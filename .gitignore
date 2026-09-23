@@ -1,0 +1,24 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# IDE / 编辑器
+.vs/
+
+# 运行时状态：server 自己写出来的清单文件（可由工具重新生成，不是源码）
+catalog/
+
+# views/ 里分成两类，别一刀切：
+#   - 带时间戳的渲染图/回读 JSON、以及 `_` 开头的对比图 = **产物**，不入库
+#   - 不带时间戳的（reference_*.jpg、overview_01.png、ref_view_01.png、
+#     Material_00X.png、reference_views.json）= 原始参考图，是输入，要入库
+views/*_20*.png
+views/*_20*.json
+views/**/_*.png
