@@ -1,0 +1,94 @@
+{
+  "_meta": {
+    "用途": "阶段二「生成平面布局规划」的全部参数。代码只读它，不写死数字 —— 改参数不改代码。",
+    "单位": "米（米制世界坐标；到 UE/Blender 那一层才 ×100 转厘米）",
+    "坐标系": "UE 左手系 Z-up：X 前进、Y 右、Z 上。平面内【右法线 = (-dy, dx)】—— 全工程唯一口径。",
+    "图与数据的关系": "views/plan_wire_v1.png 是【给客户看的示意图，仅作展示】；所有后续计算只读 views/plan_v1.json。图是从数据单向画出来的，数据不从图读。",
+    "过程声明": "全程纯几何计算，不做任何图像识别推理。参考图只用来人工确定下面那两条参数。",
+    "编码提醒": "本文件必须存成 UTF-8 无 BOM；代码侧已按 utf-8-sig 读，能容忍 BOM，但别用会改编码的工具回写。"
+  },
+  "derived_from_reference_image": {
+    "路网走向": "参考图里街道沿画面纵深、与人行道平行、目测基本笔直 → 平面里沿 +X 方向；横向位置沿用 v1 实测（马路中心线 y = 9 m）。待用户确认。",
+    "地块密度": "参考图可见范围左侧沿街约 3~4 栋住宅，目测间距 12~18 m → 地块面宽取 15 m。待用户确认。"
+  },
+  "measured_from_v1": {
+    "马路宽度": "700 cm = 7.00 m（官方 get_bounds 实测）",
+    "人行道宽度": "150 cm = 1.50 m",
+    "绿化带宽度": "475 cm = 4.75 m（v1：人行道 y∈[-0.75,0.75]、道路左边 y=5.5）",
+    "草地范围": "8000 × 8000 cm = 80 × 80 m（半宽 40 m）"
+  },
+  "world": {
+    "origin": [
+      0.0,
+      0.0
+    ],
+    "center": [
+      0.0,
+      -6.0
+    ],
+    "half_extent": [
+      42.0,
+      28.0
+    ],
+    "height_axis": "Z",
+    "forward_axis": "X",
+    "right_axis": "Y"
+  },
+  "road": {
+    "centerline": [
+      [
+        -40.0,
+        9.0
+      ],
+      [
+        40.0,
+        9.0
+      ]
+    ],
+    "width": 7.0,
+    "median_strip_width": 4.75,
+    "sidewalk_width": 1.5,
+    "sidewalk_sides": [
+      "left"
+    ],
+    "lot_sides": [
+      "left"
+    ],
+    "end_clear_radius": 5.0,
+    "intersection_clear_radius": 8.0,
+    "turn_angle_deg_for_node": 25.0,
+    "miter_limit": 2.0
+  },
+  "lot": {
+    "frontage": 15,
+    "depth": 30.0,
+    "front_lawn_depth": 6.0,
+    "side_setback": 1.5,
+    "back_setback": 3.0
+  },
+  "green": {
+    "far_side_depth_m": 9.0,
+    "_note": "没有排人行道/地块那一侧的绿化进深（自路面边缘算起；会自动夹进世界边界内，不越界）。其余绿化区由几何自动求余量得出：地块两端没排到的余量、地块背后到用地边界的余量。用途：行道树、灌木、背景绿化。"
+  },
+  "preview": {
+    "up_axis": "X",
+    "scale_px_per_m": 11.0,
+    "grid_spacing_m": 10.0,
+    "scale_bar_m": 10.0,
+    "view_padding_m": 3.0,
+    "schematic": {
+      "enabled": true,
+      "house_footprint_m": [
+        12.0,
+        9.4
+      ],
+      "street_tree_spacing_m": 12.0,
+      "street_tree_radius_m": 1.8,
+      "tree_line_spacing_m": 9.0,
+      "tree_line_radius_m": 3.6,
+      "tree_line_offset_m": 2.0,
+      "note": "只画在图上给人看：房屋尺寸取自已确认资产 house1（实测 89.09×69.57cm × 13.47 缩放）、树取 realistic_tree（×0.28 / ×0.6）。这些**不进 plan_v1.json，不参与任何计算**。"
+    },
+    "_note": "出图规格：改这些不改代码。up_axis=X 表示 +X 朝上（街道往画面深处走，与参考图视角一致）。"
+  }
+}

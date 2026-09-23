@@ -1,0 +1,93 @@
+{
+  "delivered_at": "2026-09-23T12:24:42.208573+00:00",
+  "source_image": "C:\\Users\\27469\\AppData\\Roaming\\dsh-desktop\\harness\\attachments\\v1\\objects\\94\\94e5b21852d1193b2d773d98d6b6b0a374a7acd271dac22bb621bf2beb474f6d",
+  "total": 6,
+  "verified": 6,
+  "invalid_paths": [],
+  "items": [
+    {
+      "element": "house 主屋",
+      "element_key": "house",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "asset_type": "mesh",
+      "exists": true,
+      "size_cm": [
+        89.09,
+        69.57,
+        50.12
+      ],
+      "bbox_volume_cm3": 310643.32,
+      "size_source": "官方 get_bounds 实测（包围盒）",
+      "note": "近景左侧主屋。按主屋目标宽度≈1200cm 需放大 13.47 倍（倍率以本行 size_cm 为基准算），阶段二按实拍微调"
+    },
+    {
+      "element": "house 邻居/远景",
+      "element_key": "house",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "asset_type": "mesh",
+      "exists": true,
+      "size_cm": [
+        102.58,
+        61.67,
+        33.56
+      ],
+      "bbox_volume_cm3": 212304.2,
+      "size_source": "官方 get_bounds 实测（包围盒）",
+      "note": "画面中 2 处（中景偏左 + 远景中心）。需放大约 11.7 倍（倍率以本行 size_cm 为基准算）"
+    },
+    {
+      "element": "grass 草坪",
+      "element_key": "grass",
+      "asset_path": "/Game/Fab/Megascans/Surfaces/Uncut_Grass_oeeb70/High/oeeb70_tier_1/Materials/MI_oeeb70",
+      "asset_type": "material_instance",
+      "exists": true,
+      "size_cm": null,
+      "bbox_volume_cm3": null,
+      "size_source": "material_instance 没有包围盒",
+      "note": "哈希名资产，语义来自文件夹名 Uncut_Grass_oeeb70。覆盖前院草坪 + 人行道与马路之间的绿化带"
+    },
+    {
+      "element": "road 马路",
+      "element_key": "road",
+      "asset_path": "/Game/Fab/Megascans/Surfaces/Fine_American_Road_sjfnch0a/Medium/sjfnch0a_tier_2/Materials/MI_sjfnch0a",
+      "asset_type": "material_instance",
+      "exists": true,
+      "size_cm": null,
+      "bbox_volume_cm3": null,
+      "size_source": "material_instance 没有包围盒",
+      "note": "哈希名资产，语义来自文件夹名 Fine_American_Road_sjfnch0a（含路缘石）"
+    },
+    {
+      "element": "tree 树木",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "asset_type": "mesh",
+      "exists": true,
+      "size_cm": [
+        1435.02,
+        1172.47,
+        1605.48
+      ],
+      "bbox_volume_cm3": 2701248837.13,
+      "size_source": "官方 get_bounds 实测（包围盒）",
+      "note": "由我定缩放：小树≈0.28、远处树线≈0.6、右上悬垂大树冠≈0.5（倍率以本行 size_cm 为基准算），阶段二按实拍调整；材质 trunk / normal_leaves 随网格自带"
+    },
+    {
+      "element": "bush 花坛/地被",
+      "element_key": "bush",
+      "asset_path": "/Game/Fab/Optimized_Potted_Plants/optimized_potted_plants/StaticMeshes/optimized_potted_plants",
+      "asset_type": "mesh",
+      "exists": true,
+      "size_cm": [
+        1223.88,
+        521.08,
+        206.58
+      ],
+      "bbox_volume_cm3": 131744203.27,
+      "size_source": "官方 get_bounds 实测（包围盒）",
+      "note": "用户 2026-09-23 新加进项目的资产（用户拍板归给 bush）。材质 Low_PolyPlant 随网格自带"
+    }
+  ],
+  "deliverable": "资产清单（阶段一交付）\n\n参考图：C:\\Users\\27469\\AppData\\Roaming\\dsh-desktop\\harness\\attachments\\v1\\objects\\94\\94e5b21852d1193b2d773d98d6b6b0a374a7acd271dac22bb621bf2beb474f6d\n元素数：6    路径验证通过：6\n尺寸实测：4 个网格量到包围盒，2 个非网格本来就没有，0 个没量到（原因见该行下方）\n\n元素               状态     尺寸 X×Y×Z (cm)                       包围盒体积 (cm³)  资产路径\n--------------------------------------------------------------------------------------------------------------------------\nhouse 主屋         ✓ 存在   89.1×69.6×50.1                          310,643  /Game/demo/Item/ItemMesh/House/house1\n                        └ 近景左侧主屋。按主屋目标宽度≈1200cm 需放大 13.47 倍（倍率以本行 size_cm 为基准算），阶段二按实拍微调\nhouse 邻居/远景      ✓ 存在   102.6×61.7×33.6                         212,304  /Game/demo/Item/ItemMesh/House2/house2\n                        └ 画面中 2 处（中景偏左 + 远景中心）。需放大约 11.7 倍（倍率以本行 size_cm 为基准算）\ngrass 草坪         ✓ 存在   —                                             —  /Game/Fab/Megascans/Surfaces/Uncut_Grass_oeeb70/High/oeeb70_tier_1/Materials/MI_oeeb70\n                        └ 哈希名资产，语义来自文件夹名 Uncut_Grass_oeeb70。覆盖前院草坪 + 人行道与马路之间的绿化带\n                        └ 无尺寸原因：material_instance 没有包围盒\nroad 马路          ✓ 存在   —                                             —  /Game/Fab/Megascans/Surfaces/Fine_American_Road_sjfnch0a/Medium/sjfnch0a_tier_2/Materials/MI_sjfnch0a\n                        └ 哈希名资产，语义来自文件夹名 Fine_American_Road_sjfnch0a（含路缘石）\n                        └ 无尺寸原因：material_instance 没有包围盒\ntree 树木          ✓ 存在   1435.0×1172.5×1605.5              2,701,248,837  /Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\n                        └ 由我定缩放：小树≈0.28、远处树线≈0.6、右上悬垂大树冠≈0.5（倍率以本行 size_cm 为基准算），阶段二按实拍调整；材质 trunk / normal_leaves 随网格自带\nbush 花坛/地被       ✓ 存在   1223.9×521.1×206.6                  131,744,203  /Game/Fab/Optimized_Potted_Plants/optimized_potted_plants/StaticMeshes/optimized_potted_plants\n                        └ 用户 2026-09-23 新加进项目的资产（用户拍板归给 bush）。材质 Low_PolyPlant 随网格自带\n\n⚠ 口径：尺寸/体积都是**官方 get_bounds 实测的包围盒**（体积 = X×Y×Z），**不是网格实际体积**；材质/材质实例没有包围盒，记 —。",
+  "note": "资产清单已生成并落盘（catalog/asset_list.json）。**请把 deliverable 贴给用户做最终确认。** 资产库指纹已记录（136 个资产 / 3 次枚举）—— 之后 get_asset_list() 才判定得了这张表过没过期。"
+}

@@ -1,0 +1,11 @@
+{
+  "captured_at": "2026-09-23T12:24:42.208573+00:00",
+  "hash": "268c7fdb02f7c9ae827be13c2cf9ebb29d4d2104262f7787adb0d52a42106650",
+  "counts": {
+    "material": 44,
+    "material_instance": 57,
+    "mesh": 35
+  },
+  "total": 136,
+  "note": "confirm_assets 落盘时记的资产库指纹；只覆盖路径层面（哪些资产存在）"
+}

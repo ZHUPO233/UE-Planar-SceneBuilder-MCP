@@ -12,13 +12,35 @@ wheels/
 # IDE / 编辑器
 .vs/
 
-# 运行时状态：server 自己写出来的清单文件（可由工具重新生成，不是源码）
-catalog/
+# 运行时状态：server 写出来的清单文件。
+# ⚠ 2026-09-23 修正：**不能整个 catalog/ 一刀切忽略** ——
+#   elements.json / asset_list.json 是**人的确认结果**（签字），
+#   重新生成 = 重新找用户确认一遍，**不是无损再生**。
+#   原先把整个目录当"可再生的运行时状态"忽略掉，等于把唯一一份签过字的交付物
+#   放在版本控制之外。所以改成：目录默认忽略，只把这三份放出来。
+#   （library_snapshot.json 本身可再生，但它和清单是同一个签字整体，一起入库。）
+catalog/*
+!catalog/elements.json
+!catalog/asset_list.json
+!catalog/library_snapshot.json
 
-# views/ 里分成两类，别一刀切：
-#   - 带时间戳的渲染图/回读 JSON、以及 `_` 开头的对比图 = **产物**，不入库
-#   - 不带时间戳的（reference_*.jpg、overview_01.png、ref_view_01.png、
-#     Material_00X.png、reference_views.json）= 原始参考图，是输入，要入库
+# 手工备份目录：check_tools.py 已内置运行时快照 / 还原，这些是冗余的，不入库。
+catalog.bak-*/
+
+# views/ 分三类，别一刀切：
+#   - reference_*.jpg                 = **原始参考图（输入）**，要入库
+#   - plan_v1.json / plan_wire_v1.png = 当前链路产物，**它是闸门，必须能追溯**，要入库
+#   - 其余（探索期截图、回读 JSON、缩略图、归档目录）= **产物**，不入库
+#     ⚠ 2026-09-23 修正：原先把 overview_01.png / ref_view_01.png /
+#       reference_views.json / Material_00X.png 也叫"原始参考图、要入库"，
+#       但那几个是**关卡渲染截图和推导出的相机数据**（产物），不是参考图。
 views/*_20*.png
 views/*_20*.json
 views/**/_*.png
+views/overview_01.png
+views/ref_view_01.png
+views/reference_views.json
+views/thumbs/
+# 归档目录只入库 README（说明它是什么），图不入库 —— 那 30 MB 截图留在盘上。
+views/_archive_pre_geometry/*
+!views/_archive_pre_geometry/README.md

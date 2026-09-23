@@ -6,6 +6,10 @@
 #   - 分两组：第一组纯逻辑（不需要 UE，必须全过）；
 #             第二组端到端（需要 UE + 官方 MCP，连不上就标 [跳过]）
 #   - **危险动作只测预览路径**（rename_assets 只测 confirm=false）
+#   - ⚠ 第二组**会写** catalog/（confirm_elements 落 elements.json；
+#     confirm_assets 落 asset_list.json + library_snapshot.json）—— **它不是只读测试**。
+#     所以 main() 先把整个 catalog/ 快照到临时目录，跑完**原样还原**。
+#     2026-09-23 实测踩过：跑一次就把用户确认过的 14 元素 elements.json 覆盖成了测试用的 5 元素。
 #
 # 用法： & F:\MCP_Server\.venv\Scripts\python.exe tests\check_tools.py
 # （不要用 uv run —— 实测在沙箱里会因缓存目录权限失败）
@@ -14,7 +18,9 @@
 import asyncio
 import logging
 import math
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -49,26 +55,46 @@ def skip(name: str, why: str = "") -> None:
 async def test_pure() -> None:
     print("=== 第一组：纯函数（不需要 UE）===")
 
-    # --- 工具面：确认只注册了这 5 个（多一个都说明"清空"没做干净）---
+    # --- 工具面：确认注册的工具就是这几个（多一个都说明"清空"没做干净）---
+    # ⚠ 2026-09-23：get_asset_list（取清单）→ 6 个；阶段二三个工具 → 9 个。
     result = M.mcp.list_tools()
     if asyncio.iscoroutine(result):
         result = await result
     tools = getattr(result, "tools", result)
     names = sorted(t.name for t in tools)
     check(
-        "只注册了 5 个工具（阶段一闭环）",
-        names == ["confirm_assets", "confirm_elements", "official_status",
-                  "plan_assets", "rename_assets"],
+        "只注册了 9 个工具（阶段一 + 取清单 + 阶段二三个）",
+        names == ["confirm_assets", "confirm_elements", "confirm_plan",
+                  "generate_plan", "get_asset_list", "get_plan",
+                  "official_status", "plan_assets", "rename_assets"],
         f"实际={names}",
     )
 
-    # --- instructions：流程约束确实设上了 ---
-    ins = getattr(M.mcp, "instructions", None) or ""
-    check(
-        "instructions 里有阶段一流程约束",
-        "阶段一" in ins and "禁止猜" in ins and "plan_assets" in ins and "confirm_assets" in ins,
-        f"实际前 60 字={ins[:60]!r}",
-    )
+    # --- 要求必须写在【工具描述】里 ---
+    # ⚠ 2026-09-23 改：原先这两条断言 `M.mcp.instructions`，但实测本宿主（DSH 的 dsh-mcp-client）
+    #   **不读** MCP 的 instructions —— `connect()` 的返回值（InitializeResult，instructions 在里面）
+    #   连赋值都没有，全包搜 "instructions" 是 0 次命中。那段文字发出去也没人接，已删。
+    #   真正到模型眼前的是 **tools/list**（工具名 + 描述 + schema），所以改成断言**描述**。
+    #   这样以后谁把某条要求从描述里删掉，这里会立刻失败。
+    # ⚠ 匹配前先把 markdown 加粗标记 `**` 剔除 —— 否则断言串一旦跨过 `**` 就会**假红**。
+    #   实测踩过：描述里写的是「宿主**不许**用上下文里记得的旧表」，
+    #   而断言找的是「不许用上下文里记得的旧表」，中间隔着一对 `**`，匹配不上。
+    descs = {t.name: (getattr(t, "description", "") or "").replace("**", "") for t in tools}
+    for tool_name, must_have in [
+        ("official_status", "没有对应工具的能力"),        # 没实现的阶段要如实说「还没做」
+        ("official_status", "不许存盘"),                  # 硬性禁止：不许存 UE 关卡 / 资产
+        ("confirm_elements", "元素粒度由资产库定"),        # 粒度由资产库定，不按画面部件数（`**` 已剔除）
+        ("get_asset_list", "开场先查状态"),                # 开口之前就要查，不是"动东西之前"
+        ("get_asset_list", "不许用上下文里记得的旧表"),
+        ("generate_plan", "单位是米"),                     # 单位错 100 倍那次
+        ("get_plan", "开场先查状态"),
+        ("get_plan", "failed_names"),                      # 报「自检过了」要报具名项
+    ]:
+        check(
+            f"{tool_name} 的描述里有『{must_have}』",
+            must_have in descs.get(tool_name, ""),
+            f"实际描述前 80 字={descs.get(tool_name, '')[:80]!r}",
+        )
 
     # --- token_match：词边界匹配（对冲官方的纯子串缺陷）---
     cases = [
@@ -134,6 +160,48 @@ async def test_pure() -> None:
           M.parse_return('{"returnValue": 42}') == 42)
     check("parse_return 解析失败返回原文",
           M.parse_return("not json") == "not json")
+
+
+# --- catalog/ 快照与还原（第二组会写交付物）-----------------------------------
+
+def snapshot_catalog() -> Path:
+    """把整个 catalog/ 拷进一个临时目录。**必须在第二组之前调。**
+
+    为什么需要：第二组会真的调 confirm_elements / confirm_assets，它们都落盘到 catalog/。
+    没有快照的话，跑一次测试就等于用测试数据覆盖用户签过字的交付物（2026-09-23 实测踩过）。
+    """
+    snap = Path(tempfile.mkdtemp(prefix="check_tools_catalog_"))
+    if M.STATE_DIR.exists():
+        for p in M.STATE_DIR.iterdir():
+            if p.is_file():
+                # copy2 连修改时间一起带过去，还原后时间戳不变、便于人工比对
+                shutil.copy2(p, snap / p.name)
+    return snap
+
+
+def restore_catalog(snap: Path) -> list[str]:
+    """把 catalog/ 还原成快照时的样子；返回**被测试改动过**的文件名（已排序）。
+
+    两步：
+      ① 测试新建的文件（快照里没有的）删掉
+      ② 快照里的文件一律覆盖回去 —— 不看测试有没有改，简单且幂等
+    返回空列表 = 测试根本没写盘。
+    """
+    restored: list[str] = []
+    current: dict[str, Path] = {}
+    if M.STATE_DIR.exists():
+        current = {p.name: p for p in M.STATE_DIR.iterdir() if p.is_file()}
+    for name, path in current.items():
+        if not (snap / name).exists():
+            path.unlink()
+            restored.append(name)
+    for src in snap.iterdir():
+        dst = M.STATE_DIR / src.name
+        if dst.exists() and dst.read_bytes() == src.read_bytes():
+            continue                      # 内容没变，不算改动
+        shutil.copy2(src, dst)
+        restored.append(src.name)
+    return sorted(set(restored))
 
 
 # --- 第二组：端到端（需要 UE + 官方 MCP）-------------------------------------
@@ -254,12 +322,22 @@ async def test_live() -> None:
 
 async def main() -> int:
     await test_pure()
+
+    # ⚠ 第二组会写 catalog/，先快照。还原放在 finally 里 ——
+    #   不能只在"跑成功"时还原：失败或中断时更需要还原，那时候文件已经被改掉一半了。
+    snap = snapshot_catalog()
     try:
         await test_live()
     except BaseException as exc:
         # ⚠ 必须是 BaseException：CancelledError 不是 Exception 的子类，
         #   用 except Exception 接不住（实测被这个坑过一次）。
         print(f"\n[异常] 端到端测试抛出：{type(exc).__name__}: {exc}")
+    finally:
+        changed = restore_catalog(snap)
+        if changed:
+            print(f"[还原] catalog/ 已从快照还原，测试改动过：{changed}")
+        else:
+            print("[还原] catalog/ 本次没有变化")
 
     print(f"\n结果：通过 {PASSED} 项，失败 {len(FAILED)} 项")
     if FAILED:
