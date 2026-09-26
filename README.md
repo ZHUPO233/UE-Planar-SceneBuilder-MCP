@@ -8,14 +8,14 @@
 宿主（DSH / Trae / Cursor / 豆包） → 本 server（stdio）→ 官方 Unreal MCP（HTTP 127.0.0.1:8000）→ UE
 ```
 
-## 30 秒上手
+## 使用说明
 
 1. 解压到一个**路径不含空格**的目录（Trae 的配置不允许空格）；
 2. 在该目录跑 `.\setup.ps1` —— 建环境、装依赖、跑自检、并把各家客户端配置写好；
 3. 按你的客户端做**最后一次动作**（重启客户端 / 打开「启用项目级 MCP」/ 重载窗口）—— 见 `SETUP.md`；
 4. 让 AI 调一次 `get_plan()`：能返回状态就说明通了（连上应有 **13 个工具**）。
 
-用户侧怎么用（要准备什么、在哪几次停下点头）见 **`交付说明.md`**；给 AI 的规则见 **`AGENTS.md`**（交付给客户的版本是 `交付版-AGENTS.md`）。
+用户侧怎么用（见 **`交付说明.md`**；给 AI 的规则见 **`AGENTS.md`**（交付给客户的版本是 `交付版-AGENTS.md`）。
 
 ## 阶段
 
@@ -30,8 +30,6 @@
 | 七 · 环境灯光与预览相机 | **未实现** |
 | 八 · 评估与闭环迭代 | **未实现** |
 
-被问到没做的阶段，**如实说"还没做"** —— 不许承诺。所以现在的定位是"**把参考图变成可核对的布局，并落进 UE**"，不是"发张图就出效果图"。
-
 ## 仓库导航
 
 | 路径 | 里面是什么 |
@@ -44,23 +42,20 @@
 | `tests/` | `preflight.py`（重启前自检）+ `check_tools.py`（工具面 / 链路回归，要 UE） |
 | `serve_http.py` | 只认 URL 的客户端用（端口 `8770`） |
 
-## 硬规矩（不许破）
+## 该MCP硬规矩
 
-① **禁止猜"疑似资产"** —— 名字对得上才算找到，找不到就报缺并请用户给【路径 + 名字】；② **用户确认前不落盘、不摆东西**；③ **规划图没经用户确认不许进第三阶段**，数据与图缺一不可且必须一致；④ **绝不存盘**（存不存由用户在 UE 里决定）；⑤ 返回数字必须**无损穿过 JSON**（`-0.0` / `NaN` / `Infinity` 会被宿主整条拒收）。
+① **禁止猜"疑似资产"** —— 名字对得上才算找到，找不到就报缺并请用户给【路径 + 名字】；② **用户确认前不落盘、不搭建东西**；③ **规划图没经用户确认不许进第三阶段**，数据与图缺一不可且必须一致；④ **绝不存盘**（存不存由用户在 UE 里决定）；⑤ 返回数字必须**无损穿过 JSON**（`-0.0` / `NaN` / `Infinity` 会被宿主整条拒收）。
 
 **13 个工具**：`official_status`、`check_build_target`、`confirm_elements`、`plan_assets`、`rename_assets`、`confirm_assets`、`get_asset_list`、`generate_plan`、`get_plan`、`request_plan_change`、`confirm_plan`、`generate_build_orders`、`execute_build`。
 
-⚠ 宿主**不读** MCP 的 `instructions` —— 所以要求要么写在各工具 docstring 里，要么由**代码拒收时的原文**教会调用方。软约束（"你要记得…"）已经踩过坑：能变硬的都变成了代码闸（回读闸 / 规划图闸 / 用户原话 / 改动窗口 / 搭哪张图 / 人工痕迹保护）。
+⚠ 宿主**不读** MCP 的 `instructions` —— 所以要求要么写在各工具 docstring 里，要么由**代码拒收时的原文**教会调用方。
 
 ## 开发 / 跑法
 
-- **DSH** 以 stdio 启动：`command=<根>\.venv\Scripts\python.exe`、`args=[<根>\src\mcp_server\main.py]`；只认 URL 的客户端用 `serve_http.py`，端口 `8770` —— **别抢 8000**，那是官方插件的。
+- **DSH** 以 stdio 启动：`command=<根>\.venv\Scripts\python.exe`、`args=[<根>\src\mcp_server\main.py]`；只认 URL 的客户端用 `serve_http.py`，端口 `8770` —— **注意别抢 8000**，那是官方UE的MCP插件使用的。
 - 改完 `src/mcp_server/main.py` 或规划层：**由用户**跑
 
   ```powershell
   & .\.venv\Scripts\python.exe tests\preflight.py
   ```
-
-  **必须用脚本方式**（与宿主的启动方式一致）：用 `import mcp_server.main` 会给**假绿**，实测吃过亏。绿了再重启。
-- 已知坑（细节都写在代码注释里）：官方连接的取消域跨 task 会**炸掉整个 server**；规划层不能在文件顶部 `from .planning import ...`（脚本方式起必炸）；官方 `find_assets` **不匹配文件夹名**，哈希名资产只能靠"枚举 + 本地按文件夹名匹配"。
 - 排障：工具报**没有正文**的错（只有一句 `Error executing tool …`）→ 完整栈在宿主日志 `%APPDATA%\dsh-desktop\logs\harness.log`，搜工具名即可定位。
