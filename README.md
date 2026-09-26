@@ -44,7 +44,7 @@
 
 ## 该MCP硬规矩
 
-① **禁止猜"疑似资产"** —— 名字对得上才算找到，找不到就报缺并请用户给【路径 + 名字】；② **用户确认前不落盘、不搭建东西**；③ **规划图没经用户确认不许进第三阶段**，数据与图缺一不可且必须一致；④ **绝不存盘**（存不存由用户在 UE 里决定）；⑤ 返回数字必须**无损穿过 JSON**（`-0.0` / `NaN` / `Infinity` 会被宿主整条拒收）。
+①**禁止猜"疑似资产"** —— 名字对得上才算找到，找不到就报缺并请用户给【路径 + 名字】；② **按搭建阶段由用户依次确认，用户确认前不落盘、不搭建**；③ **规划图没经用户确认不许进第三阶段**，数据与图缺一不可且必须一致；④ **绝不存盘**（存不存由用户在 UE 里决定）；⑤ 返回数字必须**无损穿过 JSON**（`-0.0` / `NaN` / `Infinity` 会被宿主整条拒收）。
 
 **13 个工具**：`official_status`、`check_build_target`、`confirm_elements`、`plan_assets`、`rename_assets`、`confirm_assets`、`get_asset_list`、`generate_plan`、`get_plan`、`request_plan_change`、`confirm_plan`、`generate_build_orders`、`execute_build`。
 
