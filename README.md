@@ -5,7 +5,7 @@
 **它是什么**：MCP **编排层**（编排 = 它自己一步都不碰 UE，只调度官方工具）。链路：
 
 ```
-宿主（DSH / Trae / Cursor / 豆包） → 本MCP server→ 官方 Unreal MCP → UE
+Agent（DSH / Trae / Cursor / 豆包） → 本MCP server→ 官方 Unreal MCP → UE
 ```
 
 ## 使用说明
