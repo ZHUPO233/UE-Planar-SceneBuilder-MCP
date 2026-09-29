@@ -1,0 +1,1538 @@
+{
+  "stage": "阶段二 · 平面放置规划",
+  "unit": "m",
+  "world": {
+    "center": [
+      0.0,
+      0.0
+    ],
+    "size": [
+      120.0,
+      80.0
+    ],
+    "size_source": "阶段一 elements.json 的『地图大小』场景项",
+    "bounds": {
+      "min": [
+        -60.0,
+        -40.0
+      ],
+      "max": [
+        60.0,
+        40.0
+      ]
+    },
+    "coordinate_system": {
+      "handedness": "left",
+      "height_axis": "Z",
+      "forward_axis": "X",
+      "right_axis": "Y",
+      "right_normal_rule": "right_normal(d) = (-dy, dx)"
+    }
+  },
+  "assets": [
+    {
+      "element_key": "house",
+      "label": "住宅 #1（house1）",
+      "pos": [
+        -50.0,
+        -32.0
+      ],
+      "footprint_m": [
+        11.13,
+        14.25
+      ],
+      "rot_deg": 90.0,
+      "note": "成对相向：本栋门朝 +X（rot 90）。图里近景那栋白色板条墙大宅。三面墙根有灌木带（第 34～36 行）、外面绕一圈走道（第 14～17 行）",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "住宅 #2（house2）",
+      "pos": [
+        -28.0,
+        -32.0
+      ],
+      "footprint_m": [
+        9.87,
+        16.41
+      ],
+      "rot_deg": 270.0,
+      "note": "门朝 -X（rot 270）→ 与 #1 正门相对。灌木带第 37～39 行、走道第 18～21 行。⚠ 后缘 + 屋后走道到 y=-41.6，超世界边界 1.6 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "住宅 #3（house1）",
+      "pos": [
+        -6.0,
+        -32.0
+      ],
+      "footprint_m": [
+        11.13,
+        14.25
+      ],
+      "rot_deg": 90.0,
+      "note": "门朝 +X（rot 90）→ 与 #4 正门相对；与 #2 背靠背。灌木带第 40～42 行、走道第 22～25 行",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "住宅 #4（house2）",
+      "pos": [
+        16.0,
+        -32.0
+      ],
+      "footprint_m": [
+        9.87,
+        16.41
+      ],
+      "rot_deg": 270.0,
+      "note": "门朝 -X（rot 270）。灌木带第 43～45 行、走道第 26～29 行。⚠ 后缘 + 屋后走道到 y=-41.6，超世界边界 1.6 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "住宅 #5（house1）",
+      "pos": [
+        38.0,
+        -32.0
+      ],
+      "footprint_m": [
+        11.13,
+        14.25
+      ],
+      "rot_deg": 90.0,
+      "note": "门朝 +X（rot 90）。末栋。灌木带第 46～48 行、走道第 30～33 行",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 路左 #1",
+      "pos": [
+        -48.0,
+        -6.25
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "树高 5 m（缩放 0.31；实测 16.05 m × 0.31 = 4.98 m）。路左共 5 棵、间距 24 m",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 路左 #2",
+      "pos": [
+        -24.0,
+        -6.25
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 路左 #3",
+      "pos": [
+        0.0,
+        -6.25
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上；图里那棵幼树位置（脚下有灌木丛，见第 49 行）",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 路左 #4",
+      "pos": [
+        24.0,
+        -6.25
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 路左 #5",
+      "pos": [
+        48.0,
+        -6.25
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #01",
+      "pos": [
+        -56.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "株距 4 m、共 29 棵；树高 5 m。⚠ 脚下草皮本版补上（见第 47 行）",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #02",
+      "pos": [
+        -52.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #03",
+      "pos": [
+        -48.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #04",
+      "pos": [
+        -44.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #05",
+      "pos": [
+        -40.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #06",
+      "pos": [
+        -36.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #07",
+      "pos": [
+        -32.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #08",
+      "pos": [
+        -28.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #09",
+      "pos": [
+        -24.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #10",
+      "pos": [
+        -20.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #11",
+      "pos": [
+        -16.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #12",
+      "pos": [
+        -12.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #13",
+      "pos": [
+        -8.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #14",
+      "pos": [
+        -4.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #15",
+      "pos": [
+        0.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #16",
+      "pos": [
+        4.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #17",
+      "pos": [
+        8.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #18",
+      "pos": [
+        12.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #19",
+      "pos": [
+        16.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #20",
+      "pos": [
+        20.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #21",
+      "pos": [
+        24.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #22",
+      "pos": [
+        28.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #23",
+      "pos": [
+        32.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #24",
+      "pos": [
+        36.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #25",
+      "pos": [
+        40.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #26",
+      "pos": [
+        44.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #27",
+      "pos": [
+        48.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #28",
+      "pos": [
+        52.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "路右密林 #29",
+      "pos": [
+        56.0,
+        14.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "末棵；树冠外缘 x=56+2.23=58.23 ≤ 60",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    }
+  ],
+  "whiteboxes": [
+    {
+      "element_key": "road",
+      "label": "沥青车行道",
+      "pos": [
+        0.0,
+        0.0
+      ],
+      "footprint_m": [
+        120.0,
+        8.0
+      ],
+      "rot_deg": 0.0,
+      "note": "y-4～4（8 m）。路面标高。阶段六可拿 MI_Asphalt 当表面",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "sidewalk",
+      "label": "人行道（我方一侧，沿公路）",
+      "pos": [
+        0.0,
+        -9.25
+      ],
+      "footprint_m": [
+        120.0,
+        1.5
+      ],
+      "rot_deg": 0.0,
+      "note": "y-10～-8.5。cube 高 15 cm。阶段六可拿 MI_Concrete 当表面",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "sidewalk",
+      "label": "人行道（公路对面）",
+      "pos": [
+        0.0,
+        8.75
+      ],
+      "footprint_m": [
+        120.0,
+        1.5
+      ],
+      "rot_deg": 0.0,
+      "note": "y8～9.5。同 element_key 多行",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "grass",
+      "label": "草坪 我方路缘草带（人行道↔公路）",
+      "pos": [
+        0.0,
+        -6.25
+      ],
+      "footprint_m": [
+        120.0,
+        4.5
+      ],
+      "rot_deg": 0.0,
+      "note": "y-8.5～-4。路左 5 棵树就站在这条带上。五条连接路会横穿它",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "草坪 住宅带（一整片，y -40～-10）",
+      "pos": [
+        0.0,
+        -25.0
+      ],
+      "footprint_m": [
+        120.0,
+        30.0
+      ],
+      "rot_deg": 0.0,
+      "note": "房前 6 块草坪合成**一整片**；5 栋房子、15 行灌木带、20 行走道、5 条连接路都落在这片草地上",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "草坪 右 #1（对面路缘草带）",
+      "pos": [
+        0.0,
+        6.0
+      ],
+      "footprint_m": [
+        120.0,
+        4.0
+      ],
+      "rot_deg": 0.0,
+      "note": "y4～8",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "草坪 右 #3（路右林带，树下草皮）",
+      "pos": [
+        0.0,
+        14.25
+      ],
+      "footprint_m": [
+        120.0,
+        9.5
+      ],
+      "rot_deg": 0.0,
+      "note": "第 22 轮新增。y9.5～19 —— 以前这条林带是裸地，29 棵密林（y=14）脚下没草皮",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "草坪 右 #2（林带外侧）",
+      "pos": [
+        0.0,
+        29.5
+      ],
+      "footprint_m": [
+        120.0,
+        21.0
+      ],
+      "rot_deg": 0.0,
+      "note": "y19～40。图里看不到林带之外，按草地延伸到世界边界",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "path",
+      "label": "连接路 #1（住宅 #1 ↔ #2 之间，直通公路）",
+      "pos": [
+        -39.54,
+        -22.0
+      ],
+      "footprint_m": [
+        4.0,
+        36.0
+      ],
+      "rot_deg": 0.0,
+      "note": "y 从 -40（屋后）到 -4（公路边），长 36 m。落在两栋房子之间",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "连接路 #2（住宅 #2 ↔ #3 之间，直通公路）",
+      "pos": [
+        -16.46,
+        -22.0
+      ],
+      "footprint_m": [
+        4.0,
+        36.0
+      ],
+      "rot_deg": 0.0,
+      "note": "y-40～-4。同上（两栋背靠背）",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "连接路 #3（住宅 #3 ↔ #4 之间，直通公路）",
+      "pos": [
+        4.46,
+        -22.0
+      ],
+      "footprint_m": [
+        4.0,
+        36.0
+      ],
+      "rot_deg": 0.0,
+      "note": "y-40～-4。落在两栋房子之间",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "连接路 #4（住宅 #4 ↔ #5 之间，直通公路）",
+      "pos": [
+        27.54,
+        -22.0
+      ],
+      "footprint_m": [
+        4.0,
+        36.0
+      ],
+      "rot_deg": 0.0,
+      "note": "y-40～-4。同上（两栋背靠背）",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "连接路 #5（房子排东端，直通公路）",
+      "pos": [
+        53.0,
+        -22.0
+      ],
+      "footprint_m": [
+        4.0,
+        36.0
+      ],
+      "rot_deg": 0.0,
+      "note": "y-40～-4。不在两栋房子之间（东端已无房）",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #1 朝公路面（灌木带外侧）",
+      "pos": [
+        -50.0,
+        -23.175
+      ],
+      "footprint_m": [
+        15.93,
+        1.4
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增。高墙 1.0 m（灌木带外缘）→ 2.4 m（走道外缘），长 = 该栋面宽 + 4.8 m",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #1 端头 -X",
+      "pos": [
+        -57.265,
+        -31.5
+      ],
+      "footprint_m": [
+        1.4,
+        15.25
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增。西端山墙外侧",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #1 端头 +X",
+      "pos": [
+        -42.735,
+        -31.5
+      ],
+      "footprint_m": [
+        1.4,
+        15.25
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增。东端山墙外侧",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #1 屋后",
+      "pos": [
+        -50.0,
+        -39.825
+      ],
+      "footprint_m": [
+        15.93,
+        1.4
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增。屋后没有灌木，走道直接贴墙",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #2 朝公路面（灌木带外侧）",
+      "pos": [
+        -28.0,
+        -22.095
+      ],
+      "footprint_m": [
+        14.67,
+        1.4
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #2 端头 -X",
+      "pos": [
+        -34.635,
+        -31.5
+      ],
+      "footprint_m": [
+        1.4,
+        17.41
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增。西端山墙外侧",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #2 端头 +X",
+      "pos": [
+        -21.365,
+        -31.5
+      ],
+      "footprint_m": [
+        1.4,
+        17.41
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增。东端山墙外侧",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #2 屋后",
+      "pos": [
+        -28.0,
+        -40.905
+      ],
+      "footprint_m": [
+        14.67,
+        1.4
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增。⚠ 外缘到 y=-41.605，超世界边界 1.605 m",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #3 朝公路面（灌木带外侧）",
+      "pos": [
+        -6.0,
+        -23.175
+      ],
+      "footprint_m": [
+        15.93,
+        1.4
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #3 端头 -X",
+      "pos": [
+        -13.265,
+        -31.5
+      ],
+      "footprint_m": [
+        1.4,
+        15.25
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #3 端头 +X",
+      "pos": [
+        1.265,
+        -31.5
+      ],
+      "footprint_m": [
+        1.4,
+        15.25
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #3 屋后",
+      "pos": [
+        -6.0,
+        -39.825
+      ],
+      "footprint_m": [
+        15.93,
+        1.4
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #4 朝公路面（灌木带外侧）",
+      "pos": [
+        16.0,
+        -22.095
+      ],
+      "footprint_m": [
+        14.67,
+        1.4
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #4 端头 -X",
+      "pos": [
+        9.365,
+        -31.5
+      ],
+      "footprint_m": [
+        1.4,
+        17.41
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #4 端头 +X",
+      "pos": [
+        22.635,
+        -31.5
+      ],
+      "footprint_m": [
+        1.4,
+        17.41
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #4 屋后",
+      "pos": [
+        16.0,
+        -40.905
+      ],
+      "footprint_m": [
+        14.67,
+        1.4
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增。⚠ 外缘到 y=-41.605，超世界边界 1.605 m",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #5 朝公路面（灌木带外侧）",
+      "pos": [
+        38.0,
+        -23.175
+      ],
+      "footprint_m": [
+        15.93,
+        1.4
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #5 端头 -X",
+      "pos": [
+        30.735,
+        -31.5
+      ],
+      "footprint_m": [
+        1.4,
+        15.25
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #5 端头 +X",
+      "pos": [
+        45.265,
+        -31.5
+      ],
+      "footprint_m": [
+        1.4,
+        15.25
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "走道·住宅 #5 屋后",
+      "pos": [
+        38.0,
+        -39.825
+      ],
+      "footprint_m": [
+        15.93,
+        1.4
+      ],
+      "rot_deg": 0.0,
+      "note": "第 21 轮新增",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #1 朝公路面带",
+      "pos": [
+        -50.0,
+        -24.375
+      ],
+      "footprint_m": [
+        11.13,
+        1.0
+      ],
+      "rot_deg": 0.0,
+      "note": "**贴着墙**（离墙 0），深 1 m、长 = 该栋世界 X 占地 11.13 m",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #1 端头 -X",
+      "pos": [
+        -56.065,
+        -31.5
+      ],
+      "footprint_m": [
+        1.0,
+        15.25
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着西端墙面，与朝公路面带齐平",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #1 端头 +X",
+      "pos": [
+        -43.935,
+        -31.5
+      ],
+      "footprint_m": [
+        1.0,
+        15.25
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着东端墙面",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #2 朝公路面带",
+      "pos": [
+        -28.0,
+        -23.295
+      ],
+      "footprint_m": [
+        9.87,
+        1.0
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着朝公路那面墙，长 = 该栋世界 X 占地 9.87 m",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #2 端头 -X",
+      "pos": [
+        -33.435,
+        -31.5
+      ],
+      "footprint_m": [
+        1.0,
+        17.41
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着西端墙面",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #2 端头 +X",
+      "pos": [
+        -22.565,
+        -31.5
+      ],
+      "footprint_m": [
+        1.0,
+        17.41
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着东端墙面",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #3 朝公路面带",
+      "pos": [
+        -6.0,
+        -24.375
+      ],
+      "footprint_m": [
+        11.13,
+        1.0
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着朝公路那面墙",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #3 端头 -X",
+      "pos": [
+        -12.065,
+        -31.5
+      ],
+      "footprint_m": [
+        1.0,
+        15.25
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着西端墙面",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #3 端头 +X",
+      "pos": [
+        0.065,
+        -31.5
+      ],
+      "footprint_m": [
+        1.0,
+        15.25
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着东端墙面",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #4 朝公路面带",
+      "pos": [
+        16.0,
+        -23.295
+      ],
+      "footprint_m": [
+        9.87,
+        1.0
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着朝公路那面墙",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #4 端头 -X",
+      "pos": [
+        10.565,
+        -31.5
+      ],
+      "footprint_m": [
+        1.0,
+        17.41
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着西端墙面",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #4 端头 +X",
+      "pos": [
+        21.435,
+        -31.5
+      ],
+      "footprint_m": [
+        1.0,
+        17.41
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着东端墙面",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #5 朝公路面带",
+      "pos": [
+        38.0,
+        -24.375
+      ],
+      "footprint_m": [
+        11.13,
+        1.0
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着朝公路那面墙",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #5 端头 -X",
+      "pos": [
+        31.935,
+        -31.5
+      ],
+      "footprint_m": [
+        1.0,
+        15.25
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着西端墙面",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木·住宅 #5 端头 +X",
+      "pos": [
+        44.065,
+        -31.5
+      ],
+      "footprint_m": [
+        1.0,
+        15.25
+      ],
+      "rot_deg": 0.0,
+      "note": "贴着东端墙面",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木幼树根部植被丛",
+      "pos": [
+        0.0,
+        -6.25
+      ],
+      "footprint_m": [
+        3.0,
+        3.0
+      ],
+      "rot_deg": 0.0,
+      "note": "图里那棵幼树土丘周围的低矮植被。与路左 #3 那棵树同位置（用户 2026-09-26 确认图上确实有）",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.6
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木路对面丛",
+      "pos": [
+        20.0,
+        6.0
+      ],
+      "footprint_m": [
+        6.0,
+        2.0
+      ],
+      "rot_deg": 0.0,
+      "note": "路对面路缘草带里的一丛",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.2
+    }
+  ],
+  "params": {
+    "世界": "沿街长 X=120 m，进深 Y=80 m（±40），中心 [0,0]，单位米。房子在 -Y 侧、路在 +Y 侧。",
+    "本版变更（第 22 轮，用户 2026-09-26）": "在上一版（第 21 轮：灌木贴墙三面 + 走道绕房一圈 + 住宅带一整片草地 + 连接路 y-40～-4）基础上再补一行：**路右 29 棵密林脚下补草皮**（y 9.5～19 那条林带之前是裸地）→ “草坪 右 #3（路右林带，树下草皮）” [120 × 9.5] m。",
+    "横断面（从墙面往外）": "墙 → 灌木带深 1 m（三面，贴墙）→ 走道宽 1.4 m（四面成环）→ 草地。走道外缘离墙：朝公路面与两端 2.4 m，屋后 1.4 m。",
+    "横向断面（从 -Y 到 +Y）": "①住宅带 y-40～-10（一整片草坪；5 栋房子、15 行灌木带、20 行走道、5 条连接路都落在它上面）②我方人行道 y-10～-8.5 ③我方路缘草带 y-8.5～-4（路左 5 棵树 y=-6.25）④车行道 y-4～4 ⑤对面路缘草带 y4～8 ⑥对面人行道 y8～9.5 ⑦**路右林带草坪 y9.5～19（本版补，29 棵树 y=14 站在它上面）**⑧林带外侧草带 y19～40",
+    "房子的世界占地（重要）": "house1：X 11.13 × Y 14.25 m，y-39.125～-24.875；house2：X 9.87 × Y 16.41 m，y-40.205～-23.795。朝公路墙面 y=-24.875 / -23.795。",
+    "五条连接路": "每条 [2, 36] m，y 从 -40（屋后）到 -4（公路边），中心 y=-22；x = -39.54 / -16.46 / 4.46 / 27.54 / 53。",
+    "数量对账（第 22 轮）": "house 5、tree 34、**grass 5**（住宅带 1 + 我方路缘草带 1 + 对面路缘草带 1 + **林带草皮 1（新）** + 林带外侧 1）、**path 25**（5 条连接路 + 20 条绕房子的走道）、road 1、sidewalk 2、**shrub 17**。合计 39 资产 + **50 白膜 = 89 行**。",
+    "与阶段一的偏差（累计）": "① tree：42 → 34；② grass：8 行 → 5 行（内容不同）；③ path：5 → 25；④ sidewalk：1 → 2；⑤ shrub：3 → 17。均未回改阶段一，待用户定。",
+    "旋转符号已实测（2026-09-26）": "plan 的 rot_deg 直接当 UE yaw 用，**不反号**（+X→0 / +Y→+90 / −Y→−90 / −X→180）。⚠ 仍未测：资产自身在 rot 0 时朝哪边。",
+    "尺寸口径": "已有资产占地 = 阶段一实测包围盒 × scale，`footprint_m` 是**旋转之后的世界 X / Y 占地**；白膜占地 = 阶段一登记的预估尺寸。走道宽 1.4 m、灌木深 1 m 为沿用旧值的口径。",
+    "已知的『重叠』（不是碰撞）": "① 住宅带草坪 / 林带草坪与立在它上面的东西必然重叠；② 连接路横穿人行道与路缘草带；③ 灌木幼树丛与路左 #3 那棵树同位置；④ 密林 4 m 株距下相邻树冠仅叠 0.45 m。灌木带 / 走道 / 草坪相互间**无重叠**（已逐条对过坐标）。",
+    "⚠ 待用户拍的越界（本版仍是）": "屋后走道把房子往后推了一截：house1 屋后走道到 y=-40.525（超界 0.525 m）、**house2 到 y=-41.605（超界 1.605 m）**。三选项：① 5 栋房子整体往 +Y 挪 1.7 m（房子行中心 -32 → -30.3）；② 世界进深 80 → 84 m；③ 接受越界（阶段四再管）。**本版没动**。",
+    "其他待核实": "①房子『成对相向』仍是推断；②5 m 树高是用户口述；③第 5 条连接路仍在东端；④旧行“贴墙走道（住宅 #1 正门前）”已被 20 条绕房子走道取代；⑤灌木深 1 m / 走道宽 1.4 m / 离墙 0 / 林带草坪 y9.5～19 均为口径值。",
+    "本版变更（补丁）": "按 label 打了 5 条补丁，几何只动了这几处：改 连接路 #1（住宅 #1 ↔ #2 之间，直通公路）：footprint_m [2.0, 36.0] → [4, 36]；改 连接路 #2（住宅 #2 ↔ #3 之间，直通公路）：footprint_m [2.0, 36.0] → [4, 36]；改 连接路 #3（住宅 #3 ↔ #4 之间，直通公路）：footprint_m [2.0, 36.0] → [4, 36]；改 连接路 #4（住宅 #4 ↔ #5 之间，直通公路）：footprint_m [2.0, 36.0] → [4, 36]；改 连接路 #5（房子排东端，直通公路）：footprint_m [2.0, 36.0] → [4, 36]"
+  },
+  "previous_elements": {
+    "path": "catalog/elements.json",
+    "confirmed_at": "2026-09-26T04:37:04.524978+00:00",
+    "scene": {
+      "size_m": "120×80 m（阶段一记录）",
+      "time_of_day": "sunset"
+    }
+  },
+  "note": "一个物体一行、自带 pos（平面中心坐标，米）。**没有 count 字段** —— 摆几个就写几行，不许用一条记录代表多个不同位置的物体（那样谁也看不见它们）。已有资产先放（大小是阶段一实测的）、白膜后放（大小要等资产占完位再估）。本数据不依赖任何图片；要图就由 AI 拿这份数据自己画（代码不出图）。",
+  "confirmation": {
+    "required": true,
+    "confirmed": true,
+    "confirmed_by": "用户",
+    "confirmed_at": "2026-09-27T06:35:55.224827+00:00",
+    "note": "已确认。几何一变，指纹就对不上，本次确认自动作废。",
+    "plan_hash": "956637e62095e403f6829a3e408a03f8ab166bad967a78ea6d2e114192e698be",
+    "user_quote": "确认"
+  }
+}

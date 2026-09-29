@@ -1,64 +1,173 @@
 {
-  "confirmed_at": "2026-09-23T10:26:36.356548+00:00",
-  "source_image": "C:\\Users\\27469\\AppData\\Roaming\\dsh-desktop\\harness\\attachments\\v1\\objects\\94\\94e5b21852d1193b2d773d98d6b6b0a374a7acd271dac22bb621bf2beb474f6d",
-  "total": 14,
+  "confirmed_at": "2026-09-26T04:37:04.524978+00:00",
+  "source_image": "F:\\MCP_Server\\views\\ref_94e5b218\\ref_dusk.jpg",
+  "total": 12,
   "elements": [
     {
       "element": "house",
-      "note": "主屋（左侧近景，占画面左约 1/3）：白色竖板条墙 + 深色陡坡三角山墙 + 石材基座，两层"
+      "category": "building",
+      "subcategory": "",
+      "count": 5,
+      "count_source": "预估（参考图目测）；用户 2026-09-26 未纠正",
+      "size_m": null,
+      "time_of_day": "",
+      "note": "左侧近景白色板条墙大宅（石砌基座、深色窗与檐口、山墙屋顶）等。屋顶 / 窗 / 石基 / 门廊并入本行。备用关键词 house / home / cottage / facade。✔ 用户 2026-09-26：**house1 + house2 混搭**"
     },
     {
-      "element": "window",
-      "note": "主屋的大窗 + 上方深色挑檐/小雨棚（山墙下方）。⚠ 那块深色斜板到底是雨棚还是别的构件，图片分辨率不足，待核实。备用关键词 canopy"
+      "element": "tree",
+      "category": "nature",
+      "subcategory": "",
+      "count": 5,
+      "count_source": "用户核实（2026-09-26）：路左边就 5 棵",
+      "size_m": null,
+      "time_of_day": "",
+      "note": "**路左侧（我方一侧）5 棵**，含近景土丘上那棵幼树（细干、小冠）。备用关键词 tree / street_tree / maple / oak"
     },
     {
-      "element": "house",
-      "note": "邻居住宅（中景偏左，落日两侧）：灰褐色坡屋顶、带车库门，比主屋矮，1-2 栋"
+      "element": "tree",
+      "category": "nature",
+      "subcategory": "",
+      "count": 37,
+      "count_source": "用户 2026-09-26：株距 3 m；数量由 120 m 街推算（两端各留 5.4 m 使树冠不越界）",
+      "size_m": null,
+      "time_of_day": "",
+      "note": "**路右侧（对面）一排很茂密的树**（成片林带）。✔ 用户 2026-09-26 定：**株距 3 m**。⚠ 按 3 m 排满 120 m 得 40 棵，但两端树冠（半径约 5.4 m）会越出世界边界 ±60 m → 取 **37 棵**（X -54～54）。⚠ 3 m 株距下树冠必然大幅重叠 —— 用户要的正是『茂密』"
     },
     {
-      "element": "house",
-      "note": "远处住宅（中景远景中心）：浅色小体量，1 栋"
+      "element": "shrub",
+      "category": "nature",
+      "subcategory": "",
+      "count": 3,
+      "count_source": "预估（参考图目测）",
+      "size_m": null,
+      "time_of_day": "",
+      "note": "① 房子墙根的种植带 ② 幼树根部的低矮植被丛 ③ 右侧路缘的灌木丛。备用关键词 bush / hedge / plant。⚠ 数量目测"
     },
     {
       "element": "grass",
-      "note": "前院草坪：左中大片，修剪整齐，明暗割草条纹明显。备用关键词 lawn / ground"
+      "category": "nature",
+      "subcategory": "",
+      "count": 6,
+      "count_source": "用户核实（2026-09-26）：草皮左边有 6 块",
+      "size_m": null,
+      "time_of_day": "",
+      "note": "**路左侧（我方）草坪 6 块**，被连接路分隔开。备用关键词 lawn / turf / meadow / ground_cover"
+    },
+    {
+      "element": "grass",
+      "category": "nature",
+      "subcategory": "",
+      "count": 2,
+      "count_source": "用户核实（2026-09-26）：右边是很长的两块",
+      "size_m": null,
+      "time_of_day": "",
+      "note": "**路右侧草带 2 长条**（一条贴路缘、一条在林带外侧）。与上一行同一个 element_key（允许同元素多行）"
     },
     {
       "element": "sidewalk",
-      "note": "混凝土人行道：画面中央下方延伸至远方，带横向板缝。备用关键词 pavement"
+      "category": "environment",
+      "subcategory": "",
+      "count": null,
+      "count_source": "不适用（连续面，没有『个数』）",
+      "size_m": null,
+      "time_of_day": "",
+      "note": "混凝土人行道，**沿着公路走**（带伸缩缝）。✔ 用户 2026-09-26 核实。备用关键词 pavement / curb / paving。⚠ 材料：资产库里只有材质 MI_Concrete，没有网格 → 白膜"
     },
     {
-      "element": "driveway",
-      "note": "车道 / 门前小径：主屋地基与人行道相接，1-2 段。备用关键词 path"
+      "element": "path",
+      "category": "environment",
+      "subcategory": "",
+      "count": 5,
+      "count_source": "预估（每栋房子一条），用户 2026-09-26 只说『单独』、未给数",
+      "size_m": null,
+      "time_of_day": "",
+      "note": "**与房子之间的连接路**（人行道通往各户的横向小径，把 6 块草坪分隔开）。✔ 用户 2026-09-26：「单独」→ 新增本行，不并入 sidewalk。⚠ 数量 5 是我估的（对应 5 栋房子），待核实。备用关键词 path / walkway / driveway"
     },
     {
       "element": "road",
-      "note": "沥青马路（已并入路缘石 curb）：右侧斜向远方，路面有井盖与修补痕。备用关键词 street"
-    },
-    {
-      "element": "grass",
-      "note": "绿化带（人行道与马路之间的行道草带）：小树和花坛都长在这条上"
-    },
-    {
-      "element": "tree",
-      "note": "小树：画面中央偏右、人行道旁，细枝干、树冠稀疏，前景主体之一"
-    },
-    {
-      "element": "bush",
-      "note": "花坛 + 灌木 / 地被：小树根部与人行道边，1-2 组，球状灌木 + 低矮花草。备用关键词 flower / plant"
-    },
-    {
-      "element": "tree",
-      "note": "大树树冠（悬垂入画）：右上角压住画面，只见枝叶、看不到树干 —— 是否建由用户定"
-    },
-    {
-      "element": "tree",
-      "note": "远处树线 / 树林：右侧背景沿马路，1 排，作背景绿化带"
+      "category": "environment",
+      "subcategory": "",
+      "count": null,
+      "count_source": "不适用（连续面，没有『个数』）",
+      "size_m": null,
+      "time_of_day": "",
+      "note": "沥青车行道，在画面右侧；路缘石并入本行。备用关键词 street / asphalt / roadway。⚠ 材料：只有材质 MI_Asphalt，没有网格 → 白膜"
     },
     {
       "element": "sky",
-      "note": "天空 + 落日：按【光照环境】处理（Sky/Atmosphere + 低角度方向光），不按资产找（用户已拍板）。黄昏渐变淡紫→粉→橙，落日贴地平线、被邻居住宅遮住一半"
+      "category": "environment",
+      "subcategory": "",
+      "count": null,
+      "count_source": "不适用（不是资产）",
+      "size_m": null,
+      "time_of_day": "",
+      "note": "**黄昏天空**：太阳贴地平线、暖橙→淡灰蓝渐变。按【光照环境】处理，不按资产找，归阶段七。⚠ 不纳入：右上角视频文字、画面左右黑边。备用关键词 sky / atmosphere"
+    },
+    {
+      "element": "map_size",
+      "category": "map_size",
+      "subcategory": "",
+      "count": null,
+      "count_source": "",
+      "size_m": [
+        120.0,
+        80.0
+      ],
+      "time_of_day": "",
+      "note": "预估（参考图目测，待核实）：单宅前院视角 —— 沿街长 120 m，进深 80 m。✔ 用户 2026-09-26：「差不多，画图的时候再改也行」（本版先不动）"
+    },
+    {
+      "element": "time_of_day",
+      "category": "time_of_day",
+      "subcategory": "",
+      "count": null,
+      "count_source": "",
+      "size_m": null,
+      "time_of_day": "sunset",
+      "note": "黄昏。依据：① 太阳贴着地平线（画面中央偏左那团橙色光）；② 天空自地平线暖橙渐变到上方淡灰蓝；③ 低角度柔光"
     }
   ],
-  "next_step": "元素清单已记录。下一步调 plan_assets()（不传参数即可）去找资产；找到就是找到，没找到就直接告诉用户缺什么，并请用户给出【路径 + 名字】—— 禁止猜疑似的。"
+  "groups": {
+    "建筑物与建筑": [
+      "house"
+    ],
+    "环境": [
+      "sidewalk",
+      "path",
+      "road",
+      "sky"
+    ],
+    "自然与植物": [
+      "tree",
+      "tree",
+      "shrub",
+      "grass",
+      "grass"
+    ],
+    "地图大小": [
+      "map_size"
+    ],
+    "地图对应时间": [
+      "time_of_day"
+    ]
+  },
+  "categories_defined": 13,
+  "scene": {
+    "地图大小": "120×80 m（预估）",
+    "地图对应时间": "sunset"
+  },
+  "scene_map_size_m": [
+    120.0,
+    80.0
+  ],
+  "scene_time_of_day": "sunset",
+  "no_count": [
+    "sidewalk",
+    "road",
+    "sky"
+  ],
+  "next_step": "元素清单已记录（按大类填好了，含地图大小 / 地图对应时间两个场景项）。下一步调 plan_assets()（不传参数即可）去找资产 —— ⚠ **场景项不参与找资产**（它们不是资产），会在报告的 scene 里原样带出。找到就是找到，没找到就直接告诉用户缺什么，并请用户给出【路径 + 名字】—— 禁止猜疑似的。",
+  "warnings": [
+    "有 3 个元素**没填预估数量**：sidewalk、road、sky。用户 2026-09-24 要求『有数量的还要填预估数量』—— 材质 / 面这类确实没有个数的，请在该行 note 里写明；其余的请补 count。"
+  ]
 }

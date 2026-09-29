@@ -50,6 +50,30 @@ def skip(name: str, why: str = "") -> None:
     print(f"[跳过] {name}   {why}")
 
 
+async def call_expect_error(c, tool: str, args: dict) -> tuple[bool, str]:
+    """调一个**预期会被拒收**的工具 → `(是否被拒, 错误原文)`。
+
+    ⚠ 为什么不直接 `try/except`（2026-09-24 实测 + 查 SDK 源码定案）：
+      服务端 `raise ToolError(...)` 最后变成 **`CallToolResult(is_error=True)`**，
+      错误原文在 `content` 的文本块里（`mcp/server/mcpserver/server.py:447`）；
+      客户端 `call_tool` **把这个结果直接返回、不抛异常**（`mcp/client/client.py:813-814`）。
+      所以"抛异常"这条路根本不会走到 —— 第一版就因此断言永假。
+    ⚠ 反过来**也不能**把"content 里有文本"当成错误：正常结果也有文本。
+      那样会让断言**恒真**（"等于没测"），比假红更坏。
+      所以这里只认 `is_error`，拿不到就由调用方按"没被拒"处理。
+    """
+    try:
+        result = await c.call_tool(tool, args)
+    except Exception as exc:                      # noqa: BLE001 —— 兜底：万一某版会抛
+        return True, f"(客户端抛异常) {exc}"
+
+    if getattr(result, "is_error", False) or getattr(result, "isError", False):
+        text = "".join(str(getattr(b, "text", "") or "")
+                       for b in (getattr(result, "content", None) or []))
+        return True, text or str(getattr(result, "structured_content", "") or "")
+    return False, "(没有 is_error 标记 —— 这个调用**没被拒**)"
+
+
 # --- 第一组：纯逻辑（不需要 UE）-----------------------------------------------
 
 async def test_pure() -> None:
@@ -57,16 +81,23 @@ async def test_pure() -> None:
 
     # --- 工具面：确认注册的工具就是这几个（多一个都说明"清空"没做干净）---
     # ⚠ 2026-09-23：get_asset_list（取清单）→ 6 个；阶段二三个工具 → 9 个。
+    # ⚠ 2026-09-25：阶段二验收加一个 request_plan_change → 10 个。
+    # ⚠ 2026-09-26：阶段三加 check_build_target + generate_build_orders + execute_build
+    #   → **13 个**（与 tests/preflight.py 的 EXPECTED_TOOLS 必须一致）。
+    # ⚠ 2026-09-27：阶段四 `generate_layout` 加了又**当天整块回退**（阶段一资产表 + 阶段二位置表
+    #   已是全局权威，那份只是派生件）→ 仍是 **13 个**。
     result = M.mcp.list_tools()
     if asyncio.iscoroutine(result):
         result = await result
     tools = getattr(result, "tools", result)
     names = sorted(t.name for t in tools)
     check(
-        "只注册了 9 个工具（阶段一 + 取清单 + 阶段二三个）",
-        names == ["confirm_assets", "confirm_elements", "confirm_plan",
-                  "generate_plan", "get_asset_list", "get_plan",
-                  "official_status", "plan_assets", "rename_assets"],
+        "只注册了 13 个工具（阶段一 4 + 取清单 1 + 阶段二 4 + 阶段三 3 + 自检 1）",
+        names == ["check_build_target", "confirm_assets", "confirm_elements", "confirm_plan",
+                  "execute_build", "generate_build_orders", "generate_plan",
+                  "get_asset_list", "get_plan",
+                  "official_status", "plan_assets", "rename_assets",
+                  "request_plan_change"],
         f"实际={names}",
     )
 
@@ -88,7 +119,7 @@ async def test_pure() -> None:
         ("get_asset_list", "不许用上下文里记得的旧表"),
         ("generate_plan", "单位是米"),                     # 单位错 100 倍那次
         ("get_plan", "开场先查状态"),
-        ("get_plan", "failed_names"),                      # 报「自检过了」要报具名项
+        ("get_plan", "阶段二不再自检"),                    # 2026-09-25：自检整段删除，描述须如实说
     ]:
         check(
             f"{tool_name} 的描述里有『{must_have}』",
@@ -161,6 +192,42 @@ async def test_pure() -> None:
     check("parse_return 解析失败返回原文",
           M.parse_return("not json") == "not json")
 
+    # --- 白膜占位四道校验（2026-09-24 用户要求：先给预估尺寸、登记白膜，再让用户确认）---
+    # ⚠ 这是**纯逻辑**：不碰 UE，必须全过。四道校验一条都不能松 ——
+    #   松一条，交付物里就会出现"看着像资产、其实是估的"的行（硬规则 6）。
+    def _ph(**over):
+        """造一行白膜占位；over 覆盖默认值（默认值是**合格**的一行）。"""
+        base = {
+            "element": "window", "is_placeholder": True, "placeholder_shape": "cube",
+            "size_cm": [120.0, 20.0, 100.0],
+            "size_source": M.SIZE_SOURCE_ESTIMATED,
+        }
+        base.update(over)
+        return M.AssetListItem(**base)
+
+    check("白膜：合格的一行没有错误", M.placeholder_errors(_ph()) == [],
+          f"实际={M.placeholder_errors(_ph())}")
+    check("白膜：带 asset_path 被拒（白膜就是没有资产）",
+          any("asset_path" in e for e in M.placeholder_errors(
+              _ph(asset_path="/Game/demo/Item/ItemMesh/House/house1"))))
+    check("白膜：没写形状被拒（阶段六没法实例化）",
+          any("placeholder_shape" in e for e in M.placeholder_errors(_ph(placeholder_shape=""))))
+    check("白膜：形状写错也被拒",
+          any("placeholder_shape" in e for e in M.placeholder_errors(_ph(placeholder_shape="sphere"))))
+    check("白膜：没给尺寸被拒",
+          any("size_cm" in e for e in M.placeholder_errors(_ph(size_cm=None))))
+    check("白膜：cube 只给两个数（没有体积）被拒",
+          any("三个数" in e for e in M.placeholder_errors(_ph(size_cm=[120.0, 20.0]))))
+    check("白膜：plane 给两个数就够（覆盖面）",
+          M.placeholder_errors(_ph(placeholder_shape="plane", size_cm=[800.0, 700.0])) == [])
+    check("白膜：尺寸来源写成实测被拒（预估值不许伪装成实测值）",
+          any("size_source" in e for e in M.placeholder_errors(
+              _ph(size_source="官方 get_bounds 实测（包围盒）"))))
+    check("白膜：旧文案『预估（待核实）』算合格（同样是「估的」）",
+          M.placeholder_errors(_ph(size_source=M.SIZE_SOURCE_ESTIMATED_LEGACY)) == [])
+    check("白膜：没写 size_source 不算错（工具会回填成预估文案）",
+          M.placeholder_errors(_ph(size_source="")) == [])
+
 
 # --- catalog/ 快照与还原（第二组会写交付物）-----------------------------------
 
@@ -219,20 +286,46 @@ async def test_live() -> None:
         check("拿到官方工具集数量", (st.get("toolset_count") or 0) > 5,
               f"实际={st.get('toolset_count')}")
 
-        # --- confirm_elements：记录元素清单 ---
+        # --- confirm_elements：记录**按大类填好的那张表**（含预估数量 + 两个场景项）---
+        # ⚠ 2026-09-24 契约变了：每个元素必须填 category（表外的 key 会被拒收）；
+        #   有数量的填 count；表里还必须出现 map_size / time_of_day 两个**场景项**。
         r = await c.call_tool("confirm_elements", {
             "elements": [
-                {"element": "house", "note": "左侧近处的白色大房子"},
-                {"element": "road", "note": "右侧沥青路"},
-                {"element": "sidewalk", "note": "中间水泥步道"},
-                {"element": "tree", "note": "草带上的小树"},
-                {"element": "grass", "note": "草坪"},
+                {"element": "house", "category": "building", "count": 1,
+                 "count_source": "预估（参考图目测）", "note": "左侧近处的白色大房子"},
+                {"element": "road", "category": "environment",
+                 "note": "右侧沥青路（面 —— 没有『个数』概念，故不填 count）"},
+                {"element": "sidewalk", "category": "environment",
+                 "note": "中间水泥步道（面，同上）"},
+                {"element": "tree", "category": "nature", "count": 6,
+                 "count_source": "预估（参考图目测）", "note": "草带上的小树"},
+                {"element": "grass", "category": "nature", "note": "草坪（面，同上）"},
+                # ⚠ 故意放一个**资产库里不可能有**的元素：用来验「找不到 → 给白膜提示」这条
+                {"element": "windmill_zzz", "category": "props",
+                 "note": "测试用：资产库里不存在，用来验 placeholder_hint"},
+                {"element": "map_size", "category": "map_size", "size_m": [80, 80],
+                 "note": "预估：参考图看不出边界，按街景纵深估 80×80 m（待核实）"},
+                {"element": "time_of_day", "category": "time_of_day",
+                 "time_of_day": "sunset", "note": "黄昏：长影 + 暖色天光"},
             ],
             "source_image": "views/reference_lawn_sunset.jpg",
         })
         d = r.structured_content or {}
-        check("confirm_elements 记录成功", d.get("total") == 5, f"实际={d.get('total')}")
+        check("confirm_elements 记录成功（6 个资产元素 + 2 个场景项 = 8）",
+              d.get("total") == 8, f"实际={d.get('total')}")
         check("元素清单已落盘", M.ELEMENTS_PATH.exists(), str(M.ELEMENTS_PATH))
+        check("返回里给出了按大类分组的『填好的表』",
+              bool(d.get("groups")) and "建筑物与建筑" in (d.get("groups") or {}),
+              f"实际 groups={d.get('groups')}")
+        check("两个场景项带出来了（地图大小 / 地图对应时间）",
+              (d.get("scene") or {}).get("地图大小") and (d.get("scene") or {}).get("地图对应时间"),
+              f"实际 scene={d.get('scene')}")
+        check("场景项的结构化值给对了（80×80 m / sunset）",
+              d.get("scene_map_size_m") == [80, 80] and d.get("scene_time_of_day") == "sunset",
+              f"实际 size={d.get('scene_map_size_m')} time={d.get('scene_time_of_day')}")
+        check("没填数量的元素被列出来（面类如实登记）",
+              "road" in (d.get("no_count") or []) and "house" not in (d.get("no_count") or []),
+              f"实际 no_count={d.get('no_count')}")
 
         # --- plan_assets：不传 keywords，应读回刚确认的清单 ---
         r2 = await c.call_tool("plan_assets", {})
@@ -240,10 +333,29 @@ async def test_live() -> None:
         check("plan_assets 读到了用户确认的清单",
               "用户确认过的元素清单" in (d2.get("source") or ""),
               f"实际 source={d2.get('source')}")
-        check("查了 5 个元素", d2.get("total_elements") == 5)
+        check("查了 6 个元素", d2.get("total_elements") == 6,
+              f"实际={d2.get('total_elements')}")
         check("恒定要求用户确认", d2.get("needs_user_confirmation") is True)
+        # ⚠ 2026-09-24：场景项**不是资产**，不许被当成元素去搜（搜「地图大小」没有意义）
+        check("场景项没被当成元素搜索",
+              all(e.get("element") not in ("map_size", "time_of_day")
+                  for e in d2.get("elements", [])),
+              f"实际={[e.get('element') for e in d2.get('elements', [])]}")
+        check("场景项原样带出在 scene 里",
+              bool(d2.get("scene")), f"实际 scene={d2.get('scene')}")
 
+        # ⚠ 2026-09-24 整改的验收点：找不到资产的元素，要被明确指成**白膜占位**，
+        #   而且**不许**再用"跳过这个元素"那种会让人静默丢信息的说法。
         elems = {e["element"]: e for e in d2.get("elements", [])}
+        probe = elems.get("windmill_zzz") or {}
+        check("找不到的元素带出 placeholder_hint（要求登记白膜占位）",
+              probe.get("status") == "missing"
+              and "白膜占位" in (probe.get("placeholder_hint") or ""),
+              f"实际 status={probe.get('status')} hint={(probe.get('placeholder_hint') or '')[:60]!r}")
+        check("找不到元素时不再说『跳过这个元素』",
+              "跳过这个元素" not in (probe.get("question") or ""),
+              f"实际={probe.get('question')}")
+
 
         # 关键：road 必须靠【文件夹名】命中（官方按资产名搜不到哈希名 MI_sjfnch0a）
         road = elems.get("road") or {}
@@ -293,30 +405,70 @@ async def test_live() -> None:
               d3["items"][0]["new_path"].endswith("/MI_Lawn"),
               f"实际={d3['items'][0]['new_path']}")
 
-        # --- confirm_assets：验证存在性 + 交付清单 ---
+        # --- confirm_assets：**白膜契约**（2026-09-24 整改后的新规矩）---
+        # ⚠ 契约变了（这次整改的核心）：
+        #   ① 路径验不过的行**不再**当"invalid_paths"交付出去 —— 直接**整表拒收**，
+        #      并告诉调用方二选一：给对路径 / 登记成白膜占位；
+        #   ② 白膜行必须把 asset_path / placeholder_shape / size_cm / size_source 四样填齐；
+        #   ③ **只有材质实例顶着**的行要点名（摆不出实体）—— 但只点名，不替用户改。
+        # ⚠ 判"有没有被拒"用 `call_expect_error()`（见它 docstring：**本 SDK 报错时不抛异常**）。
+        #   断言**只看"被拒了没有"** —— 错误原文长什么样、以哪种形式回来，**不在这里断言**：
+        #   那是"客户端怎么送错误"的实现细节，我在这个环境里**没法复现**（不能跑 MCP 客户端）。
+        #   把"错误原文"也写进 detail，红了就能一眼看见它到底回了什么。
+        rejected, err = await call_expect_error(c, "confirm_assets", {
+            "items": [{"element": "shadow_probe", "element_key": "shadow_probe",
+                       "asset_path": "/Game/This/Path/Does/Not/Exist",
+                       "asset_type": "mesh"}],
+        })
+        check("confirm_assets 拒收路径验证不过的行（不再当 invalid_paths 交付）",
+              rejected, f"rejected={rejected} 原文={err[:200]!r}")
+
+        # 填错的白膜行（没写形状）也要被拒 —— 光有尺寸不算数
+        rejected, err = await call_expect_error(c, "confirm_assets", {
+            "items": [{"element": "window", "element_key": "window",
+                       "is_placeholder": True, "size_cm": [120.0, 20.0, 100.0],
+                       "size_source": M.SIZE_SOURCE_ESTIMATED}],
+        })
+        check("confirm_assets 拒收没写 placeholder_shape 的白膜行",
+              rejected, f"rejected={rejected} 原文={err[:200]!r}")
+
+        # 走通的一批：真资产（road=材质实例，**摆不出实体**要被打上 ⚠）
+        #             + 登记好的白膜（window / driveway）
         r4 = await c.call_tool("confirm_assets", {
             "items": [
-                {"element": "road",
+                {"element": "road", "element_key": "road",
                  "asset_path": "/Game/Fab/Megascans/Surfaces/Fine_American_Road_sjfnch0a/Medium/sjfnch0a_tier_2/Materials/MI_sjfnch0a",
                  "asset_type": "material_instance"},
-                {"element": "grass",
-                 "asset_path": "/Game/Fab/Megascans/Surfaces/Uncut_Grass_oeeb70/High/oeeb70_tier_1/Materials/MI_oeeb70",
-                 "asset_type": "material_instance"},
-                {"element": "不存在的",
-                 "asset_path": "/Game/This/Path/Does/Not/Exist",
-                 "asset_type": "mesh"},
+                {"element": "window", "element_key": "window",
+                 "is_placeholder": True, "placeholder_shape": "cube",
+                 "size_cm": [120.0, 20.0, 100.0],
+                 "size_source": M.SIZE_SOURCE_ESTIMATED,
+                 "note": "预估：参考图目测（待核实）"},
+                {"element": "driveway", "element_key": "driveway",
+                 "is_placeholder": True, "placeholder_shape": "plane",
+                 "size_cm": [300.0, 600.0], "size_source": M.SIZE_SOURCE_ESTIMATED},
             ],
         })
         d4 = r4.structured_content or {}
-        check("confirm_assets 验证出 2 个存在 / 1 个不存在",
-              d4.get("verified") == 2 and len(d4.get("invalid_paths") or []) == 1,
-              f"实际 verified={d4.get('verified')} invalid={d4.get('invalid_paths')}")
+        check("confirm_assets 验证出 1 个真资产 / 2 个白膜占位",
+              d4.get("verified") == 1 and d4.get("placeholders") == 2,
+              f"实际 verified={d4.get('verified')} placeholders={d4.get('placeholders')}")
+        check("confirm_assets 里 invalid_paths 恒为空（验不过的进不来）",
+              d4.get("invalid_paths") == [], f"实际={d4.get('invalid_paths')}")
         check("confirm_assets 生成了给人看的清单正文",
               "资产清单（阶段一交付）" in (d4.get("deliverable") or ""),
               "deliverable 里没有清单标题")
-        check("存在性不通过时明确要求先处理",
-              "先" in (d4.get("note") or "") or "处理" in (d4.get("note") or ""),
-              f"实际={d4.get('note')}")
+        # ⚠ 这两条是本轮整改的**验收点**：材质行必须在**清单里**就看得出来，不能只在脑子里
+        check("清单里点明了『只有材质实例，摆不出实体』",
+              "摆不出实体" in (d4.get("deliverable") or ""),
+              "deliverable 里没点名材质行")
+        check("note 里点名了只拿材质顶着的元素",
+              "road" in (d4.get("note") or ""), f"实际 note={d4.get('note')}")
+        check("白膜行在清单里标成 ◻ 白膜，且不带资产路径",
+              "◻ 白膜" in (d4.get("deliverable") or "")
+              and not any(it.get("asset_path") for it in d4.get("items", [])
+                          if it.get("is_placeholder")),
+              "白膜行没标出来，或带了路径")
         check("资产清单已落盘", M.ASSET_LIST_PATH.exists(), str(M.ASSET_LIST_PATH))
 
 

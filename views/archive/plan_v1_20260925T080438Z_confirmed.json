@@ -1,0 +1,708 @@
+{
+  "stage": "阶段二 · 平面放置规划",
+  "unit": "m",
+  "world": {
+    "center": [
+      0.0,
+      0.0
+    ],
+    "size": [
+      200.0,
+      70.0
+    ],
+    "size_source": "调用方覆盖（不是阶段一记录）",
+    "bounds": {
+      "min": [
+        -100.0,
+        -35.0
+      ],
+      "max": [
+        100.0,
+        35.0
+      ]
+    },
+    "coordinate_system": {
+      "handedness": "left",
+      "height_axis": "Z",
+      "forward_axis": "X",
+      "right_axis": "Y",
+      "right_normal_rule": "right_normal(d) = (-dy, dx)"
+    }
+  },
+  "assets": [
+    {
+      "element_key": "tree",
+      "label": "行道树 #1",
+      "pos": [
+        -95.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "用户 2026-09-25「树改回图片大小」→ scale 0.55：树高 8.8 m、冠幅 7.9 m（图里目标 8～12 m）。实测包围盒 14.35×11.72×16.05 m。⚠ 树冠会探到车行道上空（上下分离，平面模型表达不了）→ 会报红，用户已认可这类报红",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #2",
+      "pos": [
+        -85.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #3",
+      "pos": [
+        -75.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #4",
+      "pos": [
+        -65.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #5",
+      "pos": [
+        -55.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #6",
+      "pos": [
+        -45.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #7",
+      "pos": [
+        -35.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #8",
+      "pos": [
+        -25.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #9",
+      "pos": [
+        -15.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #10",
+      "pos": [
+        -5.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #11",
+      "pos": [
+        5.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #12",
+      "pos": [
+        15.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #13",
+      "pos": [
+        25.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #14",
+      "pos": [
+        35.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #15",
+      "pos": [
+        45.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #16",
+      "pos": [
+        55.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #17",
+      "pos": [
+        65.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #18",
+      "pos": [
+        75.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #19",
+      "pos": [
+        85.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #20",
+      "pos": [
+        95.0,
+        15.1
+      ],
+      "footprint_m": [
+        7.89,
+        6.45
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.55
+    },
+    {
+      "element_key": "building",
+      "label": "沿街楼 左 #1",
+      "pos": [
+        -25.0,
+        -25.0
+      ],
+      "footprint_m": [
+        14.25,
+        11.13
+      ],
+      "rot_deg": 0.0,
+      "note": "街对面沿街楼（y=-25）。实测 0.89×0.70×0.50 × scale 16 → 高 8.0 m；图上目标 12～16 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "building",
+      "label": "沿街楼 左 #2",
+      "pos": [
+        10.0,
+        -25.0
+      ],
+      "footprint_m": [
+        14.25,
+        11.13
+      ],
+      "rot_deg": 0.0,
+      "note": "同上一栋，沿街排开（面宽 14.25 m + 间隙 10 m）",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "street_light",
+      "label": "路灯 #1",
+      "pos": [
+        -80.0,
+        34.5
+      ],
+      "footprint_m": [
+        1.62,
+        0.89
+      ],
+      "rot_deg": 0.0,
+      "note": "5 根一列（y=34.5），间距 40 m；实测 0.70×0.39×3.87 × scale 2.3 → 杆高 8.9 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/streetlight/street_lamp_01_4k/street_lamp_01_4k",
+      "scale": 2.3
+    },
+    {
+      "element_key": "street_light",
+      "label": "路灯 #2",
+      "pos": [
+        -40.0,
+        34.5
+      ],
+      "footprint_m": [
+        1.62,
+        0.89
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/demo/Item/ItemMesh/streetlight/street_lamp_01_4k/street_lamp_01_4k",
+      "scale": 2.3
+    },
+    {
+      "element_key": "street_light",
+      "label": "路灯 #3",
+      "pos": [
+        0.0,
+        34.5
+      ],
+      "footprint_m": [
+        1.62,
+        0.89
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/demo/Item/ItemMesh/streetlight/street_lamp_01_4k/street_lamp_01_4k",
+      "scale": 2.3
+    },
+    {
+      "element_key": "street_light",
+      "label": "路灯 #4",
+      "pos": [
+        40.0,
+        34.5
+      ],
+      "footprint_m": [
+        1.62,
+        0.89
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/demo/Item/ItemMesh/streetlight/street_lamp_01_4k/street_lamp_01_4k",
+      "scale": 2.3
+    },
+    {
+      "element_key": "street_light",
+      "label": "路灯 #5",
+      "pos": [
+        80.0,
+        34.5
+      ],
+      "footprint_m": [
+        1.62,
+        0.89
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/demo/Item/ItemMesh/streetlight/street_lamp_01_4k/street_lamp_01_4k",
+      "scale": 2.3
+    },
+    {
+      "element_key": "trash_bin",
+      "label": "红色垃圾桶",
+      "pos": [
+        83.0,
+        25.3
+      ],
+      "footprint_m": [
+        0.83,
+        0.75
+      ],
+      "rot_deg": 0.0,
+      "note": "用户确认的那一个红色垃圾桶：x=83、y=25.3。实测 0.49×0.44×0.59 × scale 1.7 → 高 1.0 m",
+      "asset_path": "/Game/Fab/Megascans/3D/Trash_Can_ucynedrfa/Medium/SM_ucynedrfa_tier_2/StaticMeshes/SM_ucynedrfa_tier_2",
+      "scale": 1.7
+    }
+  ],
+  "whiteboxes": [
+    {
+      "element_key": "road",
+      "label": "沥青车行道（整条）",
+      "pos": [
+        0.0,
+        0.0
+      ],
+      "footprint_m": [
+        200.0,
+        20.0
+      ],
+      "rot_deg": 0.0,
+      "note": "路幅 20 m，覆盖整条街（y-10～10）；车道标线与边线阶段六再画/上材质",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "sidewalk",
+      "label": "右侧人行道（整条）",
+      "pos": [
+        0.0,
+        22.15
+      ],
+      "footprint_m": [
+        200.0,
+        3.0
+      ],
+      "rot_deg": 0.0,
+      "note": "我方一侧人行道（y20.65～23.65）：含砖铺 / 树池 / 路缘石，阶段六上材质或细分",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "草地 ①左侧路边草坪·西段",
+      "pos": [
+        -50.0,
+        -32.5
+      ],
+      "footprint_m": [
+        100.0,
+        5.0
+      ],
+      "rot_deg": 0.0,
+      "note": "街对面沿街楼外侧的草坪带（x-100～0、y-35～-30）；阶段六可贴 MI_oeeb70",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "草地 ①左侧路边草坪·东段",
+      "pos": [
+        50.0,
+        -32.5
+      ],
+      "footprint_m": [
+        100.0,
+        5.0
+      ],
+      "rot_deg": 0.0,
+      "note": "同上一段的东半（x0～100）；避开沿街楼占的 x 区间",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "草地 ②右侧草坡",
+      "pos": [
+        0.0,
+        30.5
+      ],
+      "footprint_m": [
+        200.0,
+        3.0
+      ],
+      "rot_deg": 0.0,
+      "note": "右侧人行道外侧的斜坡草坡（y29～32）；阶段六可贴 MI_oeeb70",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "shrub",
+      "label": "绿篱 #1（右侧，草坡前）",
+      "pos": [
+        40.0,
+        26.6
+      ],
+      "footprint_m": [
+        30.0,
+        1.2
+      ],
+      "rot_deg": 0.0,
+      "note": "沿街修剪绿篱一段（x25～55，y26～27.2）；层高 0.9 m",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.9
+    },
+    {
+      "element_key": "shrub",
+      "label": "绿篱 #2（街对面沿街楼前）",
+      "pos": [
+        0.0,
+        -17.5
+      ],
+      "footprint_m": [
+        30.0,
+        1.2
+      ],
+      "rot_deg": 0.0,
+      "note": "街对面沿街楼前的绿篱带（x-15～15，y-18.1～-16.9）；⚠ 待核实是否其实是中央分隔带",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.9
+    },
+    {
+      "element_key": "drain_grate",
+      "label": "线性排水沟 / 井盖",
+      "pos": [
+        50.0,
+        10.0
+      ],
+      "footprint_m": [
+        1.0,
+        0.5
+      ],
+      "rot_deg": 0.0,
+      "note": "车行道靠路缘的线性格栅（x=50，y=10）—— 嵌在路面里；⚠ 待核实是一处还是两处、是排水沟还是树池盖板",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.1
+    }
+  ],
+  "params": {
+    "世界": "沿街长 X = 200 m，进深 Y = 70 m（±35），中心 [0,0]，单位米。镜头站在右侧人行道（+Y）看向街道纵深",
+    "本版变更": "① 行道树按用户「改回图片大小」→ scale 0.55（高 8.8 m、冠幅 7.9 m）；② 车行道收回 20 m（y-10～10）；③ element_key 取数 bug 已修（重启后生效）",
+    "纵向分区（从 -Y 到 +Y）": "① 左侧草坪（两段，y-35～-30）② 沿街楼带 y-30.56～-19.44（2 栋）③ 左侧绿篱 y-18.1～-16.9 ④ 车行道 y-10～10（20 m 幅）⑤ 行道树中心线 y=15.1（树冠 y11.9～18.3，探到路面上空）⑥ 右侧人行道 y20.65～23.65 ⑦ 垃圾桶 y25.3 ⑧ 右侧绿篱 y26～27.2 ⑨ 右侧草坡 y29～32 ⑩ 路灯 y34.5",
+    "报红口径（用户 2026-09-25 拍板）": "自检保持最严（有交叠就报红）；报红不拦确认、由用户逐条表态：① 排水沟×车行道（已认）② 楼×草坪（已认）③ 树×车行道（已接受，因为要按图放大树）",
+    "待核实": "左侧那条修剪绿篱是中央分隔带还是左侧沿街绿化带 —— 本版一条摆左侧（y=-17.5）、一条摆右侧（y=26.6）"
+  },
+  "checks": [
+    {
+      "name": "每条占地的宽/深都为正",
+      "bad": [],
+      "ok": true
+    },
+    {
+      "name": "所有占地的四角都在世界边界内",
+      "bad": [],
+      "ok": true
+    },
+    {
+      "name": "已有资产两两不重叠",
+      "bad": [],
+      "ok": true
+    },
+    {
+      "name": "白膜两两不重叠",
+      "bad": [
+        "沥青车行道（整条） × 线性排水沟 / 井盖"
+      ],
+      "ok": false
+    },
+    {
+      "name": "白膜不压已有资产（= 先放资产、再放白膜）",
+      "bad": [
+        "沿街楼 左 #1 × 草地 ①左侧路边草坪·西段",
+        "沿街楼 左 #2 × 草地 ①左侧路边草坪·东段"
+      ],
+      "ok": false
+    },
+    {
+      "name": "每个元素的 element_key 都在阶段一的清单里有记录",
+      "bad": [],
+      "ok": true,
+      "note": "catalog/asset_list.json（交付清单，2026-09-25T07:10:29.932652+00:00，10 行 / 5 个无资产）"
+    },
+    {
+      "name": "白膜只用在『阶段一没有可用资产』的元素上",
+      "bad": [],
+      "ok": true,
+      "note": "catalog/asset_list.json（交付清单，2026-09-25T07:10:29.932652+00:00，10 行 / 5 个无资产）"
+    },
+    {
+      "name": "已有资产占地 = 阶段一实测包围盒 × scale（按 asset_path 对账）",
+      "bad": [],
+      "ok": true,
+      "note": "catalog/asset_list.json（交付清单，2026-09-25T07:10:29.932652+00:00：4 个资产路径有实测尺寸 / 4 个元素有资产）"
+    },
+    {
+      "name": "交付清单里『有资产』的元素都已落位",
+      "bad": [],
+      "ok": true,
+      "note": "catalog/asset_list.json（交付清单，2026-09-25T07:10:29.932652+00:00：4 个资产路径有实测尺寸 / 4 个元素有资产）；没落位的要么补上行、要么在 params 里写明为什么不放"
+    },
+    {
+      "name": "阶段一判成『无资产』的元素都已落位（每个都有白膜行）",
+      "bad": [],
+      "ok": true,
+      "note": "catalog/asset_list.json（交付清单，2026-09-25T07:10:29.932652+00:00，10 行 / 5 个无资产）"
+    },
+    {
+      "name": "白膜里的 cube 都记了 height_m（阶段六实例化要用）",
+      "bad": [],
+      "ok": true,
+      "note": "plane（覆盖面）不需要高度；cube 缺高度时，阶段六只能靠人读 note 里的中文"
+    }
+  ],
+  "previous_elements": {
+    "path": "catalog/elements.json",
+    "confirmed_at": "2026-09-25T07:10:22.459765+00:00",
+    "scene": {
+      "size_m": "200×70 m（阶段一记录）",
+      "time_of_day": "afternoon"
+    }
+  },
+  "no_asset_source": "catalog/asset_list.json（交付清单，2026-09-25T07:10:29.932652+00:00，10 行 / 5 个无资产）",
+  "note": "一个物体一行、自带 pos（平面中心坐标，米）。**没有 count 字段** —— 摆几个就写几行，不许用一条记录代表多个不同位置的物体（那样自检看不见它们）。已有资产先放（大小是阶段一实测的）、白膜后放（大小要等资产占完位再估）。本数据不依赖任何图片；要图就由 AI 拿这份数据自己画（代码不出图）。",
+  "confirmation": {
+    "required": true,
+    "confirmed": true,
+    "confirmed_by": "用户",
+    "confirmed_at": "2026-09-25T07:29:44.971648+00:00",
+    "note": "已确认。几何一变，指纹就对不上，本次确认自动作废。",
+    "plan_hash": "e6d3a5fa0611562c51c85df451e2520deaeaa93de8ad7ad81279c10d45b594cd"
+  }
+}

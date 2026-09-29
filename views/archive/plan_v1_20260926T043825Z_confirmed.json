@@ -1,0 +1,886 @@
+{
+  "stage": "阶段二 · 平面放置规划",
+  "unit": "m",
+  "world": {
+    "center": [
+      0.0,
+      0.0
+    ],
+    "size": [
+      110.0,
+      60.0
+    ],
+    "size_source": "阶段一 elements.json 的『地图大小』场景项",
+    "bounds": {
+      "min": [
+        -55.0,
+        -30.0
+      ],
+      "max": [
+        55.0,
+        30.0
+      ]
+    },
+    "coordinate_system": {
+      "handedness": "left",
+      "height_axis": "Z",
+      "forward_axis": "X",
+      "right_axis": "Y",
+      "right_normal_rule": "right_normal(d) = (-dy, dx)"
+    }
+  },
+  "assets": [
+    {
+      "element_key": "tree",
+      "label": "行道树 右 #1",
+      "pos": [
+        -48.0,
+        6.0
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "右侧路缘草皮带（y=6.0）。本版株距由 7 m 改为 12 m、每侧 9 棵 —— 树冠宽 10.76 m，7 m 株距会重叠 3.76 m。实测 14.35×11.72×16.05 m × 0.75 → 高 12.0 m",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 右 #2",
+      "pos": [
+        -36.0,
+        6.0
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 右 #3",
+      "pos": [
+        -24.0,
+        6.0
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 右 #4",
+      "pos": [
+        -12.0,
+        6.0
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 右 #5",
+      "pos": [
+        0.0,
+        6.0
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 右 #6",
+      "pos": [
+        12.0,
+        6.0
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 右 #7",
+      "pos": [
+        24.0,
+        6.0
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 右 #8",
+      "pos": [
+        36.0,
+        6.0
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 右 #9",
+      "pos": [
+        48.0,
+        6.0
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上；树冠外缘 x=53.38，在世界边界 55 以内",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 左 #1",
+      "pos": [
+        -48.0,
+        -6.5
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "左侧草坪上贴路缘一列（y=-6.5），与右排同位，共 9 棵",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 左 #2",
+      "pos": [
+        -36.0,
+        -6.5
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 左 #3",
+      "pos": [
+        -24.0,
+        -6.5
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 左 #4",
+      "pos": [
+        -12.0,
+        -6.5
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 左 #5",
+      "pos": [
+        0.0,
+        -6.5
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 左 #6",
+      "pos": [
+        12.0,
+        -6.5
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 左 #7",
+      "pos": [
+        24.0,
+        -6.5
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 左 #8",
+      "pos": [
+        36.0,
+        -6.5
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 左 #9",
+      "pos": [
+        48.0,
+        -6.5
+      ],
+      "footprint_m": [
+        10.76,
+        8.79
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.75
+    },
+    {
+      "element_key": "house",
+      "label": "沿街住宅 右 #1（house1 高房）",
+      "pos": [
+        -33.36,
+        22.0
+      ],
+      "footprint_m": [
+        14.25,
+        11.13
+      ],
+      "rot_deg": 0.0,
+      "note": "右排从 x=-40.485 起排；本栋中心 -33.36。与 #2 的缝 1.4 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "沿街住宅 右 #2（house2 矮房）",
+      "pos": [
+        -16.63,
+        22.0
+      ],
+      "footprint_m": [
+        16.41,
+        9.87
+      ],
+      "rot_deg": 0.0,
+      "note": "与前栋缝 1.4 m、与后栋缝 0.9 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "沿街住宅 右 #3（house1 高房）",
+      "pos": [
+        -0.4,
+        22.0
+      ],
+      "footprint_m": [
+        14.25,
+        11.13
+      ],
+      "rot_deg": 0.0,
+      "note": "图里右侧那栋白房子（栅栏在它前面）。与前栋缝 0.9 m、与后栋缝 1.9 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "沿街住宅 右 #4（house2 矮房）",
+      "pos": [
+        16.83,
+        22.0
+      ],
+      "footprint_m": [
+        16.41,
+        9.87
+      ],
+      "rot_deg": 0.0,
+      "note": "图里右侧那栋深红房子（灌木在它前面）。与前栋缝 1.9 m、与后栋缝 1.2 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "沿街住宅 右 #5（house1 高房）",
+      "pos": [
+        33.36,
+        22.0
+      ],
+      "footprint_m": [
+        14.25,
+        11.13
+      ],
+      "rot_deg": 0.0,
+      "note": "右排末栋，与前栋缝 1.2 m；整排跨 x-40.49～40.49",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "沿街住宅 左 #1（house2 矮房）",
+      "pos": [
+        -33.41,
+        -22.0
+      ],
+      "footprint_m": [
+        16.41,
+        9.87
+      ],
+      "rot_deg": 180.0,
+      "note": "左排从 x=-41.615 起排，户型节奏与右排错开；rot 180 → 正面朝街",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "沿街住宅 左 #2（house1 高房）",
+      "pos": [
+        -16.48,
+        -22.0
+      ],
+      "footprint_m": [
+        14.25,
+        11.13
+      ],
+      "rot_deg": 180.0,
+      "note": "与前栋缝 1.6 m、与后栋缝 1.1 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "沿街住宅 左 #3（house2 矮房）",
+      "pos": [
+        -0.05,
+        -22.0
+      ],
+      "footprint_m": [
+        16.41,
+        9.87
+      ],
+      "rot_deg": 180.0,
+      "note": "与前栋缝 1.1 m、与后栋缝 0.8 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "沿街住宅 左 #4（house1 高房）",
+      "pos": [
+        16.08,
+        -22.0
+      ],
+      "footprint_m": [
+        14.25,
+        11.13
+      ],
+      "rot_deg": 180.0,
+      "note": "与前栋缝 0.8 m、与后栋缝 2.0 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "沿街住宅 左 #5（house2 矮房）",
+      "pos": [
+        33.41,
+        -22.0
+      ],
+      "footprint_m": [
+        16.41,
+        9.87
+      ],
+      "rot_deg": 180.0,
+      "note": "左排末栋，与前栋缝 2.0 m；整排跨 x-41.62～41.62",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 16.0
+    },
+    {
+      "element_key": "street_light",
+      "label": "路灯 #1（左）",
+      "pos": [
+        -30.0,
+        -6.0
+      ],
+      "footprint_m": [
+        1.62,
+        0.89
+      ],
+      "rot_deg": 0.0,
+      "note": "在左侧、-36 与 -24 两棵树的树冠缝（1.24 m）正中。⚠ 灯宽 1.62 m，比缝宽 0.38 m → 两端各进树冠包围盒 0.19 m。树冠是包围盒不是实体，3D 里灯头（8.9 m）在树冠（12 m）下方",
+      "asset_path": "/Game/demo/Item/ItemMesh/streetlight/street_lamp_01_4k/street_lamp_01_4k",
+      "scale": 2.3
+    },
+    {
+      "element_key": "street_light",
+      "label": "路灯 #2（左）",
+      "pos": [
+        30.0,
+        -6.0
+      ],
+      "footprint_m": [
+        1.62,
+        0.89
+      ],
+      "rot_deg": 0.0,
+      "note": "同上；两根间距 60 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/streetlight/street_lamp_01_4k/street_lamp_01_4k",
+      "scale": 2.3
+    }
+  ],
+  "whiteboxes": [
+    {
+      "element_key": "road",
+      "label": "沥青车行道（整条）",
+      "pos": [
+        0.0,
+        0.0
+      ],
+      "footprint_m": [
+        110.0,
+        9.0
+      ],
+      "rot_deg": 0.0,
+      "note": "车行道 y-4.5～4.5（9 m）。在路面标高，两侧地面比它高 15 cm。⚠ 新图未见白色车道线",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "草地 ①右侧路缘草皮带（行道树带）",
+      "pos": [
+        0.0,
+        6.0
+      ],
+      "footprint_m": [
+        110.0,
+        3.0
+      ],
+      "rot_deg": 0.0,
+      "note": "y4.5～7.5。连续条带，行道树种在这条带上。cube、面层高 15 cm",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "grass",
+      "label": "草地 ②右侧房前草坪",
+      "pos": [
+        0.0,
+        12.7
+      ],
+      "footprint_m": [
+        110.0,
+        7.4
+      ],
+      "rot_deg": 0.0,
+      "note": "y9.0～16.4（人行道外沿到房子前）。cube、面层高 15 cm",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "grass",
+      "label": "草地 ③左侧房前草坪",
+      "pos": [
+        0.0,
+        -10.45
+      ],
+      "footprint_m": [
+        110.0,
+        11.9
+      ],
+      "rot_deg": 0.0,
+      "note": "y-16.4～-4.5。cube、面层高 15 cm。⚠ 这一行是阶段一『2 片』之外的第三片（左侧）",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "sidewalk",
+      "label": "人行道（我方一侧，含路缘石与树池）",
+      "pos": [
+        0.0,
+        8.25
+      ],
+      "footprint_m": [
+        110.0,
+        1.5
+      ],
+      "rot_deg": 0.0,
+      "note": "y7.5～9.0、高 15 cm。用户特别说明『人行道还是有高度的』→ cube 不是 plane",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "car",
+      "label": "停放车辆 #1（首辆栗色 SUV）",
+      "pos": [
+        -24.0,
+        -3.35
+      ],
+      "footprint_m": [
+        4.8,
+        1.9
+      ],
+      "rot_deg": 0.0,
+      "note": "沿左侧路缘一列停放，车列 x-24～24、间距 6 m。停在路面上 → 标高 z=0。⚠ 在左侧树冠下方（参考图也是如此）",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.7
+    },
+    {
+      "element_key": "car",
+      "label": "停放车辆 #2",
+      "pos": [
+        -18.0,
+        -3.35
+      ],
+      "footprint_m": [
+        4.8,
+        1.9
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.7
+    },
+    {
+      "element_key": "car",
+      "label": "停放车辆 #3",
+      "pos": [
+        -12.0,
+        -3.35
+      ],
+      "footprint_m": [
+        4.8,
+        1.9
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.7
+    },
+    {
+      "element_key": "car",
+      "label": "停放车辆 #4",
+      "pos": [
+        -6.0,
+        -3.35
+      ],
+      "footprint_m": [
+        4.8,
+        1.9
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.7
+    },
+    {
+      "element_key": "car",
+      "label": "停放车辆 #5",
+      "pos": [
+        0.0,
+        -3.35
+      ],
+      "footprint_m": [
+        4.8,
+        1.9
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.7
+    },
+    {
+      "element_key": "car",
+      "label": "停放车辆 #6",
+      "pos": [
+        6.0,
+        -3.35
+      ],
+      "footprint_m": [
+        4.8,
+        1.9
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.7
+    },
+    {
+      "element_key": "car",
+      "label": "停放车辆 #7",
+      "pos": [
+        12.0,
+        -3.35
+      ],
+      "footprint_m": [
+        4.8,
+        1.9
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.7
+    },
+    {
+      "element_key": "car",
+      "label": "停放车辆 #8",
+      "pos": [
+        18.0,
+        -3.35
+      ],
+      "footprint_m": [
+        4.8,
+        1.9
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.7
+    },
+    {
+      "element_key": "car",
+      "label": "停放车辆 #9",
+      "pos": [
+        24.0,
+        -3.35
+      ],
+      "footprint_m": [
+        4.8,
+        1.9
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.7
+    },
+    {
+      "element_key": "fence",
+      "label": "白色尖桩栅栏（右侧白房子前）",
+      "pos": [
+        -0.4,
+        11.0
+      ],
+      "footprint_m": [
+        12.0,
+        0.1
+      ],
+      "rot_deg": 0.0,
+      "note": "顺街一道 12 m，高 1.1 m。在白房子（右 #3）正前方",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.1
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木 #1（红房子前）",
+      "pos": [
+        15.0,
+        14.5
+      ],
+      "footprint_m": [
+        1.5,
+        1.5
+      ],
+      "rot_deg": 0.0,
+      "note": "随红房子（右 #4，中心 x=16.83）摆放，三丛在其前 15.0 / 16.8 / 18.7",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.0
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木 #2（红房子前）",
+      "pos": [
+        16.8,
+        14.5
+      ],
+      "footprint_m": [
+        1.5,
+        1.5
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.0
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木 #3（红房子前）",
+      "pos": [
+        18.7,
+        14.5
+      ],
+      "footprint_m": [
+        1.5,
+        1.5
+      ],
+      "rot_deg": 0.0,
+      "note": "同上",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 1.0
+    },
+    {
+      "element_key": "utility_pole",
+      "label": "电线杆 #1（右侧）",
+      "pos": [
+        -42.0,
+        6.5
+      ],
+      "footprint_m": [
+        0.3,
+        0.3
+      ],
+      "rot_deg": 0.0,
+      "note": "木质电杆，高 11 m，站在右侧路缘草皮带里（地面抬高 15 cm），在 -36 与 -48 两棵树冠缝（1.24 m）里",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 11.0
+    },
+    {
+      "element_key": "utility_pole",
+      "label": "电线杆 #2（右侧）",
+      "pos": [
+        42.0,
+        6.5
+      ],
+      "footprint_m": [
+        0.3,
+        0.3
+      ],
+      "rot_deg": 0.0,
+      "note": "同上；两根间距 84 m",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 11.0
+    }
+  ],
+  "params": {
+    "世界": "沿街长 X=110 m，进深 Y=60 m（±30），中心 [0,0]，单位米。镜头站在右侧（+Y）人行道附近看向街道纵深（+X）。",
+    "本版变更": "用户 2026-09-25：「树删一点吧别重叠」→ 行道树由每侧 15 棵改为 **每侧 9 棵、株距 12 m**（共 18 棵），树的大小不变（×0.75、高 12.0 m）。原因算得很清楚：110 m 街上摆 15 棵/侧 → 株距 7 m，而树冠宽 10.76 m，必然重叠 3.76 m；株距≥10.76 m 才不重叠。路灯随之从 x=±33.75 挪到 x=±30（两棵树冠缝的正中）。",
+    "⚠ 数量与阶段一不一致（按用户要求）": "阶段一记录树 **30 棵**（左右各 15，用户当时给的数）；本版实际摆 **18 棵**（左右各 9）。不一致是**用户本轮明确要求删树**造成的，不是漏摆。",
+    "树冠不重叠的验证": "株距 12 m − 树冠宽 10.76 m = **留缝 1.24 m**（>0）。树冠外缘最大 x=48+5.38=53.38，在世界边界 55 以内。",
+    "仍然存在的重叠（非错误，已如实列出）": "① 地面覆盖面（路/草/人行道）与立在其上的东西（车/树/房/栅栏/灌木/杆）在平面投影上必然重叠；② **左侧车列停在左侧树冠下方**（车 y-4.3～-2.4，左树冠到 y-2.105）—— 参考图里车就停在树下；③ 路灯两端各进树冠包围盒 0.19 m（详见路灯行备注）。",
+    "横向断面（从 -Y 到 +Y）": "①左侧住宅带 y-27.6～-16.4（5 栋紧排，中心 -22）②左侧房前草坪 y-16.4～-4.5（抬高 15 cm）③车行道 y-4.5～4.5（9 m，路面标高，左侧停车带 y≈-3.35）④右侧路缘草皮带 y4.5～7.5（3 m，抬高 15 cm，行道树中心 y=6.0）⑤右侧人行道 y7.5～9.0（1.5 m，高 15 cm）⑥右侧房前草坪 y9.0～16.4（抬高 15 cm）⑦右侧住宅带 y16.4～27.6（5 栋紧排，中心 22）",
+    "标高口径": "车行道在【路面标高 z=0】；两侧地面比路面高 15 cm。车按 z=0；树、房、栅栏、灌木、路灯、电线杆立在抬高的地面上 → 实例化时整体 +15 cm。",
+    "房子（上一版，未动）": "高房子=house1（×16 → 14.25×11.13×8.02 m）、矮房子=house2（×16 → 16.41×9.87×5.37 m）。右排 高-矮-高-矮-高，左排 矮-高-矮-高-矮；缝隙不等值（右 1.4/0.9/1.9/1.2 m，左 1.6/1.1/0.8/2.0 m）。",
+    "⚠ 关于「错落」": "系统性的错落（±5° 随机旋转、尺寸抖动）按分工属【阶段三】，**还没实现**。本版的不规则全是我手填的坐标。",
+    "尺寸口径": "已有资产占地 = 阶段一实测包围盒 × scale；白膜占地 = 阶段一登记的预估尺寸。",
+    "本版与阶段一的偏差": "① 树 30→18（用户要求）；② grass 阶段一记『2 片』，本版是 3 行；③ 地图 200×60 → 110×60（上一版已回填 elements.json）。",
+    "待核实": "①右侧红房子前那块红色物体仍未指认，本版没摆 ②两侧抬高 15 cm 是否正确 ③地图 110 m 对不对 ④左侧看不到人行道，本版没给左侧排人行道"
+  },
+  "previous_elements": {
+    "path": "catalog/elements.json",
+    "confirmed_at": "2026-09-25T08:01:25.910970+00:00",
+    "scene": {
+      "size_m": "110×60 m（阶段一记录）",
+      "time_of_day": "afternoon"
+    }
+  },
+  "note": "一个物体一行、自带 pos（平面中心坐标，米）。**没有 count 字段** —— 摆几个就写几行，不许用一条记录代表多个不同位置的物体（那样谁也看不见它们）。已有资产先放（大小是阶段一实测的）、白膜后放（大小要等资产占完位再估）。本数据不依赖任何图片；要图就由 AI 拿这份数据自己画（代码不出图）。",
+  "confirmation": {
+    "required": true,
+    "confirmed": true,
+    "confirmed_by": "用户",
+    "confirmed_at": "2026-09-25T09:09:10.798716+00:00",
+    "note": "已确认。几何一变，指纹就对不上，本次确认自动作废。",
+    "plan_hash": "81852d77d2d086adfca70fe7ec295a921ece8cc3f2e44f63474be093a672aac1"
+  }
+}

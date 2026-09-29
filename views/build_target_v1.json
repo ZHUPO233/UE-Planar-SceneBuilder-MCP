@@ -1,0 +1,13 @@
+{
+  "stage": "阶段三 · 「搭哪张图」的答复台账（我们自己的文件，非 UE 存盘）",
+  "asked_at": "2026-09-26T10:15:40.752820+00:00",
+  "asked_level": "/Game/demo/Landscape/MCP",
+  "answer": {
+    "decision": "current",
+    "level": "/Game/demo/Landscape/MCP",
+    "user_quote": "就用当前这张 /Game/demo/Landscape/MCP（问：搭哪张图）；允许按 plan 覆盖重建（会删掉它们）（问：当前 UEMCP/ 下那 34 个 Actor 怎么处理）—— 用户在问题卡片上选定的两项",
+    "at": "2026-09-27T06:34:00.140026+00:00"
+  },
+  "at": "2026-09-27T10:21:28.253866+00:00",
+  "note": "`asked_*` = 问的时候 UE 开着哪张图；`answer.decision` 三个取值：current（就用当前这张）/ existing（用户指定的既有图，路径在 answer.level）/ new（开新图，用户自己建）。`execute_build` 拿它与当前关卡核对 —— 对不上不搭。"
+}

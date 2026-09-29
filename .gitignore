@@ -27,6 +27,12 @@ catalog/*
 # 手工备份目录：check_tools.py 已内置运行时快照 / 还原，这些是冗余的，不入库。
 catalog.bak-*/
 
+# 交付 / 打包 / 备份产物：都是"工作区当前状态"的副本，别塞进版本历史（各自 170~240 KB）。
+#   - backup-<UTC时间戳>/  = 初始化前手做的保命备份（catalog + views + archive 的副本）
+#   - *.zip                = 给别的 AI/环境用的整包（MCPdoubao.zip / MCPdsh.zip）
+backup-*/
+*.zip
+
 # views/ 分三类，别一刀切：
 #   - reference_*.jpg                 = **原始参考图（输入）**，要入库
 #   - plan_v1.json / plan_wire_v1.png = 当前链路产物，**它是闸门，必须能追溯**，要入库
@@ -41,6 +47,21 @@ views/overview_01.png
 views/ref_view_01.png
 views/reference_views.json
 views/thumbs/
+# ⚠ 2026-09-26 补：上面那几条是按**文件名**挑的，管不住后来新增的两类东西 ——
+#   `views/ref_<批次>/`（参考图的切片，实测 4 批共 ~36 MB）与 `diag_* / stage3_viewport*`
+#   （探索期截图，~3.4 MB）。按本文件第 36-39 行写的分类口径，这两类都是**产物**，不入库。
+views/ref_*/
+views/ref_*.jpg
+views/diag_*.png
+views/stage3_viewport*.png
 # 归档目录只入库 README（说明它是什么），图不入库 —— 那 30 MB 截图留在盘上。
 views/_archive_pre_geometry/*
 !views/_archive_pre_geometry/README.md
+
+# views/archive/（阶段二每一版 plan_v1.json 的留档；2026-09-24 用户口径：**草稿不入库**）
+#   - plan_v1_<时间戳>_confirmed.json = **用户点头过的那一版**，要入库
+#     （"我们现在搭的，是不是当初确认的那一版"—— 回答这个问题就靠它）
+#   - plan_v1_<时间戳>_draft.json     = 中间草稿，不入库（每改一次坐标就多一份，别塞进历史）
+#   - 被自动清走的旧图（*.svg / *.png …）= 产物，不入库
+views/archive/*
+!views/archive/*_confirmed.json

@@ -1,0 +1,2976 @@
+{
+  "stage": "阶段三 · 搭建指令表（离线翻译件）",
+  "generated_at": "2026-09-27T10:44:35.091857+00:00",
+  "unit": "cm",
+  "plan_hash": "ecd6f40890388b099b9bb7411ffedd125d925278cceca533c442ded68cd68271",
+  "world": {
+    "center": [
+      0.0,
+      0.0
+    ],
+    "size": [
+      120.0,
+      80.0
+    ],
+    "size_source": "阶段一 elements.json 的『地图大小』场景项",
+    "bounds": {
+      "min": [
+        -60.0,
+        -40.0
+      ],
+      "max": [
+        60.0,
+        40.0
+      ]
+    },
+    "coordinate_system": {
+      "handedness": "left",
+      "height_axis": "Z",
+      "forward_axis": "X",
+      "right_axis": "Y",
+      "right_normal_rule": "right_normal(d) = (-dy, dx)"
+    }
+  },
+  "z_rules": [
+    "路面标高 z = 0 m；两侧地面（人行道 / 草坪**顶面**）比路面高 15 cm —— 依据：plan 的人行道/连接路白膜自带 height_m=0.15。",
+    "白膜 cube：`add_cube` 的方块**以 Actor 原点为中心**（2026-09-26 实测）→ loc.z = 贴的那一头 ± 高度/2；贴哪一头见本文件 `WHITEBOX_VERTICAL`。",
+    "已有资产：loc.z = 15 cm（站在抬高的地面上）；原点不在底面的（见 `ASSET_PIVOT_LIFT_CM`）再加『高出的那段 × scale』。",
+    "⚠ 上面几条是**口径**（依据写在常量旁），不是实测值 —— 觉得不对就说，改表里的数即可。"
+  ],
+  "counts": {
+    "资产行": 39,
+    "白膜行": 51,
+    "合计": 90,
+    "分元素": {
+      "ground": 1,
+      "grass": 5,
+      "house": 5,
+      "road": 1,
+      "sidewalk": 2,
+      "path": 25,
+      "tree": 34,
+      "shrub": 17
+    },
+    "分分组": {
+      "UEMCP/ground": 1,
+      "UEMCP/grass": 5,
+      "UEMCP/houses": 5,
+      "UEMCP/road": 1,
+      "UEMCP/sidewalk": 2,
+      "UEMCP/paths": 25,
+      "UEMCP/trees": 34,
+      "UEMCP/shrubs": 17
+    }
+  },
+  "rows": [
+    {
+      "index": 1,
+      "label": "世界地基（整块底板，铺满世界）",
+      "uid": "ground|世界地基（整块底板，铺满世界）",
+      "name": "世界地基_整块底板_铺满世界",
+      "kind": "whitebox",
+      "element_key": "ground",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        0.0,
+        0.0,
+        5.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        12000.0,
+        8000.0,
+        20.0
+      ],
+      "folder": "UEMCP/ground",
+      "surface_material_hint": "",
+      "note": "第①层「世界地基」（用户 2026-09-27 指令加）：整块底板铺满世界边界。竖直口径：**顶面 = 两侧地面 15 cm**（GROUND_Z_M）→ 房子底面 15 cm 坐上去、草坪顶面与它齐平、车行道（顶面 0 / 厚 15，占 −15～0）正好嵌进去；方块中心 z = 15 − 10 = 5 cm。⚠ 厚度 20 cm 是**口径值**，不是实测；要改就改这一行的 height_m。",
+      "layer": "① 世界地基"
+    },
+    {
+      "index": 2,
+      "label": "草坪 我方路缘草带（人行道↔公路）",
+      "uid": "grass|草坪 我方路缘草带（人行道↔公路）",
+      "name": "草坪_我方路缘草带_人行道_公路",
+      "kind": "whitebox",
+      "element_key": "grass",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        0.0,
+        -625.0,
+        12.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        12000.0,
+        450.0,
+        5.0
+      ],
+      "folder": "UEMCP/grass",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Lawn",
+      "note": "y-8.5～-4。路左 5 棵树就站在这条带上。五条连接路会横穿它 ｜ 阶段三：官方 PrimitiveTools **没有 add_plane**，按口径压成极薄 cube（厚 5 cm，取自阶段一清单 grass 的 size_cm[2] = 5 cm）",
+      "layer": "② 地皮"
+    },
+    {
+      "index": 3,
+      "label": "草坪 住宅带（一整片，y -40～-10）",
+      "uid": "grass|草坪 住宅带（一整片，y -40～-10）",
+      "name": "草坪_住宅带_一整片_y_-40_-10",
+      "kind": "whitebox",
+      "element_key": "grass",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        0.0,
+        -2500.0,
+        12.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        12000.0,
+        3000.0,
+        5.0
+      ],
+      "folder": "UEMCP/grass",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Lawn",
+      "note": "房前 6 块草坪合成**一整片**；5 栋房子、15 行灌木带、20 行走道、5 条连接路都落在这片草地上 ｜ 阶段三：官方 PrimitiveTools **没有 add_plane**，按口径压成极薄 cube（厚 5 cm，取自阶段一清单 grass 的 size_cm[2] = 5 cm）",
+      "layer": "② 地皮"
+    },
+    {
+      "index": 4,
+      "label": "草坪 右 #1（对面路缘草带）",
+      "uid": "grass|草坪 右 #1（对面路缘草带）",
+      "name": "草坪_右_1_对面路缘草带",
+      "kind": "whitebox",
+      "element_key": "grass",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        0.0,
+        600.0,
+        12.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        12000.0,
+        400.0,
+        5.0
+      ],
+      "folder": "UEMCP/grass",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Lawn",
+      "note": "y4～8 ｜ 阶段三：官方 PrimitiveTools **没有 add_plane**，按口径压成极薄 cube（厚 5 cm，取自阶段一清单 grass 的 size_cm[2] = 5 cm）",
+      "layer": "② 地皮"
+    },
+    {
+      "index": 5,
+      "label": "草坪 右 #3（路右林带，树下草皮）",
+      "uid": "grass|草坪 右 #3（路右林带，树下草皮）",
+      "name": "草坪_右_3_路右林带_树下草皮",
+      "kind": "whitebox",
+      "element_key": "grass",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        0.0,
+        1425.0,
+        12.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        12000.0,
+        950.0,
+        5.0
+      ],
+      "folder": "UEMCP/grass",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Lawn",
+      "note": "第 22 轮新增。y9.5～19 —— 以前这条林带是裸地，29 棵密林（y=14）脚下没草皮 ｜ 阶段三：官方 PrimitiveTools **没有 add_plane**，按口径压成极薄 cube（厚 5 cm，取自阶段一清单 grass 的 size_cm[2] = 5 cm）",
+      "layer": "② 地皮"
+    },
+    {
+      "index": 6,
+      "label": "草坪 右 #2（林带外侧）",
+      "uid": "grass|草坪 右 #2（林带外侧）",
+      "name": "草坪_右_2_林带外侧",
+      "kind": "whitebox",
+      "element_key": "grass",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        0.0,
+        2950.0,
+        12.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        12000.0,
+        2100.0,
+        5.0
+      ],
+      "folder": "UEMCP/grass",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Lawn",
+      "note": "y19～40。图里看不到林带之外，按草地延伸到世界边界 ｜ 阶段三：官方 PrimitiveTools **没有 add_plane**，按口径压成极薄 cube（厚 5 cm，取自阶段一清单 grass 的 size_cm[2] = 5 cm）",
+      "layer": "② 地皮"
+    },
+    {
+      "index": 7,
+      "label": "住宅 #1（house1）",
+      "uid": "house|住宅 #1（house1）",
+      "name": "住宅_1_house1",
+      "kind": "asset",
+      "element_key": "house",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "primitive": "",
+      "loc_cm": [
+        -5000.0,
+        -3200.0,
+        15.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 90.0,
+        "roll": 0.0
+      },
+      "scale": [
+        16.0,
+        16.0,
+        16.0
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/houses",
+      "surface_material_hint": "",
+      "note": "成对相向：本栋门朝 +X（rot 90）。图里近景那栋白色板条墙大宅。三面墙根有灌木带（第 34～36 行）、外面绕一圈走道（第 14～17 行）",
+      "layer": "③ 建筑层"
+    },
+    {
+      "index": 8,
+      "label": "住宅 #2（house2）",
+      "uid": "house|住宅 #2（house2）",
+      "name": "住宅_2_house2",
+      "kind": "asset",
+      "element_key": "house",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "primitive": "",
+      "loc_cm": [
+        -2800.0,
+        -3200.0,
+        15.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 270.0,
+        "roll": 0.0
+      },
+      "scale": [
+        16.0,
+        16.0,
+        16.0
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/houses",
+      "surface_material_hint": "",
+      "note": "门朝 -X（rot 270）→ 与 #1 正门相对。灌木带第 37～39 行、走道第 18～21 行。⚠ 后缘 + 屋后走道到 y=-41.6，超世界边界 1.6 m",
+      "layer": "③ 建筑层"
+    },
+    {
+      "index": 9,
+      "label": "住宅 #3（house1）",
+      "uid": "house|住宅 #3（house1）",
+      "name": "住宅_3_house1",
+      "kind": "asset",
+      "element_key": "house",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "primitive": "",
+      "loc_cm": [
+        -600.0,
+        -3200.0,
+        15.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 90.0,
+        "roll": 0.0
+      },
+      "scale": [
+        16.0,
+        16.0,
+        16.0
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/houses",
+      "surface_material_hint": "",
+      "note": "门朝 +X（rot 90）→ 与 #4 正门相对；与 #2 背靠背。灌木带第 40～42 行、走道第 22～25 行",
+      "layer": "③ 建筑层"
+    },
+    {
+      "index": 10,
+      "label": "住宅 #4（house2）",
+      "uid": "house|住宅 #4（house2）",
+      "name": "住宅_4_house2",
+      "kind": "asset",
+      "element_key": "house",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "primitive": "",
+      "loc_cm": [
+        1600.0,
+        -3200.0,
+        15.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 270.0,
+        "roll": 0.0
+      },
+      "scale": [
+        16.0,
+        16.0,
+        16.0
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/houses",
+      "surface_material_hint": "",
+      "note": "门朝 -X（rot 270）。灌木带第 43～45 行、走道第 26～29 行。⚠ 后缘 + 屋后走道到 y=-41.6，超世界边界 1.6 m",
+      "layer": "③ 建筑层"
+    },
+    {
+      "index": 11,
+      "label": "住宅 #5（house1）",
+      "uid": "house|住宅 #5（house1）",
+      "name": "住宅_5_house1",
+      "kind": "asset",
+      "element_key": "house",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "primitive": "",
+      "loc_cm": [
+        3800.0,
+        -3200.0,
+        15.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 90.0,
+        "roll": 0.0
+      },
+      "scale": [
+        16.0,
+        16.0,
+        16.0
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/houses",
+      "surface_material_hint": "",
+      "note": "门朝 +X（rot 90）。末栋。灌木带第 46～48 行、走道第 30～33 行",
+      "layer": "③ 建筑层"
+    },
+    {
+      "index": 12,
+      "label": "沥青车行道",
+      "uid": "road|沥青车行道",
+      "name": "沥青车行道",
+      "kind": "whitebox",
+      "element_key": "road",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        0.0,
+        0.0,
+        -7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        12000.0,
+        800.0,
+        15.0
+      ],
+      "folder": "UEMCP/road",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Asphalt",
+      "note": "y-4～4（8 m）。路面标高。阶段六可拿 MI_Asphalt 当表面 ｜ 阶段三：官方 PrimitiveTools **没有 add_plane**，按口径压成极薄 cube（厚 15 cm，取自阶段一清单 road 的 size_cm[2] = 15 cm）",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 13,
+      "label": "人行道（我方一侧，沿公路）",
+      "uid": "sidewalk|人行道（我方一侧，沿公路）",
+      "name": "人行道_我方一侧_沿公路",
+      "kind": "whitebox",
+      "element_key": "sidewalk",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        0.0,
+        -925.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        12000.0,
+        150.0,
+        15.0
+      ],
+      "folder": "UEMCP/sidewalk",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "y-10～-8.5。cube 高 15 cm。阶段六可拿 MI_Concrete 当表面",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 14,
+      "label": "人行道（公路对面）",
+      "uid": "sidewalk|人行道（公路对面）",
+      "name": "人行道_公路对面",
+      "kind": "whitebox",
+      "element_key": "sidewalk",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        0.0,
+        875.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        12000.0,
+        150.0,
+        15.0
+      ],
+      "folder": "UEMCP/sidewalk",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "y8～9.5。同 element_key 多行",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 15,
+      "label": "连接路 #1（住宅 #1 ↔ #2 之间，直通公路）",
+      "uid": "path|连接路 #1（住宅 #1 ↔ #2 之间，直通公路）",
+      "name": "连接路_1_住宅_1_2_之间_直通公路",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -3954.0,
+        -2200.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        400.0,
+        3600.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "y 从 -40（屋后）到 -4（公路边），长 36 m。落在两栋房子之间",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 16,
+      "label": "连接路 #2（住宅 #2 ↔ #3 之间，直通公路）",
+      "uid": "path|连接路 #2（住宅 #2 ↔ #3 之间，直通公路）",
+      "name": "连接路_2_住宅_2_3_之间_直通公路",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -1646.0,
+        -2200.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        400.0,
+        3600.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "y-40～-4。同上（两栋背靠背）",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 17,
+      "label": "连接路 #3（住宅 #3 ↔ #4 之间，直通公路）",
+      "uid": "path|连接路 #3（住宅 #3 ↔ #4 之间，直通公路）",
+      "name": "连接路_3_住宅_3_4_之间_直通公路",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        446.0,
+        -2200.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        400.0,
+        3600.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "y-40～-4。落在两栋房子之间",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 18,
+      "label": "连接路 #4（住宅 #4 ↔ #5 之间，直通公路）",
+      "uid": "path|连接路 #4（住宅 #4 ↔ #5 之间，直通公路）",
+      "name": "连接路_4_住宅_4_5_之间_直通公路",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        2754.0,
+        -2200.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        400.0,
+        3600.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "y-40～-4。同上（两栋背靠背）",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 19,
+      "label": "连接路 #5（房子排东端，直通公路）",
+      "uid": "path|连接路 #5（房子排东端，直通公路）",
+      "name": "连接路_5_房子排东端_直通公路",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        5300.0,
+        -2200.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        400.0,
+        3600.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "y-40～-4。不在两栋房子之间（东端已无房）",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 20,
+      "label": "走道·住宅 #1 朝公路面（灌木带外侧）",
+      "uid": "path|走道·住宅 #1 朝公路面（灌木带外侧）",
+      "name": "走道_住宅_1_朝公路面_灌木带外侧",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -5000.0,
+        -2317.5,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1593.0,
+        140.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增。高墙 1.0 m（灌木带外缘）→ 2.4 m（走道外缘），长 = 该栋面宽 + 4.8 m",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 21,
+      "label": "走道·住宅 #1 端头 -X",
+      "uid": "path|走道·住宅 #1 端头 -X",
+      "name": "走道_住宅_1_端头_-X",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -5726.5,
+        -3150.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        140.0,
+        1525.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增。西端山墙外侧",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 22,
+      "label": "走道·住宅 #1 端头 +X",
+      "uid": "path|走道·住宅 #1 端头 +X",
+      "name": "走道_住宅_1_端头_X",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -4273.5,
+        -3150.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        140.0,
+        1525.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增。东端山墙外侧",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 23,
+      "label": "走道·住宅 #1 屋后",
+      "uid": "path|走道·住宅 #1 屋后",
+      "name": "走道_住宅_1_屋后",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -5000.0,
+        -3982.5,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1593.0,
+        140.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增。屋后没有灌木，走道直接贴墙",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 24,
+      "label": "走道·住宅 #2 朝公路面（灌木带外侧）",
+      "uid": "path|走道·住宅 #2 朝公路面（灌木带外侧）",
+      "name": "走道_住宅_2_朝公路面_灌木带外侧",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -2800.0,
+        -2209.5,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1467.0,
+        140.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 25,
+      "label": "走道·住宅 #2 端头 -X",
+      "uid": "path|走道·住宅 #2 端头 -X",
+      "name": "走道_住宅_2_端头_-X",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -3463.5,
+        -3150.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        140.0,
+        1741.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增。西端山墙外侧",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 26,
+      "label": "走道·住宅 #2 端头 +X",
+      "uid": "path|走道·住宅 #2 端头 +X",
+      "name": "走道_住宅_2_端头_X",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -2136.5,
+        -3150.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        140.0,
+        1741.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增。东端山墙外侧",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 27,
+      "label": "走道·住宅 #2 屋后",
+      "uid": "path|走道·住宅 #2 屋后",
+      "name": "走道_住宅_2_屋后",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -2800.0,
+        -4090.5,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1467.0,
+        140.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增。⚠ 外缘到 y=-41.605，超世界边界 1.605 m",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 28,
+      "label": "走道·住宅 #3 朝公路面（灌木带外侧）",
+      "uid": "path|走道·住宅 #3 朝公路面（灌木带外侧）",
+      "name": "走道_住宅_3_朝公路面_灌木带外侧",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -600.0,
+        -2317.5,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1593.0,
+        140.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 29,
+      "label": "走道·住宅 #3 端头 -X",
+      "uid": "path|走道·住宅 #3 端头 -X",
+      "name": "走道_住宅_3_端头_-X",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -1326.5,
+        -3150.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        140.0,
+        1525.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 30,
+      "label": "走道·住宅 #3 端头 +X",
+      "uid": "path|走道·住宅 #3 端头 +X",
+      "name": "走道_住宅_3_端头_X",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        126.5,
+        -3150.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        140.0,
+        1525.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 31,
+      "label": "走道·住宅 #3 屋后",
+      "uid": "path|走道·住宅 #3 屋后",
+      "name": "走道_住宅_3_屋后",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -600.0,
+        -3982.5,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1593.0,
+        140.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 32,
+      "label": "走道·住宅 #4 朝公路面（灌木带外侧）",
+      "uid": "path|走道·住宅 #4 朝公路面（灌木带外侧）",
+      "name": "走道_住宅_4_朝公路面_灌木带外侧",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        1600.0,
+        -2209.5,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1467.0,
+        140.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 33,
+      "label": "走道·住宅 #4 端头 -X",
+      "uid": "path|走道·住宅 #4 端头 -X",
+      "name": "走道_住宅_4_端头_-X",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        936.5,
+        -3150.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        140.0,
+        1741.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 34,
+      "label": "走道·住宅 #4 端头 +X",
+      "uid": "path|走道·住宅 #4 端头 +X",
+      "name": "走道_住宅_4_端头_X",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        2263.5,
+        -3150.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        140.0,
+        1741.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 35,
+      "label": "走道·住宅 #4 屋后",
+      "uid": "path|走道·住宅 #4 屋后",
+      "name": "走道_住宅_4_屋后",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        1600.0,
+        -4090.5,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1467.0,
+        140.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增。⚠ 外缘到 y=-41.605，超世界边界 1.605 m",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 36,
+      "label": "走道·住宅 #5 朝公路面（灌木带外侧）",
+      "uid": "path|走道·住宅 #5 朝公路面（灌木带外侧）",
+      "name": "走道_住宅_5_朝公路面_灌木带外侧",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        3800.0,
+        -2317.5,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1593.0,
+        140.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 37,
+      "label": "走道·住宅 #5 端头 -X",
+      "uid": "path|走道·住宅 #5 端头 -X",
+      "name": "走道_住宅_5_端头_-X",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        3073.5,
+        -3150.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        140.0,
+        1525.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 38,
+      "label": "走道·住宅 #5 端头 +X",
+      "uid": "path|走道·住宅 #5 端头 +X",
+      "name": "走道_住宅_5_端头_X",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        4526.5,
+        -3150.0,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        140.0,
+        1525.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 39,
+      "label": "走道·住宅 #5 屋后",
+      "uid": "path|走道·住宅 #5 屋后",
+      "name": "走道_住宅_5_屋后",
+      "kind": "whitebox",
+      "element_key": "path",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        3800.0,
+        -3982.5,
+        7.5
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1593.0,
+        140.0,
+        15.0
+      ],
+      "folder": "UEMCP/paths",
+      "surface_material_hint": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+      "note": "第 21 轮新增",
+      "layer": "④ 设施层"
+    },
+    {
+      "index": 40,
+      "label": "行道树 路左 #1",
+      "uid": "tree|行道树 路左 #1",
+      "name": "行道树_路左_1",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -4800.0,
+        -625.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "树高 5 m（缩放 0.31；实测 16.05 m × 0.31 = 4.98 m）。路左共 5 棵、间距 24 m ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 41,
+      "label": "行道树 路左 #2",
+      "uid": "tree|行道树 路左 #2",
+      "name": "行道树_路左_2",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -2400.0,
+        -625.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 42,
+      "label": "行道树 路左 #3",
+      "uid": "tree|行道树 路左 #3",
+      "name": "行道树_路左_3",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        0.0,
+        -625.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上；图里那棵幼树位置（脚下有灌木丛，见第 49 行） ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 43,
+      "label": "行道树 路左 #4",
+      "uid": "tree|行道树 路左 #4",
+      "name": "行道树_路左_4",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        2400.0,
+        -625.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 44,
+      "label": "行道树 路左 #5",
+      "uid": "tree|行道树 路左 #5",
+      "name": "行道树_路左_5",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        4800.0,
+        -625.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 45,
+      "label": "路右密林 #01",
+      "uid": "tree|路右密林 #01",
+      "name": "路右密林_01",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -5600.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "株距 4 m、共 29 棵；树高 5 m。⚠ 脚下草皮本版补上（见第 47 行） ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 46,
+      "label": "路右密林 #02",
+      "uid": "tree|路右密林 #02",
+      "name": "路右密林_02",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -5200.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 47,
+      "label": "路右密林 #03",
+      "uid": "tree|路右密林 #03",
+      "name": "路右密林_03",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -4800.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 48,
+      "label": "路右密林 #04",
+      "uid": "tree|路右密林 #04",
+      "name": "路右密林_04",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -4400.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 49,
+      "label": "路右密林 #05",
+      "uid": "tree|路右密林 #05",
+      "name": "路右密林_05",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -4000.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 50,
+      "label": "路右密林 #06",
+      "uid": "tree|路右密林 #06",
+      "name": "路右密林_06",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -3600.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 51,
+      "label": "路右密林 #07",
+      "uid": "tree|路右密林 #07",
+      "name": "路右密林_07",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -3200.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 52,
+      "label": "路右密林 #08",
+      "uid": "tree|路右密林 #08",
+      "name": "路右密林_08",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -2800.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 53,
+      "label": "路右密林 #09",
+      "uid": "tree|路右密林 #09",
+      "name": "路右密林_09",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -2400.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 54,
+      "label": "路右密林 #10",
+      "uid": "tree|路右密林 #10",
+      "name": "路右密林_10",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -2000.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 55,
+      "label": "路右密林 #11",
+      "uid": "tree|路右密林 #11",
+      "name": "路右密林_11",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -1600.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 56,
+      "label": "路右密林 #12",
+      "uid": "tree|路右密林 #12",
+      "name": "路右密林_12",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -1200.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 57,
+      "label": "路右密林 #13",
+      "uid": "tree|路右密林 #13",
+      "name": "路右密林_13",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -800.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 58,
+      "label": "路右密林 #14",
+      "uid": "tree|路右密林 #14",
+      "name": "路右密林_14",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        -400.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 59,
+      "label": "路右密林 #15",
+      "uid": "tree|路右密林 #15",
+      "name": "路右密林_15",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        0.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 60,
+      "label": "路右密林 #16",
+      "uid": "tree|路右密林 #16",
+      "name": "路右密林_16",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        400.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 61,
+      "label": "路右密林 #17",
+      "uid": "tree|路右密林 #17",
+      "name": "路右密林_17",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        800.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 62,
+      "label": "路右密林 #18",
+      "uid": "tree|路右密林 #18",
+      "name": "路右密林_18",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        1200.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 63,
+      "label": "路右密林 #19",
+      "uid": "tree|路右密林 #19",
+      "name": "路右密林_19",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        1600.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 64,
+      "label": "路右密林 #20",
+      "uid": "tree|路右密林 #20",
+      "name": "路右密林_20",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        2000.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 65,
+      "label": "路右密林 #21",
+      "uid": "tree|路右密林 #21",
+      "name": "路右密林_21",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        2400.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 66,
+      "label": "路右密林 #22",
+      "uid": "tree|路右密林 #22",
+      "name": "路右密林_22",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        2800.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 67,
+      "label": "路右密林 #23",
+      "uid": "tree|路右密林 #23",
+      "name": "路右密林_23",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        3200.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 68,
+      "label": "路右密林 #24",
+      "uid": "tree|路右密林 #24",
+      "name": "路右密林_24",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        3600.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 69,
+      "label": "路右密林 #25",
+      "uid": "tree|路右密林 #25",
+      "name": "路右密林_25",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        4000.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 70,
+      "label": "路右密林 #26",
+      "uid": "tree|路右密林 #26",
+      "name": "路右密林_26",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        4400.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 71,
+      "label": "路右密林 #27",
+      "uid": "tree|路右密林 #27",
+      "name": "路右密林_27",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        4800.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 72,
+      "label": "路右密林 #28",
+      "uid": "tree|路右密林 #28",
+      "name": "路右密林_28",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        5200.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "同上 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 73,
+      "label": "路右密林 #29",
+      "uid": "tree|路右密林 #29",
+      "name": "路右密林_29",
+      "kind": "asset",
+      "element_key": "tree",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "primitive": "",
+      "loc_cm": [
+        5600.0,
+        1400.0,
+        24.75
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.31,
+        0.31,
+        0.31
+      ],
+      "size_cm": null,
+      "folder": "UEMCP/trees",
+      "surface_material_hint": "",
+      "note": "末棵；树冠外缘 x=56+2.23=58.23 ≤ 60 ｜ 阶段三补 Z：该资产原点比底面高 31.44 cm（scale 1 实测）×0.31 = 9.75 cm，挪到地面 15 cm 之上 → z = 24.75 cm",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 74,
+      "label": "灌木·住宅 #1 朝公路面带",
+      "uid": "shrub|灌木·住宅 #1 朝公路面带",
+      "name": "灌木_住宅_1_朝公路面带",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -5000.0,
+        -2437.5,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1113.0,
+        100.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "**贴着墙**（离墙 0），深 1 m、长 = 该栋世界 X 占地 11.13 m",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 75,
+      "label": "灌木·住宅 #1 端头 -X",
+      "uid": "shrub|灌木·住宅 #1 端头 -X",
+      "name": "灌木_住宅_1_端头_-X",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -5606.5,
+        -3150.0,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        100.0,
+        1525.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着西端墙面，与朝公路面带齐平",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 76,
+      "label": "灌木·住宅 #1 端头 +X",
+      "uid": "shrub|灌木·住宅 #1 端头 +X",
+      "name": "灌木_住宅_1_端头_X",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -4393.5,
+        -3150.0,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        100.0,
+        1525.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着东端墙面",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 77,
+      "label": "灌木·住宅 #2 朝公路面带",
+      "uid": "shrub|灌木·住宅 #2 朝公路面带",
+      "name": "灌木_住宅_2_朝公路面带",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -2800.0,
+        -2329.5,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        987.0,
+        100.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着朝公路那面墙，长 = 该栋世界 X 占地 9.87 m",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 78,
+      "label": "灌木·住宅 #2 端头 -X",
+      "uid": "shrub|灌木·住宅 #2 端头 -X",
+      "name": "灌木_住宅_2_端头_-X",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -3343.5,
+        -3150.0,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        100.0,
+        1741.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着西端墙面",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 79,
+      "label": "灌木·住宅 #2 端头 +X",
+      "uid": "shrub|灌木·住宅 #2 端头 +X",
+      "name": "灌木_住宅_2_端头_X",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -2256.5,
+        -3150.0,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        100.0,
+        1741.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着东端墙面",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 80,
+      "label": "灌木·住宅 #3 朝公路面带",
+      "uid": "shrub|灌木·住宅 #3 朝公路面带",
+      "name": "灌木_住宅_3_朝公路面带",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -600.0,
+        -2437.5,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1113.0,
+        100.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着朝公路那面墙",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 81,
+      "label": "灌木·住宅 #3 端头 -X",
+      "uid": "shrub|灌木·住宅 #3 端头 -X",
+      "name": "灌木_住宅_3_端头_-X",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        -1206.5,
+        -3150.0,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        100.0,
+        1525.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着西端墙面",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 82,
+      "label": "灌木·住宅 #3 端头 +X",
+      "uid": "shrub|灌木·住宅 #3 端头 +X",
+      "name": "灌木_住宅_3_端头_X",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        6.5,
+        -3150.0,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        100.0,
+        1525.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着东端墙面",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 83,
+      "label": "灌木·住宅 #4 朝公路面带",
+      "uid": "shrub|灌木·住宅 #4 朝公路面带",
+      "name": "灌木_住宅_4_朝公路面带",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        1600.0,
+        -2329.5,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        987.0,
+        100.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着朝公路那面墙",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 84,
+      "label": "灌木·住宅 #4 端头 -X",
+      "uid": "shrub|灌木·住宅 #4 端头 -X",
+      "name": "灌木_住宅_4_端头_-X",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        1056.5,
+        -3150.0,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        100.0,
+        1741.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着西端墙面",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 85,
+      "label": "灌木·住宅 #4 端头 +X",
+      "uid": "shrub|灌木·住宅 #4 端头 +X",
+      "name": "灌木_住宅_4_端头_X",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        2143.5,
+        -3150.0,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        100.0,
+        1741.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着东端墙面",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 86,
+      "label": "灌木·住宅 #5 朝公路面带",
+      "uid": "shrub|灌木·住宅 #5 朝公路面带",
+      "name": "灌木_住宅_5_朝公路面带",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        3800.0,
+        -2437.5,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        1113.0,
+        100.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着朝公路那面墙",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 87,
+      "label": "灌木·住宅 #5 端头 -X",
+      "uid": "shrub|灌木·住宅 #5 端头 -X",
+      "name": "灌木_住宅_5_端头_-X",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        3193.5,
+        -3150.0,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        100.0,
+        1525.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着西端墙面",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 88,
+      "label": "灌木·住宅 #5 端头 +X",
+      "uid": "shrub|灌木·住宅 #5 端头 +X",
+      "name": "灌木_住宅_5_端头_X",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        4406.5,
+        -3150.0,
+        55.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        100.0,
+        1525.0,
+        80.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "贴着东端墙面",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 89,
+      "label": "灌木幼树根部植被丛",
+      "uid": "shrub|灌木幼树根部植被丛",
+      "name": "灌木幼树根部植被丛",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        0.0,
+        -625.0,
+        45.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        300.0,
+        300.0,
+        60.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "图里那棵幼树土丘周围的低矮植被。与路左 #3 那棵树同位置（用户 2026-09-26 确认图上确实有）",
+      "layer": "⑤ 植被层"
+    },
+    {
+      "index": 90,
+      "label": "灌木路对面丛",
+      "uid": "shrub|灌木路对面丛",
+      "name": "灌木路对面丛",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "asset_path": "",
+      "primitive": "cube",
+      "loc_cm": [
+        2000.0,
+        600.0,
+        75.0
+      ],
+      "rot": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size_cm": [
+        600.0,
+        200.0,
+        120.0
+      ],
+      "folder": "UEMCP/shrubs",
+      "surface_material_hint": "",
+      "note": "路对面路缘草带里的一丛",
+      "layer": "⑤ 植被层"
+    }
+  ],
+  "warnings": [
+    "搭建顺序（五层，由下往上）：① 世界地基 1 个；② 地皮 5 个；③ 建筑层 5 个；④ 设施层 28 个；⑤ 植被层 51 个",
+    "⚠ **阶段二检查 · 越界**：15 处超出世界边界（边界 [-60.0, -40.0] ～ [60.0, 40.0]，米）。\n　判据：判据分三级（理由见 `BOUNDS_TIERS`）：**硬·实体**（house / tree / shrub，以及**表里没有的一切 element_key**）四角必须都在界内；**软·铺装**（road / sidewalk / path / grass）允许贴边、不许超出；**豁免·边界元素**（ground）它自己就是世界边界，压线合法（超出仍报）。判的是物体**中心**与**占地四角**（`footprint_m` 当世界轴对齐尺寸用，**不叠 `rot_deg`**）。\n　【硬 · 实体（四角必须都在界内） 6 处】「住宅 #2（house2）」占地四角出界（中心仍在界内），越界 0.20 m（占地 9.87×16.41 m）；「住宅 #4（house2）」占地四角出界（中心仍在界内），越界 0.20 m（占地 9.87×16.41 m）；「灌木·住宅 #2 端头 -X」占地四角出界（中心仍在界内），越界 0.20 m（占地 1×17.41 m）；「灌木·住宅 #2 端头 +X」占地四角出界（中心仍在界内），越界 0.20 m（占地 1×17.41 m）；「灌木·住宅 #4 端头 -X」占地四角出界（中心仍在界内），越界 0.20 m（占地 1×17.41 m）；「灌木·住宅 #4 端头 +X」占地四角出界（中心仍在界内），越界 0.20 m（占地 1×17.41 m）\n　【软 · 铺装（允许贴边、不许超出） 9 处】「走道·住宅 #2 屋后」中心 (-28, -40.905) 已在界外，占地四角也出界，越界 1.61 m（占地 14.67×1.4 m）；「走道·住宅 #4 屋后」中心 (16, -40.905) 已在界外，占地四角也出界，越界 1.61 m（占地 14.67×1.4 m）；「走道·住宅 #1 屋后」占地四角出界（中心仍在界内），越界 0.53 m（占地 15.93×1.4 m）；「走道·住宅 #3 屋后」占地四角出界（中心仍在界内），越界 0.53 m（占地 15.93×1.4 m）；「走道·住宅 #5 屋后」占地四角出界（中心仍在界内），越界 0.53 m（占地 15.93×1.4 m）；「走道·住宅 #2 端头 -X」占地四角出界（中心仍在界内），越界 0.20 m（占地 1.4×17.41 m）（还有 3 处没列全）\n　⚠ **只报红、不拦** —— 改不改由用户定（要么挪物体、要么把世界放大再重画图确认）。"
+  ],
+  "note": "一物一行，**按五层搭建顺序**排（① 世界地基 → ② 地皮 → ③ 建筑层 → ④ 设施层 → ⑤ 植被层；同层内保持 plan 原序，见每行的 `layer`）。loc_cm 由 plan 的 pos（米）×100 得来，坐标本身未做任何改动；补的只有 Z 与白膜图元 —— 依据见 z_rules。"
+}

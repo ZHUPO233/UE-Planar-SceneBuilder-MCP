@@ -14,22 +14,40 @@
 # 【怎么跑】
 #   & F:\MCP_Server\.venv\Scripts\python.exe tests\preflight.py
 #   退出码 0 = 全绿 → 可以重启；非 0 = **别重启**，先修。
+#
+# ⚠ **必须用上面那条 venv 的解释器，别用 PATH 上的 `python`。**
+#   2026-09-26 实测踩到：PATH 上第一个 `python` 是**微软商店的"应用执行别名"空壳**
+#   （`C:\Users\<用户>\AppData\Local\Microsoft\WindowsApps\python.exe`）——
+#   它**静默退出、一个字都不打印**。现场表现：`python tests/preflight.py` 敲下去
+#   立刻回到提示符，什么都没有，看着像"跑完了"。
+#   → **空输出 ≠ 通过。** 判据只有两个：**退出码**（`echo "exit=$LASTEXITCODE"`）
+#     加那几行 `[通过]` / `[失败]`。
+#   → 怀疑解释器不对时，先跑 `python -c "print('hello')"`：
+#     连 hello 都不打印，就说明那个 `python` 根本没在执行你的文件。
 # =============================================================================
 
 import asyncio
 import runpy
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN_PY = ROOT / "src" / "mcp_server" / "main.py"
 
 # 当前应有的工具（改动工具面时**必须同步这里和 tests/check_tools.py**）
+# ⚠ 2026-09-25：新增 `request_plan_change`（阶段二验收：记「用户要改什么」）→ 9 → 10 个。
+# ⚠ 2026-09-26：新增 `generate_build_orders` + `execute_build`
+#   （阶段三第 2 步：放置表 → 搭建指令表 → 批量落关卡）→ 10 → **12** 个；
+#   同一批还加了 `check_build_target`（阶段三第 1 步的只读检查）→ 最终 **13** 个。
+# ⚠ 2026-09-27：曾短暂加过 `generate_layout`（阶段四 · 布局序列化），**当天按用户指令整块回退** ——
+#   理由：阶段一资产表 + 阶段二位置表已是全局权威，那份只是派生件，先不做。所以仍是 **13** 个。
+#   ⚠ `tests/check_tools.py` 里那份名单必须与这里逐字一致（本次已同步）。
 EXPECTED_TOOLS = [
-    "confirm_assets", "confirm_elements", "confirm_plan",
-    "generate_plan", "get_asset_list", "get_plan",
+    "check_build_target", "confirm_assets", "confirm_elements", "confirm_plan",
+    "execute_build", "generate_build_orders", "generate_plan",
+    "get_asset_list", "get_plan",
     "official_status", "plan_assets", "rename_assets",
+    "request_plan_change",
 ]
 
 FAILED: list[str] = []
@@ -65,10 +83,9 @@ def main() -> int:
 
     # --- ② 把阶段二的**惰性导入**也走一遍（上次就是这条路径没被走到） ---
     try:
-        planning, plan_render = mod["_planning_modules"]()
+        planning = mod["_planning_modules"]()
         check("② 规划层惰性导入成功", True)
         print(f"        plan = {planning.__name__}")
-        print(f"        render = {plan_render.__name__}")
     except BaseException as exc:
         check("② 规划层惰性导入成功", False, f"{type(exc).__name__}: {exc}")
         print("\n**别重启**：阶段二工具会报错（阶段一还能用，但不该带病上）。")
@@ -82,28 +99,78 @@ def main() -> int:
     check("③ 注册的工具与预期一致", names == EXPECTED_TOOLS, f"实际={names}")
     print(f"        {names}")
 
-    # --- ④ 阶段二那条链：几何 + 出图（内存里算，图渲到临时文件后删掉，不动 views/） ---
+    # --- ④ 阶段二那条链：装配 + 形状校验（全在内存里算，不碰 views/）---
+    # ⚠ 2026-09-25 **按用户指令大改**：阶段二原来有 11 项具名自检（含"白膜不压已有资产"
+    #   "占地 = 阶段一实测包围盒 × scale"等），连同 `build_checks()` 已整段删除
+    #   （用户：「阶段二不要这个自检阶段了，后面阶段再做自检」；碰撞检测与布局修正
+    #    **已整段删除**：2026-09-27 用户指令，不再单列阶段）。
+    #   所以本段**不再验"自检该报红的会不会报红"**（那些项已经不存在了），改成验**还活着的契约**：
+    #     ① 装配链跑得通，且数据里**不再有 `checks`**（防止自检被悄悄加回来而没人发现）；
+    #     ② 两条**拒收**仍然有效 —— 它们是**形状校验**、不属自检，删自检时不许连它们一起删：
+    #        · 白膜行带了 `asset_path`（自相矛盾）
+    #        · 白膜的 `size_source` 没写明是「预估」（预估值伪装成实测值）
+    #        · 资产行没给 `asset_path`
+    #     ③ 空表（初始化态）依然**允许**，不许抛错。
     try:
-        params = planning.load_params()
-        plan = planning.build_plan(params)
-        bad = [c.get("name", "?") for c in plan.get("checks", []) if not c.get("ok")]
-        check("④ 阶段二几何自检全过", not bad, f"没过的={bad}")
-        with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / "preflight.png"
-            plan_render.render(plan, params, out)
-            check("④ 阶段二出图能跑通", out.exists() and out.stat().st_size > 0,
-                  "PNG 没生成")
+        world = {
+            "center": [0.0, 0.0], "size": [100.0, 40.0], "size_source": "预检",
+            "bounds": {"min": [-50.0, -20.0], "max": [50.0, 20.0]},
+            "coordinate_system": {"handedness": "left"},
+        }
+        ok_assets = [{"element_key": "building_fake", "label": "假楼",
+                      "asset_path": "/Game/Fake", "pos": [0.0, 0.0],
+                      "footprint_m": [10.0, 8.0], "rot_deg": 0.0, "scale": 1.0, "note": ""}]
+        ok_boxes = [{"element_key": "road_fake", "label": "假路", "shape": "plane",
+                     "pos": [0.0, -15.0], "footprint_m": [90.0, 6.0], "rot_deg": 0.0,
+                     "size_source": "预估（预检）", "note": ""}]
+        plan = planning.build_plan(ok_assets, ok_boxes, world)
+        check("④ 阶段二装配链跑通，且数据里不再有 `checks`（阶段二已不自检）",
+              ("checks" not in plan)
+              and len(plan.get("assets", [])) == 1 and len(plan.get("whiteboxes", [])) == 1,
+              f"plan 顶层键={sorted(plan)}")
 
-        # --- ⑤ 闸门指纹自洽：刚算出来的图，不该被判成"被手改过" ---
+        # ④b 拒收：白膜行带了 asset_path（自相矛盾 —— 白膜就是"没有资产"）
+        try:
+            planning.normalize_whitebox(dict(ok_boxes[0], asset_path="/Game/Fake"))
+            ok_b, why_b = False, "没拒"
+        except ValueError as exc:
+            ok_b, why_b = True, str(exc)[:70]
+        check("④b 白膜行带 asset_path 时被拒收（形状校验还活着）", ok_b, why_b)
+
+        # ④c 拒收：白膜尺寸来源没写明"预估"（预估值不许伪装成实测值）
+        try:
+            planning.normalize_whitebox(dict(ok_boxes[0], size_source="实测"))
+            ok_c, why_c = False, "没拒"
+        except ValueError as exc:
+            ok_c, why_c = True, str(exc)[:70]
+        check("④c 白膜尺寸来源不是「预估」时被拒收", ok_c, why_c)
+
+        # ④d 拒收：资产行没给 asset_path
+        try:
+            planning.normalize_asset(dict(ok_assets[0], asset_path=""))
+            ok_d, why_d = False, "没拒"
+        except ValueError as exc:
+            ok_d, why_d = True, str(exc)[:70]
+        check("④d 资产行没给 asset_path 时被拒收", ok_d, why_d)
+
+        # ④e 初始化态：两张表都空是**允许**的（"先立结构、内容是空的"），不许抛错
+        try:
+            plan_empty = planning.build_plan([], [], world)
+            ok_e, why_e = (not plan_empty.get("assets")
+                           and not plan_empty.get("whiteboxes")), ""
+        except BaseException as exc:                  # noqa: BLE001
+            ok_e, why_e = False, f"{type(exc).__name__}: {exc}"
+        check("④e 两张表都空（初始化态）依然允许、不抛错", ok_e, why_e)
+
+        # --- ⑤ 闸门指纹自洽：刚算出来的数据，不该被判成"被手改过" ---
         # ⚠ 这是 2026-09-23 经 MCP 实测抓到的 bug 的回归检查：
         #   内存对象带 -0.0、落盘的是净化后的 0.0，两边哈希就会不等，
-        #   于是对着一张刚出的图喊"文件被改过"。指纹计算必须内部净化。
-        gate = planning.gate_check(params, plan)
-        check("⑤ 闸门指纹自洽（刚出的图不该被判成'被改过'）",
-              bool(gate["plan_hash_ok"]) and bool(gate["params_hash_ok"]),
-              f"gate={gate}")
+        #   于是对着刚算出的数据喊"文件被改过"。指纹计算必须内部净化。
+        gate = planning.gate_check(plan)
+        check("⑤ 闸门指纹自洽（刚算出的数据不该被判成'被改过'）",
+              bool(gate["plan_hash_ok"]), f"gate={gate}")
     except BaseException as exc:
-        check("④ / ⑤ 阶段二几何、出图、闸门指纹能跑通", False,
+        check("④ / ⑤ 阶段二装配、形状校验与闸门指纹能跑通", False,
               f"{type(exc).__name__}: {exc}")
 
     print()

@@ -1,0 +1,535 @@
+{
+  "stage": "阶段二 · 平面放置规划",
+  "status": "draft",
+  "unit": "m",
+  "world": {
+    "center": [
+      0.0,
+      0.0
+    ],
+    "size": [
+      120.0,
+      40.0
+    ],
+    "size_source": "调用方覆盖（不是阶段一记录）",
+    "bounds": {
+      "min": [
+        -60.0,
+        -20.0
+      ],
+      "max": [
+        60.0,
+        20.0
+      ]
+    },
+    "coordinate_system": {
+      "handedness": "left",
+      "height_axis": "Z",
+      "forward_axis": "X",
+      "right_axis": "Y",
+      "right_normal_rule": "right_normal(d) = (-dy, dx)"
+    }
+  },
+  "assets": [
+    {
+      "element_key": "house",
+      "label": "主楼 house1（近景，白色板条 + 陡坡三角山墙）",
+      "pos": [
+        -52.0,
+        -15.0
+      ],
+      "footprint_m": [
+        10.69,
+        8.35
+      ],
+      "rot_deg": 0.0,
+      "note": "近景主楼，贴住宅带后沿排布；正面朝 +Y（马路侧）。面宽 10.69 m ≈ 参考图主楼（含屋顶/石材基座/窗，均并入本行）",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 12.0
+    },
+    {
+      "element_key": "house",
+      "label": "中景住宅 #1（house2）",
+      "pos": [
+        -34.0,
+        -15.0
+      ],
+      "footprint_m": [
+        11.28,
+        6.78
+      ],
+      "rot_deg": 0.0,
+      "note": "中景两栋之一（深灰四坡顶那栋）。单层平房，高约 3.69 m",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 11.0
+    },
+    {
+      "element_key": "house",
+      "label": "中景住宅 #2（house2，带白色车库门）",
+      "pos": [
+        -19.0,
+        -15.0
+      ],
+      "footprint_m": [
+        11.28,
+        6.78
+      ],
+      "rot_deg": 0.0,
+      "note": "中景两栋之二（用户确认与 #1 不是同一栋）。车库门并入本行",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 11.0
+    },
+    {
+      "element_key": "house",
+      "label": "远景住宅 #1（house2，低矮）",
+      "pos": [
+        12.0,
+        -15.0
+      ],
+      "footprint_m": [
+        8.21,
+        4.93
+      ],
+      "rot_deg": 0.0,
+      "note": "远景住宅群 3 栋之一，缩小做远处体量（高约 2.68 m）",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 8.0
+    },
+    {
+      "element_key": "house",
+      "label": "远景住宅 #2（house2，低矮）",
+      "pos": [
+        28.0,
+        -15.0
+      ],
+      "footprint_m": [
+        8.21,
+        4.93
+      ],
+      "rot_deg": 0.0,
+      "note": "远景住宅群 3 栋之二",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 8.0
+    },
+    {
+      "element_key": "house",
+      "label": "远景住宅 #3（house2，低矮）",
+      "pos": [
+        44.0,
+        -15.0
+      ],
+      "footprint_m": [
+        8.21,
+        4.93
+      ],
+      "rot_deg": 0.0,
+      "note": "远景住宅群 3 栋之三，最靠近街道尽头消失点那头",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 8.0
+    },
+    {
+      "element_key": "tree",
+      "label": "中景小树（隔离带内，×1）",
+      "pos": [
+        -24.0,
+        1.75
+      ],
+      "footprint_m": [
+        3.87,
+        3.17
+      ],
+      "rot_deg": 0.0,
+      "note": "参考图里那棵独立小树，站在人行道与马路之间的隔离带里（高约 4.33 m）。隔离带草地已按它的 X 区间切成两段让位（自检项『白膜不压已有资产』要求）",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.27
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树/树线 #1",
+      "pos": [
+        -54.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.31,
+        3.52
+      ],
+      "rot_deg": 0.0,
+      "note": "马路远侧树线，每 12 m 一棵、共 10 棵（用户指定数量 10）。高约 4.82 m",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.3
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树/树线 #2",
+      "pos": [
+        -42.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.31,
+        3.52
+      ],
+      "rot_deg": 0.0,
+      "note": "马路远侧树线 #2",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.3
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树/树线 #3",
+      "pos": [
+        -30.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.31,
+        3.52
+      ],
+      "rot_deg": 0.0,
+      "note": "马路远侧树线 #3",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.3
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树/树线 #4",
+      "pos": [
+        -18.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.31,
+        3.52
+      ],
+      "rot_deg": 0.0,
+      "note": "马路远侧树线 #4",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.3
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树/树线 #5",
+      "pos": [
+        -6.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.31,
+        3.52
+      ],
+      "rot_deg": 0.0,
+      "note": "马路远侧树线 #5",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.3
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树/树线 #6",
+      "pos": [
+        6.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.31,
+        3.52
+      ],
+      "rot_deg": 0.0,
+      "note": "马路远侧树线 #6",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.3
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树/树线 #7",
+      "pos": [
+        18.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.31,
+        3.52
+      ],
+      "rot_deg": 0.0,
+      "note": "马路远侧树线 #7",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.3
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树/树线 #8",
+      "pos": [
+        30.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.31,
+        3.52
+      ],
+      "rot_deg": 0.0,
+      "note": "马路远侧树线 #8",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.3
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树/树线 #9",
+      "pos": [
+        42.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.31,
+        3.52
+      ],
+      "rot_deg": 0.0,
+      "note": "马路远侧树线 #9",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.3
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树/树线 #10",
+      "pos": [
+        54.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.31,
+        3.52
+      ],
+      "rot_deg": 0.0,
+      "note": "马路远侧树线 #10（最靠街道尽头）",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.3
+    }
+  ],
+  "whiteboxes": [
+    {
+      "element_key": "road",
+      "label": "马路（含路缘石）",
+      "pos": [
+        0.0,
+        7.75
+      ],
+      "footprint_m": [
+        120.0,
+        8.5
+      ],
+      "rot_deg": 0.0,
+      "note": "占确认过的世界全长；断面位置 = 隔离带外侧。找资产时只命中材质实例 MI_sjfnch0a（无包围盒），阶段六盖完白膜拿它当表面",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "sidewalk",
+      "label": "人行道（含通往主楼的道 + 车库前坡道）",
+      "pos": [
+        0.0,
+        -0.75
+      ],
+      "footprint_m": [
+        120.0,
+        1.5
+      ],
+      "rot_deg": 0.0,
+      "note": "紧贴前院草坪外沿；通往主楼的道与车库前坡道并入本条，未单列",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "前院草坪（沿街一条，主景）",
+      "pos": [
+        0.0,
+        -5.6
+      ],
+      "footprint_m": [
+        120.0,
+        8.2
+      ],
+      "rot_deg": 0.0,
+      "note": "参考图里最大的那块前景草坪。从住宅带前沿（Y=-9.7）铺到人行道（Y=-1.5），全长 120 m",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "隔离带草地 a（消防栓以西）",
+      "pos": [
+        -50.25,
+        1.75
+      ],
+      "footprint_m": [
+        19.5,
+        3.5
+      ],
+      "rot_deg": 0.0,
+      "note": "隔离带被小树与消防栓占位，故按 X 切成 3 段（自检项『白膜不压已有资产』）。本段 X∈[-60,-40.5]，东端给消防栓留 0.35 m",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "隔离带草地 b（消防栓与小树之间）",
+      "pos": [
+        -33.25,
+        1.75
+      ],
+      "footprint_m": [
+        12.5,
+        3.5
+      ],
+      "rot_deg": 0.0,
+      "note": "隔离带第 2 段，X∈[-39.5,-27]：西端给消防栓留 0.35 m、东端给小树留 1.06 m",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "隔离带草地 c（小树以东）",
+      "pos": [
+        21.5,
+        1.75
+      ],
+      "footprint_m": [
+        77.0,
+        3.5
+      ],
+      "rot_deg": 0.0,
+      "note": "隔离带第 3 段，X∈[-17,60]：西端给小树底花坛留 0.5 m",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "grass",
+      "label": "远侧路肩草地（马路对面）",
+      "pos": [
+        0.0,
+        14.0
+      ],
+      "footprint_m": [
+        120.0,
+        4.0
+      ],
+      "rot_deg": 0.0,
+      "note": "马路远侧、树线之前的一条草地；树线占位后自检要求让开，故草地到 Y=16 为止，树线从 Y=16.24 起",
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "shrub",
+      "label": "主楼基座前花丛",
+      "pos": [
+        -52.0,
+        -10.2
+      ],
+      "footprint_m": [
+        3.0,
+        1.0
+      ],
+      "rot_deg": 0.0,
+      "note": "参考图里主楼石材基座前那丛植物。放在住宅带与前院草坪之间的 1 m 空带里（自检要求不许压草坪白膜），故与前院草坪只相接不重叠",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "shrub",
+      "label": "小树底部花坛",
+      "pos": [
+        -19.0,
+        0.6
+      ],
+      "footprint_m": [
+        3.0,
+        1.0
+      ],
+      "rot_deg": 0.0,
+      "note": "参考图里小树根部那丛花。放在隔离带缺口内、小树以东 1.56 m 处",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "fire_hydrant",
+      "label": "消防栓（隔离带内）",
+      "pos": [
+        -40.0,
+        0.3
+      ],
+      "footprint_m": [
+        0.3,
+        0.3
+      ],
+      "rot_deg": 0.0,
+      "note": "参考图里人行道旁那根细白立杆（用户确认是消防栓）。尺寸按常规消火栓估（0.3×0.3 m 占地、0.75 m 高）；隔离带草地 a/b 为它各让出 0.35 m",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）"
+    }
+  ],
+  "params": {
+    "依据": "参考图（住宅街道・黄昏）横向结构：左侧近景主楼 → 中景 2 栋住宅 → 远景 3 栋低矮住宅沿街排开；画面右侧为马路，马路远侧为连续树线；人行道自画面底部延伸，隔离带里有 1 棵小树，隔离带内立 1 个消防栓",
+    "世界大小覆盖理由": "阶段一记的是 120×30 m，按确认过的元素排不下：住宅进深 8.35 + 前院 9.3 + 人行道 1.5 + 隔离带 3.5 + 车行道 8.5 + 远侧路肩 4.0 + 树线进深 3.52 ≈ 38.7 m。故覆盖为 120×40 m（工具已记为『调用方覆盖』）",
+    "横向（Y）": "住宅带 Y∈[-19.2,-10.8]；主楼基座花丛 Y≈-10.2；前院草坪 [-9.7,-1.5]；人行道 [-1.5,0]；隔离带 [0,3.5]（内含小树与消防栓，故按 X 切成 3 段避免压占）；车行道 [3.5,12]；远侧路肩草地 [12,16]；树线 [16.2,19.8]",
+    "精度": "平面近似；pos 与 footprint 均保留两位小数（米）；rot_deg 全 0 —— 错落/宽窄不一本阶段不做（属阶段三）",
+    "自检约束": "白膜不许压资产 —— 故隔离带草地按 X 切成 3 段，把 1 棵小树 + 1 个消防栓让出来；主楼基座花丛挪到住宅带与前院草坪之间的 1 m 空带",
+    "缩放依据": "占地 = 阶段一官方 get_bounds 实测包围盒 × scale。house1 ×12（面宽 10.69 m）、house2 中景 ×11 / 远景 ×8、小树 ×0.27（高 4.33 m）、树线 ×0.30（高 4.82 m）",
+    "纵向（X）": "相机在 X≈-60 端看向 +X；主楼 -52、中景 -34/-19、远景 12/28/44；树线 10 棵每 12 m 一棵（-54…54）"
+  },
+  "checks": [
+    {
+      "name": "每条占地的宽/深都为正",
+      "bad": [],
+      "ok": true
+    },
+    {
+      "name": "所有占地的四角都在世界边界内",
+      "bad": [],
+      "ok": true
+    },
+    {
+      "name": "已有资产两两不重叠",
+      "bad": [],
+      "ok": true
+    },
+    {
+      "name": "白膜两两不重叠",
+      "bad": [],
+      "ok": true
+    },
+    {
+      "name": "白膜不压已有资产（= 先放资产、再放白膜）",
+      "bad": [],
+      "ok": true
+    },
+    {
+      "name": "每个元素的 element_key 都在阶段一的清单里有记录",
+      "bad": [],
+      "ok": true,
+      "note": "catalog/asset_list.json（交付清单，2026-09-24T10:26:17.680401+00:00，10 行 / 5 个无资产）"
+    },
+    {
+      "name": "白膜只用在『阶段一没有可用资产』的元素上",
+      "bad": [],
+      "ok": true,
+      "note": "catalog/asset_list.json（交付清单，2026-09-24T10:26:17.680401+00:00，10 行 / 5 个无资产）"
+    }
+  ],
+  "previous_elements": {
+    "path": "catalog/elements.json",
+    "confirmed_at": "2026-09-24T10:25:02.120115+00:00",
+    "scene": {
+      "size_m": "120×30 m（阶段一记录）",
+      "time_of_day": "sunset"
+    }
+  },
+  "no_asset_source": "catalog/asset_list.json（交付清单，2026-09-24T10:26:17.680401+00:00，10 行 / 5 个无资产）",
+  "note": "一个物体一行、自带 pos（平面中心坐标，米）。**没有 count 字段** —— 摆几个就写几行，不许用一条记录代表多个不同位置的物体（那样自检看不见它们）。已有资产先放（大小是阶段一实测的）、白膜后放（大小要等资产占完位再估）。本数据不依赖任何图片；要图就由 AI 拿这份数据自己画（代码不出图）。",
+  "confirmation": {
+    "required": true,
+    "confirmed": true,
+    "confirmed_by": "用户本人",
+    "confirmed_at": "2026-09-24T10:38:27.337157+00:00",
+    "note": "已确认。几何一变，指纹就对不上，本次确认自动作废。",
+    "plan_hash": "667499072962ec540cddc6012ba6a357cb6cacdf28681082e99b13a8cb3b163d"
+  }
+}

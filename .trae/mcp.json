@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "scene-stage": {
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": ["${workspaceFolder}/src/mcp_server/main.py"]
+    }
+  }
+}
