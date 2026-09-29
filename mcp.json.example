@@ -1,0 +1,28 @@
+{
+  "_doc": [
+    "**通用模板** —— 仓库里提交的就是这一份；**成品配置由 `setup.ps1` 现场生成**（含本机绝对路径）。",
+    "",
+    "用法：把下面 `mcpServers` 那段复制到你所用的客户端里，再把 `<仓库根>` 换成你本机的解压目录。",
+    "  · 豆包 PC / 通用 stdio 客户端  → <仓库根>\\mcp.json",
+    "  · Trae（项目级）              → <仓库根>\\.trae\\mcp.json    （支持 ${workspaceFolder}，也可写成变量形式）",
+    "  · Cursor（项目级）            → <仓库根>\\.cursor\\mcp.json",
+    "  · VS Code（项目级）           → <仓库根>\\.vscode\\mcp.json  ⚠ 根键是 servers，**不是** mcpServers",
+    "  · Claude Code（项目级）       → <仓库根>\\.mcp.json         （同样是 mcpServers 形状）",
+    "  · DSH 等不读工作区文件的客户端 → 看 setup.ps1 生成的 connect-config.json，照抄里面那段",
+    "",
+    "⚠ **为什么不在仓库里放成品配置**：",
+    "   ① 各家**文件名不同**、键名也可能不同（VS Code 用 `servers`）——**一份通吃不存在**；",
+    "   ② 通用 stdio 配置必须写**本机绝对路径**（`<仓库根>\\.venv\\Scripts\\python.exe`），",
+    "      进了版本库、换台机器就是错的（除非客户端支持 `${workspaceFolder}` 这类变量）。",
+    "   → 仓库只留这份模板；四份成品由 `setup.ps1` 生成，且已在 `.gitignore` 里挡住，不污染版本历史。",
+    "",
+    "⚠ Windows 路径：JSON 里反斜杠要写成 `\\\\`（或改用正斜杠 `/`）；别混着写。",
+    "⚠ `_doc` 只是给人看的说明，客户端会忽略未知的顶层键；要省心就把它删掉再粘。"
+  ],
+  "mcpServers": {
+    "scene-stage": {
+      "command": "<仓库根>\\.venv\\Scripts\\python.exe",
+      "args": ["<仓库根>\\src\\mcp_server\\main.py"]
+    }
+  }
+}
