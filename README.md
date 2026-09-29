@@ -5,7 +5,7 @@
 **它是什么**：MCP **编排层**（编排 = 它自己一步都不碰 UE，只调度官方工具）。链路：
 
 ```
-宿主（DSH / Trae / Cursor / VS Code / 豆包） → 本 server（stdio）→ 官方 Unreal MCP（HTTP 127.0.0.1:8000）→ UE
+Agent（DSH / Trae / Cursor / VS Code / 豆包） → 本 server（stdio）→ 官方 Unreal MCP（HTTP 127.0.0.1:8000）→ UE
 ```
 
 ## 30 秒上手
@@ -15,7 +15,7 @@
 3. 按你的客户端做**最后一次动作**（重启客户端 / 打开「启用项目级 MCP」/ 重载窗口）—— 见 `SETUP.md`；
 4. 让 AI 调一次 `get_plan()`：能返回状态就说明通了（连上应有 **18 个工具**）。
 
-用户侧怎么用（要准备什么、在哪几次停下点头）见 **`交付说明.md`**；给 AI 的规则见 **`AGENTS.md`**（交付给客户的版本是 `交付版-AGENTS.md`）。
+用户侧怎么用（要准备什么、在哪几次停下点头）见 **`使用说明.md`**；给 AI 的规则见 **`AGENTS.md`**。
 
 ## 阶段
 
@@ -62,7 +62,7 @@
 
 **18 个工具**：`official_status`、`confirm_elements`、`plan_assets`、`rename_assets`、`confirm_assets`、`get_asset_list`、`generate_plan`、`get_plan`、`request_plan_change`、`confirm_plan`、`check_build_target`、`generate_build_orders`、`execute_build`、`export_layout`、`check_exchange`、`apply_surfaces`、`setup_environment`、`capture_preview`。
 
-⚠ 宿主**不读** MCP 的 `instructions` —— 所以要求要么写在各工具 docstring 里，要么由**代码拒收时的原文**教会调用方。软约束（"你要记得…"）已经踩过坑：能变硬的都变成了代码闸（回读闸 / 规划图闸 / 用户原话 / 改动窗口 / 搭哪张图 / 人工痕迹保护）。
+⚠ Agent**不读** MCP 的 `instructions` —— 所以要求要么写在各工具 docstring 里，要么由**代码拒收时的原文**教会调用方。软约束（"你要记得…"）已经踩过坑：能变硬的都变成了代码闸（回读闸 / 规划图闸 / 用户原话 / 改动窗口 / 搭哪张图 / 人工痕迹保护）。
 
 ## 开发 / 跑法
 
@@ -82,8 +82,8 @@
   & "<仓库根>\.venv\Scripts\python.exe" "<仓库根>\tests\preflight.py"
   ```
 
-  **必须用脚本方式**（与宿主的启动方式一致）：用 `import mcp_server.main` 会给**假绿**，实测吃过亏。绿了再重启。
-- ⚠ **"重启客户端"不一定换掉 MCP 子进程**（2026-09-29 实测踩到）：改完 `main.py`、重启之后如果
+  **必须用脚本方式**（与Agent的启动方式一致）：用 `import mcp_server.main` 会给**假绿**，实测吃过亏。绿了再重启。
+- ⚠ **"重启客户端"不一定换掉 MCP 子进程**：改完 `main.py`、重启之后如果
   **新改动没生效**，先核对**进程启动时间是不是晚于文件修改时间** ——
 
   ```powershell
@@ -91,9 +91,9 @@
   Get-Process python* | Select-Object Id, StartTime, Path
   ```
 
-  实测那一次：`main.py` 19:09:29 改完，可跑着的 server 进程启动于 **17:41:52** —— 那次"重启"
+  实测：`main.py` 改完，可跑着的 server 进程—— 那次"重启"
   之后跑的**仍是旧代码**（症状只是一个新旧代码之间有差异的小字段）。这类问题**不报错**，
-  只表现为"行为像改之前"，最费时间；所以别只看"我重启了"，要看**进程**。
-  要真换掉：**退出宿主（DSH 桌面端）再开**，或用上面的命令确认进程确实换了。
+  只表现为"行为像改之前"，最费时间；所以别只看"重启"，要看**进程**。
+  要真换掉：**退出Agent（DSH 桌面端等）再开**，或用上面的命令确认进程确实换了。
 - 已知坑（细节都写在代码注释里）：官方连接的取消域跨 task 会**炸掉整个 server**；规划层不能在文件顶部 `from .planning import ...`（脚本方式起必炸）；官方 `find_assets` **不匹配文件夹名**，哈希名资产只能靠"枚举 + 本地按文件夹名匹配"。
-- 排障：工具报**没有正文**的错（只有一句 `Error executing tool …`）→ 完整栈在宿主日志 `%APPDATA%\dsh-desktop\logs\harness.log`，搜工具名即可定位。
+- 排障：工具报**没有正文**的错（只有一句 `Error executing tool …`）→ 完整栈在Agent日志 `%APPDATA%\dsh-desktop\logs\harness.log`，搜工具名即可定位。
