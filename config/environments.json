@@ -1,0 +1,462 @@
+{
+  "_doc": [
+    "阶段六「环境搭建」的**时段预设表** —— 一档时段 = 六个环境因素各写什么。",
+    "",
+    "⚠ 这张表**不写死在代码里**（与 config/surface_materials.json 同一条纪律）：",
+    "   `setup_environment()` **每次调用都重新读**它 —— 改完**立刻生效，不用改代码、不用重启**。",
+    "",
+    "六个因素的 key 是固定的（写别的 key 会被工具点名跳过）：",
+    "   sun（太阳/时段）· sky_atmosphere（大气）· sky_light（天光）· fog（高度雾）·",
+    "   cloud（体积云）· post_process（后处理）",
+    "",
+    "每个因素底下只有三个段：",
+    "   transform —— **摆这个 Actor**。2026-09-29 从「只认朝向」扩成**整份变换**，两种写法都吃：",
+    "                  老写法：{ \"pitch\": -8, \"yaw\": -22, \"roll\": 0 }",
+    "                  新写法：{ \"location_m\": [x, y, z], \"rotation\": {pitch,yaw,roll}, \"scale\": [x,y,z] }",
+    "                ⚠ `location_m` 是**米**（与人看的其它表一致）；代码会和**当前的**另两项拼成",
+    "                  **整份**变换再写（实测：只传 rotation，官方会把 location 打到 0）。",
+    "                ⚠ 局部体积雾（`local_fog`）这类**新建**的 Actor 就靠这段摆位置/放大 ——",
+    "                  不写它就会落在**世界原点、默认大小**。",
+    "   props     —— 「属性 → 值」。太阳/大气/天光/雾/云写在**组件**上，后处理写在**卷**上。",
+    "   settings  —— 只有后处理用：写卷的 `settings`（结构体）。⚠ 工具会**整份写**（实测：",
+    "                结构体是整体替换，只写一个键会打坏其余键），所以这里只列你要盖的字段。",
+    "",
+    "⚠ 颜色写 `[r, g, b]` 或 `[r, g, b, a]`（0~1）即可 —— 代码按**现值自己的键序**逐位对上。",
+    "⚠ 属性名全部来自 2026-09-29 的实测清单（`list_properties` 原文）。写错名字官方会报错，",
+    "   工具会把原文带回来；不要凭记忆加字段。",
+    "",
+    "⚠⚠ **下面这些数值是美术值（照一张黄昏街景参考图定的），不是实测值、也没有经人确认** ——",
+    "    觉得不对就改这个文件（不用改代码，改完**下次调用就生效**）。",
+    "    其中 `noon` 那一档例外：它记的是 2026-09-29 实测的关卡现值，用途是「回到原始环境」。",
+    "",
+    "⚠ **云量 / 云密度：不能「直接改」，但能改**（2026-09-29 更正 —— 此前这里写的是「不在这个文件里、",
+    "   也改不了」，那是**作废口径**）：实测它们挂在引擎自带的体积云材质实例上",
+    "   （/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst）—— 直接改它就是改引擎资产，",
+    "   所有用它的关卡一起变。所以走**材质段**（见下面的 `material` 段）：**新建一份我们自己的 MI**",
+    "   （父级 = 那个引擎 MI）→ 把云组件的 `material` 指过去 → 再调 `Cloud_GlobalCoverage`（云量）/",
+    "   `Cloud_GlobalDensity`（云密度）。云另有**组件级**参数（层高 / 层厚 / 追踪距离）可改。",
+    "",
+    "⚠ 后处理这里**故意只写标量**（曝光 / Bloom / 暗角 / 颗粒 / 色差 / 色调 / 白平衡 / 运动模糊 /",
+    "   AO / 调色强度）：那几个颜色分级用的 Vector4（colorSaturation / colorGain / colorOffset …）",
+    "   的键名形状**没实测过**（可能是 {x,y,z,w} 而不是 {r,g,b,a}），照猜写会把结构体写坏。",
+    "   要用就先 `list_properties` 看一眼真形状，再加进来。",
+    "",
+    "── 因素表（factors 段）2026-09-29 用户授权从代码里搬出来 ──────────────────",
+    "「有哪些环境因素」在下面 `factors` 段里（**按键覆盖**代码里的内置兜底）—— 加自己的环境因素",
+    "**不用改代码、不用重启**。每个因素可用字段：",
+    "   cn            中文名（给人看）",
+    "   class         官方类路径（**按类找 Actor**，不写死 Actor 名字）",
+    "   component     承载参数的**组件对象名前缀**；**空串 = 参数就在 Actor 上**（后处理如此）",
+    "   spawn         true = 关卡里没有就**新建一个**（后处理卷实测 0 个 → 必须建）",
+    "   folder        新建时放进哪个 outliner 分组（默认 UEMCP_env，与阶段三的 UEMCP/ 分开放）",
+    "   material_prop 该因素「指向材质」的属性名（实测：云的 material）—— 填了才能用下面的 material 段",
+    "",
+    "── 材质段：presets.<档>.<因素>.material（云量/云密度走这条）────────────────",
+    "   asset    我们自己的 MI 路径（/Game/...）；不存在时若 create:true + parent 就**新建**",
+    "   create   是否允许新建（**会新建 UE 资产** —— 要你自己存盘才持久，本工具绝不存盘）",
+    "   parent   新建时的父级（云用 /Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst）",
+    "   name/folder  新建时的资产名 / Content 目录（默认 /Game/UEMCP/env）",
+    "   params   {\"参数名\": 值} —— **按值的形状分派四种**：数字 = scalar；{r,g,b,a} 或 [r,g,b] = vector；",
+    "            字符串 = texture（值是**纹理资产路径**，如 \"/Game/.../T_Rain\"）；true/false = static switch",
+    "   ⚠ 实测引擎云的材质参数名：Cloud_GlobalCoverage（云量）、Cloud_GlobalDensity（云密度）、",
+    "     Cloud_AlbedoColor、StormClouds、Layout_WindControls（风）… 共 29 个，清单见",
+    "     docs/阶段六-环境搭建.md",
+    "",
+    "── 样例：云量材质段长什么样（**sunset 档里已经有一份**，实际取值以 presets 为准）──",
+    "  \"material\": {",
+    "    \"asset\": \"/Game/UEMCP/env/MI_Cloud_Sunset\",",
+    "    \"create\": true,",
+    "    \"parent\": \"/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst\",",
+    "    \"name\": \"MI_Cloud_Sunset\",",
+    "    \"params\": {",
+    "      \"Cloud_GlobalCoverage\": 0.55,",
+    "      \"Cloud_GlobalDensity\": 0.02,",
+    "      \"Cloud_AlbedoColor\": [1.0, 0.82, 0.7, 1.0]",
+    "    }",
+    "  }",
+    "  ⚠ 2026-09-29 实测：这一段**先用 dry_run 验过**（报文如实报「真做时会新建一个」，且不建资产）。",
+    "    一旦开真跑，就会**新建一个 MI 资产**并把云指过去 —— 要你自己在 UE 里存盘才持久。",
+    "",
+    "── 可直接粘贴的样例：给局部体积雾摆位置（`local_fog` 已在上面 factors 里）────────",
+    "  放到 presets.sunset 底下即可（`transform` 支持整份变换；`location_m` 是**米**）：",
+    "  \"local_fog\": {",
+    "    \"transform\": { \"location_m\": [0, 0, 3], \"rotation\": { \"pitch\": 0, \"yaw\": 0, \"roll\": 0 },",
+    "                   \"scale\": [40, 20, 6] },",
+    "    \"props\": { \"heightFogExtinction\": 0.02, \"heightFogFalloff\": 0.2,",
+    "               \"radialFogExtinction\": 0.01, \"fogAlbedo\": [0.9, 0.95, 1.0] }",
+    "  }",
+    "  ⚠ 不写 `transform` 它就落在**世界原点、默认大小**（局部体积雾不摆位置基本没用）。",
+    "  ⚠ 临时试一下不想动文件：`setup_environment(factors=[\"local_fog\"], overrides={\"local_fog\":",
+    "    {\"transform\": {\"location_m\": [0, 0, 3], \"scale\": [40, 20, 6]}}})`。",
+    "",
+    "── 点名改哪一个 Actor（setup_environment 的 actors 参数）──────────────────",
+    "   默认**按类只改第一个**（会在报文里说明）；要改别的那个就传 actors，例如",
+    "   {\"fog\": \"局部雾\"}（label 片段）或 {\"fog\": \"/Game/...:PersistentLevel.ExponentialHeightFog_2\"}。",
+    "   点名后**命中多个会跳过并列出来**（不猜是哪一个）。"
+  ],
+  "factors": {
+    "local_fog": {
+      "cn": "局部体积雾",
+      "class": "/Script/Engine.LocalFogVolume",
+      "component": "LocalFogVolumeComponent",
+      "spawn": true,
+      "folder": "UEMCP_env"
+    }
+  },
+  "presets": {
+    "sunset": {
+      "_note": "黄昏（参考图就是这个时段；阶段一 catalog/elements.json 记的 scene_time_of_day = sunset）",
+      "sun": {
+        "transform": { "pitch": -8.0, "yaw": -22.0, "roll": 0.0 },
+        "props": {
+          "intensity": 3.2,
+          "bUseTemperature": true,
+          "temperature": 3200.0,
+          "lightColor": [1.0, 0.82, 0.62],
+          "volumetricScatteringIntensity": 1.4
+        }
+      },
+      "sky_atmosphere": {
+        "props": {
+          "rayleighScatteringScale": 0.045,
+          "mieScatteringScale": 0.006,
+          "skyLuminanceFactor": [1.0, 0.86, 0.72],
+          "heightFogContribution": 1.0
+        }
+      },
+      "sky_light": {
+        "props": {
+          "intensity": 0.7,
+          "lightColor": [1.0, 0.86, 0.72]
+        }
+      },
+      "fog": {
+        "props": {
+          "fogDensity": 0.02,
+          "fogHeightFalloff": 0.2,
+          "fogInscatteringLuminance": [0.35, 0.22, 0.16],
+          "directionalInscatteringLuminance": [0.9, 0.55, 0.3],
+          "startDistance": 0.0,
+          "bEnableVolumetricFog": true,
+          "volumetricFogExtinctionScale": 1.0,
+          "volumetricFogAlbedo": [1.0, 0.85, 0.75]
+        }
+      },
+      "cloud": {
+        "props": {
+          "layerBottomAltitude": 4.0,
+          "layerHeight": 8.0,
+          "tracingMaxDistance": 60.0
+        },
+        "material": {
+          "asset": "/Game/UEMCP/env/MI_Cloud_Sunset",
+          "create": true,
+          "parent": "/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst",
+          "name": "MI_Cloud_Sunset",
+          "params": {
+            "Cloud_GlobalCoverage": -0.35,
+            "Cloud_GlobalDensity": 0.012,
+            "Cloud_AlbedoColor": [1.0, 0.82, 0.7, 1.0],
+            "Layout_GlobalCloudMask": "/Engine/EngineSky/VolumetricClouds/T_CloudMask"
+          }
+        }
+      },
+      "local_fog": {
+        "_note": "街心一片局部体积雾（2026-09-29 用户授权由本工具新建）；`location_m` 是米。",
+        "transform": { "location_m": [0, 0, 3], "scale": [40, 20, 6] },
+        "props": {
+          "heightFogExtinction": 0.03,
+          "heightFogFalloff": 0.2,
+          "radialFogExtinction": 0.02,
+          "fogAlbedo": [0.9, 0.95, 1.0, 1.0]
+        }
+      },
+      "post_process": {
+        "props": { "bUnbound": true, "blendWeight": 1.0, "priority": 1 },
+        "settings": {
+          "bOverride_AutoExposureMinBrightness": true,
+          "autoExposureMinBrightness": 0.3,
+          "bOverride_AutoExposureMaxBrightness": true,
+          "autoExposureMaxBrightness": 2.0,
+          "bOverride_AutoExposureBias": true,
+          "autoExposureBias": 0.2,
+          "bOverride_BloomIntensity": true,
+          "bloomIntensity": 0.9,
+          "bOverride_BloomThreshold": true,
+          "bloomThreshold": -0.2,
+          "bOverride_WhiteTemp": true,
+          "whiteTemp": 5400.0,
+          "bOverride_VignetteIntensity": true,
+          "vignetteIntensity": 0.45,
+          "bOverride_FilmGrainIntensity": true,
+          "filmGrainIntensity": 0.12,
+          "bOverride_SceneFringeIntensity": true,
+          "sceneFringeIntensity": 1.6,
+          "bOverride_ToneCurveAmount": true,
+          "toneCurveAmount": 0.2
+        }
+      }
+    },
+
+    "blue_hour": {
+      "_note": "蓝调（日落后 / 日出前那段冷光）",
+      "sun": {
+        "transform": { "pitch": -3.0, "yaw": -35.0, "roll": 0.0 },
+        "props": {
+          "intensity": 1.2,
+          "bUseTemperature": true,
+          "temperature": 9000.0,
+          "lightColor": [0.55, 0.68, 1.0],
+          "volumetricScatteringIntensity": 1.2
+        }
+      },
+      "sky_atmosphere": {
+        "props": {
+          "rayleighScatteringScale": 0.05,
+          "mieScatteringScale": 0.004,
+          "skyLuminanceFactor": [0.5, 0.62, 0.95],
+          "heightFogContribution": 1.0
+        }
+      },
+      "sky_light": {
+        "props": {
+          "intensity": 0.9,
+          "lightColor": [0.55, 0.68, 1.0]
+        }
+      },
+      "fog": {
+        "props": {
+          "fogDensity": 0.03,
+          "fogHeightFalloff": 0.2,
+          "fogInscatteringLuminance": [0.18, 0.22, 0.35],
+          "startDistance": 0.0,
+          "bEnableVolumetricFog": true,
+          "volumetricFogExtinctionScale": 1.0,
+          "volumetricFogAlbedo": [0.8, 0.85, 1.0]
+        }
+      },
+      "cloud": {
+        "props": {
+          "layerBottomAltitude": 5.0,
+          "layerHeight": 10.0,
+          "tracingMaxDistance": 80.0
+        }
+      },
+      "post_process": {
+        "props": { "bUnbound": true, "blendWeight": 1.0, "priority": 1 },
+        "settings": {
+          "bOverride_AutoExposureMinBrightness": true,
+          "autoExposureMinBrightness": 0.2,
+          "bOverride_AutoExposureMaxBrightness": true,
+          "autoExposureMaxBrightness": 1.5,
+          "bOverride_BloomIntensity": true,
+          "bloomIntensity": 0.6,
+          "bOverride_WhiteTemp": true,
+          "whiteTemp": 8000.0,
+          "bOverride_VignetteIntensity": true,
+          "vignetteIntensity": 0.5,
+          "bOverride_FilmGrainIntensity": true,
+          "filmGrainIntensity": 0.08,
+          "bOverride_SceneFringeIntensity": true,
+          "sceneFringeIntensity": 1.0
+        }
+      }
+    },
+
+    "noon": {
+      "_note": "⚠ 这一档记的是 2026-09-29 实测的关卡现值 —— 用途是「把环境退回原始样子」（后处理卷本身不退）。",
+      "sun": {
+        "transform": { "pitch": -49.51711035415601, "yaw": -10.308600787602971, "roll": 112.36067200001975 },
+        "props": {
+          "intensity": 6.0,
+          "bUseTemperature": true,
+          "temperature": 6500.0,
+          "lightColor": [1.0, 1.0, 1.0],
+          "volumetricScatteringIntensity": 1.0
+        }
+      },
+      "sky_atmosphere": {
+        "props": {
+          "rayleighScatteringScale": 0.03310000151395798,
+          "mieScatteringScale": 0.003996000159531832,
+          "skyLuminanceFactor": [1.0, 1.0, 1.0],
+          "heightFogContribution": 1.0
+        }
+      },
+      "sky_light": {
+        "props": {
+          "intensity": 1.0,
+          "lightColor": [1.0, 1.0, 1.0]
+        }
+      },
+      "fog": {
+        "props": {
+          "fogDensity": 0.04360000044107437,
+          "fogHeightFalloff": 0.20000000298023224,
+          "fogInscatteringLuminance": [0.0, 0.0, 0.0],
+          "directionalInscatteringLuminance": [0.0, 0.0, 0.0],
+          "startDistance": 0.0,
+          "bEnableVolumetricFog": false,
+          "volumetricFogExtinctionScale": 1.0,
+          "volumetricFogAlbedo": [1.0, 1.0, 1.0]
+        }
+      },
+      "cloud": {
+        "props": {
+          "layerBottomAltitude": 5.0,
+          "layerHeight": 10.0,
+          "tracingMaxDistance": 200.0
+        }
+      },
+      "post_process": {
+        "props": { "bUnbound": true, "blendWeight": 1.0, "priority": 1 },
+        "settings": {
+          "bOverride_AutoExposureMinBrightness": true,
+          "autoExposureMinBrightness": 1.0,
+          "bOverride_AutoExposureMaxBrightness": true,
+          "autoExposureMaxBrightness": 4.0,
+          "bOverride_BloomIntensity": true,
+          "bloomIntensity": 0.4,
+          "bOverride_VignetteIntensity": true,
+          "vignetteIntensity": 0.2,
+          "bOverride_FilmGrainIntensity": true,
+          "filmGrainIntensity": 0.0,
+          "bOverride_SceneFringeIntensity": true,
+          "sceneFringeIntensity": 1.0,
+          "bOverride_WhiteTemp": true,
+          "whiteTemp": 6500.0
+        }
+      }
+    },
+
+    "night": {
+      "_note": "夜（把平行光当月光用：压暗、偏冷、抬高天光占比）",
+      "sun": {
+        "transform": { "pitch": -25.0, "yaw": 160.0, "roll": 0.0 },
+        "props": {
+          "intensity": 0.3,
+          "bUseTemperature": true,
+          "temperature": 10000.0,
+          "lightColor": [0.35, 0.42, 0.7],
+          "volumetricScatteringIntensity": 1.0
+        }
+      },
+      "sky_atmosphere": {
+        "props": {
+          "rayleighScatteringScale": 0.01,
+          "mieScatteringScale": 0.002,
+          "skyLuminanceFactor": [0.05, 0.07, 0.12],
+          "heightFogContribution": 1.0
+        }
+      },
+      "sky_light": {
+        "props": {
+          "intensity": 0.15,
+          "lightColor": [0.25, 0.32, 0.55]
+        }
+      },
+      "fog": {
+        "props": {
+          "fogDensity": 0.05,
+          "fogHeightFalloff": 0.2,
+          "fogInscatteringLuminance": [0.06, 0.08, 0.14],
+          "startDistance": 0.0,
+          "bEnableVolumetricFog": true,
+          "volumetricFogExtinctionScale": 1.0,
+          "volumetricFogAlbedo": [0.4, 0.5, 0.8]
+        }
+      },
+      "cloud": {
+        "props": {
+          "layerBottomAltitude": 6.0,
+          "layerHeight": 12.0,
+          "tracingMaxDistance": 120.0
+        }
+      },
+      "post_process": {
+        "props": { "bUnbound": true, "blendWeight": 1.0, "priority": 1 },
+        "settings": {
+          "bOverride_AutoExposureMinBrightness": true,
+          "autoExposureMinBrightness": 0.05,
+          "bOverride_AutoExposureMaxBrightness": true,
+          "autoExposureMaxBrightness": 0.4,
+          "bOverride_BloomIntensity": true,
+          "bloomIntensity": 1.2,
+          "bOverride_WhiteTemp": true,
+          "whiteTemp": 9000.0,
+          "bOverride_VignetteIntensity": true,
+          "vignetteIntensity": 0.6,
+          "bOverride_FilmGrainIntensity": true,
+          "filmGrainIntensity": 0.15,
+          "bOverride_SceneFringeIntensity": true,
+          "sceneFringeIntensity": 0.8
+        }
+      }
+    },
+
+    "overcast": {
+      "_note": "阴天（软、低对比：太阳压低、散射抬高、雾加厚）",
+      "sun": {
+        "transform": { "pitch": -55.0, "yaw": -10.0, "roll": 0.0 },
+        "props": {
+          "intensity": 1.0,
+          "bUseTemperature": true,
+          "temperature": 7000.0,
+          "lightColor": [0.8, 0.84, 0.9],
+          "volumetricScatteringIntensity": 1.2
+        }
+      },
+      "sky_atmosphere": {
+        "props": {
+          "rayleighScatteringScale": 0.01,
+          "mieScatteringScale": 0.01,
+          "skyLuminanceFactor": [0.6, 0.65, 0.7],
+          "heightFogContribution": 1.0
+        }
+      },
+      "sky_light": {
+        "props": {
+          "intensity": 1.6,
+          "lightColor": [0.75, 0.8, 0.88]
+        }
+      },
+      "fog": {
+        "props": {
+          "fogDensity": 0.06,
+          "fogHeightFalloff": 0.2,
+          "fogInscatteringLuminance": [0.55, 0.58, 0.62],
+          "startDistance": 0.0,
+          "bEnableVolumetricFog": true,
+          "volumetricFogExtinctionScale": 1.2,
+          "volumetricFogAlbedo": [0.9, 0.92, 0.95]
+        }
+      },
+      "cloud": {
+        "props": {
+          "layerBottomAltitude": 3.0,
+          "layerHeight": 6.0,
+          "tracingMaxDistance": 40.0
+        }
+      },
+      "post_process": {
+        "props": { "bUnbound": true, "blendWeight": 1.0, "priority": 1 },
+        "settings": {
+          "bOverride_AutoExposureMinBrightness": true,
+          "autoExposureMinBrightness": 0.6,
+          "bOverride_AutoExposureMaxBrightness": true,
+          "autoExposureMaxBrightness": 3.0,
+          "bOverride_BloomIntensity": true,
+          "bloomIntensity": 0.3,
+          "bOverride_WhiteTemp": true,
+          "whiteTemp": 7200.0,
+          "bOverride_VignetteIntensity": true,
+          "vignetteIntensity": 0.25,
+          "bOverride_FilmGrainIntensity": true,
+          "filmGrainIntensity": 0.05,
+          "bOverride_SceneFringeIntensity": true,
+          "sceneFringeIntensity": 0.6
+        }
+      }
+    }
+  }
+}
