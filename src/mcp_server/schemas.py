@@ -651,7 +651,9 @@ class PlanAcceptance(BaseModel):
         default="",
         description=(
             "`not_started` 空表 / `awaiting_figure` 等出图 / `awaiting_user` 等用户看图确认 / "
-            "`changes_requested` 用户提了要改 / `accepted` 验收通过"
+            "`changes_requested` 用户提了要改 / `accepted` 验收通过。"
+            "⚠ `awaiting_user` 的含义是「**该出的每一路图都认账**」（见 `REQUIRED_VIEWS`：恒两张）"
+            "—— 只画了一张（缺另一路）会退回 `awaiting_figure`，因为那时 `confirm_plan` 会拒收。"
         ),
     )
     state_cn: str = Field(default="", description="上面那个状态的中文说明（给人看）")
@@ -677,10 +679,15 @@ class PlanAcceptance(BaseModel):
         default_factory=dict,
         description=(
             "**这一版相对『上一次用户确认过的那一版』改了什么**（2026-09-26 起）："
-            "`{local, baseline, added, changed, removed, same, required_labels, note}`。"
+            "`{local, baseline, added, changed, removed, same, required_labels, changed_dims, "
+            "required_views, views_why, note}`。"
             "`local=true` = 局部一轮：**图里只要出现 `required_labels` 那几行**，"
             "没动的行不必重画（用户要求：局部改就全局部，不要全部重做）；"
             "`local=false` = 还没有基线（第一次搭）→ 图里要出现**每一行**。"
+            "⚠ **`required_views`（2026-09-30 加）决定要出哪几张图**：`top` = 顶视图（平面图，俯视）；"
+            "`elevation` = 正视图或左右视图（立面图）。**口径（用户最终定的）：位移 / 朝向 → 顶视图；"
+            "大小 / 高度（含 Z 标高 / Z 倍率）→ 正视图或左右视图**；两样都动 → 两张都要。"
+            "为什么是这几张，看 `views_why`。"
         ),
     )
     awaiting_readback: dict = Field(
@@ -755,6 +762,19 @@ class PlanStatus(BaseModel):
     )
     plan: dict | None = Field(
         default=None, description="完整计划数据（include_plan=true 时带出）"
+    )
+    drawing: dict | None = Field(
+        default=None,
+        description=(
+            "**画图用的逐行几何**（2026-09-30 加；`include_plan=true` 且规划非空时带出）："
+            "`{unit, world, coordinate_system, required_views, views_why, required_labels, "
+            "changed_dims, rows, removed_labels, z_rules, note}`，"
+            "每行 = `{label, kind, element_key, layer, x_m, y_m, z_base_m, z_top_m, w_m, d_m, h_m, "
+            "rot_deg, changed}`（**单位米**）。"
+            "它的 Z 口径与阶段三**同源**（`_compose_build_rows()`）⇒ 平面图 / 立面图都用它画，"
+            "**别自己推 Z**（推错 = 图与数据不一致 = 等于没确认）。"
+            "⚠ 它是**只读派生值**：不写进 `plan_v1.json`、**不进几何指纹**（读状态不会作废确认）。"
+        ),
     )
     next_step: str = Field(default="", description="下一步做什么")
     warnings: list[str] = Field(default_factory=list, description="要提醒的坑")

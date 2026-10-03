@@ -185,6 +185,17 @@ BUILD_STATE_PATH = VIEWS_DIR / "build_state_v1.json"
 #   没读参数说明的 agent 会直接 `execute_build`，于是可能搭在错的图上（客户问过"你搭哪张图了"）。
 BUILD_TARGET_PATH = VIEWS_DIR / "build_target_v1.json"
 
+# 阶段三 · **「人工痕迹」的问答台账**（2026-09-30 加，用户要求做成**两步闸**）——
+# 记「问过哪几行人工痕迹」+ 用户怎么答的，`execute_build()` 覆盖前拿它核对。
+# 为什么必须有它（**同类事故第二次**）：外部 agent 收到"有 N 处人工痕迹会被删"的拒收后，
+#   **自己**传了 `accept_user_edits=true` 就把用户手拖过的水面覆盖了（差 30 cm，全程没问人）；
+#   加了 `user_quote` 之后它至少得拿出一句话，但那仍然是"一次调用里说完的事"。
+#   现在拆成两步（与 `check_build_target` 同构）：① 第一次调（不带覆盖开关）→ 代码**记下
+#   "问的是哪几行"**并拒收；② 拿到用户答复后再调 → 核对「问过的那批 == 现在这批」+ 有他本人的原话
+#   + 距提问已过 `MIN_USER_EDITS_ANSWER_DELAY_S` 秒（防"问完立刻自己答复"）。
+# ⚠ 这是我们自己的 JSON（与 `catalog/` 同类），**不是 UE 资产、不是关卡存盘**；也**不进几何指纹**。
+USER_EDITS_PATH = VIEWS_DIR / "user_edits_v1.json"
+
 # 阶段七 · **落位对账报告**的落盘位置（2026-09-30）。
 # ⚠ 这是我们自己的 JSON（与 catalog/ 同类）——**不是 UE 资产、不是关卡存盘**，不违反硬规矩；
 #   它**不进几何指纹**（写报告不该让"上一次确认的 plan"作废），也**不改 plan 一个字**。
@@ -198,6 +209,14 @@ MIN_CONFIRM_DELAY_S = 15.0
 它压根没把图给用户看（实测被这么绕过一次：客户原话「你摆你牛魔呢，图都不先让我确认就摆」）。
 人看一眼平面图不可能 15 秒内完成，我们自己在图上核对一遍要几分钟。
 ⚠ 这是**可调的口径**（觉得太严/太松就改这个数），不是实测出来的物理常量。"""
+
+MIN_USER_EDITS_ANSWER_DELAY_S = 15.0
+"""「人工痕迹」两步闸里，**从提问到答复至少要隔多少秒**（2026-09-30 加）。
+
+为什么（与上面那条同一条纪律）：把"有 N 处人工痕迹会被删"这份清单写出来、交给用户、
+等他打字回话，**不可能 15 秒内完成** —— 问完立刻带着"原话"回来，只可能是自己编的。
+⚠ 同样是**可调的口径**，不是实测常量。⚠ 它拦不住"存心等够时间再编"（代码验不了真话），
+但配合台账里留下的**问过哪几行 + 那句话原文**，事后可以当场对质。"""
 
 # --- 阶段三 · 落位口径（**plan 里没有 Z** —— 竖直方向只能在这里推，依据照实写出来）----  【模块：build】
 # 为什么口径写在代码里而不是文档里：文档会腐烂，代码里的常量改不动就摆不出来。
@@ -715,12 +734,18 @@ async def _connection_loop(app: AppContext) -> None:
         await anyio.sleep(backoff)
 
 
-async def official_client(ctx: Context[AppContext]) -> Any:
+async def official_client(ctx: Context[AppContext], check_link: bool = True) -> Any:
     """取当前可用的官方客户端；没连上就抛 ToolError（给模型看人话，而不是崩栈）。
 
     连不上是**可预期**的（编辑器没开），所以这里一律转成 ToolError 原文说明，
     不把底层异常抛给协议层。
+
+    ⚠ `check_link=True`（默认，2026-09-30 加）：**动 UE 之前必须先确认链路**（见 `_link_guard()`）。
+      本函数是**所有碰 UE 的路径的唯一咽喉**，所以这道闸只在这一处实现。
+      ⚠ 只有 `official_status()` 自己传 `False` —— 它就是那把"检查链路的钥匙"，不能自己拦自己。
     """
+    if check_link:
+        _link_guard()
     app = ctx.request_context.lifespan_context
     try:
         # 等连接 task 首次表态：server 刚起来时它可能还在握手，直接判失败会误报
@@ -1205,7 +1230,8 @@ def element_keys_from_items(items: list[dict]) -> tuple[set[str], str]:
 
 
 async def call_official(
-    ctx: Context[AppContext], tool_name: str, arguments: dict, toolset: str | None = None
+    ctx: Context[AppContext], tool_name: str, arguments: dict, toolset: str | None = None,
+    check_link: bool = True,
 ) -> Any:
     """调用官方的一个能力，并把结果解析成 Python 对象。
 
@@ -1216,6 +1242,8 @@ async def call_official(
 
     ⚠ 连接由 `_connection_loop` 持有：这里**只借用，不建也不关**
       （原因见本文件顶部"官方连接"那段）。
+    ⚠ `check_link` 原样透传给 `official_client()`（默认 `True` = 先确认链路）——
+      只有"检查链路"这件事本身（`official_status()`）才传 `False`。
     """
     if toolset is None:
         mcp_tool, payload = tool_name, arguments
@@ -1224,7 +1252,7 @@ async def call_official(
         payload = {"toolset_name": toolset, "tool_name": tool_name, "arguments": arguments}
 
     app = ctx.request_context.lifespan_context
-    client = await official_client(ctx)
+    client = await official_client(ctx, check_link=check_link)
 
     async def once(target: Any) -> Any:
         result = await target.call_tool(mcp_tool, payload)
@@ -1394,7 +1422,10 @@ def candidates_for(
 @mcp.tool()
 async def official_status(ctx: Context[AppContext]) -> OfficialStatus:
     """自检：能不能连上官方 Unreal MCP，并报告协议版本和工具集数量。
-    ⚠ **闸的钥匙**（不是可选步骤）：`_session_prereq_guard` 要它 —— 本 server 进程里没调过它，`execute_build()` 会拒收。它同时是唯一能当"链路诊断"的口子。
+    ⚠ **闸的钥匙**（不是可选步骤）：`_link_guard()` 认它 —— **任何碰 UE 的工具**（它们都经
+      `official_client()`）在本 server 进程里没见它**报过连上**，就会被拒收并点名要你先调它。
+      （2026-09-26 它只被 `execute_build()` 要求；**2026-09-30 起扩到所有碰 UE 的路径** ——
+      用户要求「每次要动 UE 必须检查连接状态」；它同时是唯一能当"链路诊断"的口子。）
 
     任何依赖官方的操作之前，先用它确认链路。连不上时返回**错误原文**，不猜原因。
 
@@ -1404,17 +1435,22 @@ async def official_status(ctx: Context[AppContext]) -> OfficialStatus:
     ⚠ 讲流程时**以 `docs/` 下的规划文档为准，不许凭印象**。
     ⚠ 硬性禁止：不许寻找/猜测「疑似资产」；不许删资产；**不许存盘**（保存 UE 关卡 / 资产）。
     """
-    # ⚠ 这次调用本身要留痕（2026-09-26 加）：`execute_build` 落关卡前会核对"开场动作做过没有"，
-    #   见 `_session_prereq_guard()`。**在入口就记**（不看返回值）—— 连不上也算"调过"，
-    #   否则链路一断就变成死锁：越连不上越被拦，越被拦越没法往下走。
+    # ⚠ 这次调用留**两种**痕（2026-09-26 加第一种；2026-09-30 补第二种）：
+    #   ① `_mark_session_prereq` —— "开场动作做过没有"（`_session_prereq_guard()` 认它，**不看结果**）；
+    #   ② `_mark_link_state`    —— "**这次链路通没通**"（`_link_guard()` 认它，**看结果**）。
+    #   只记①不记②曾是漏洞：连不上也算"调过"，于是链路一断就一路以最难懂的方式失败
+    #   （2026-09-30 实测：开机后客户端与 MCP 断连，Agent 一上来就调工具）。所以①照旧记、
+    #   ②按**返回值**记 —— 且本工具自己调官方时传 `check_link=False`（不能自己拦自己）。
     _mark_session_prereq("official_status")
     try:
-        catalog = await call_official(ctx, "list_toolsets", {})
+        catalog = await call_official(ctx, "list_toolsets", {}, check_link=False)
         text = catalog if isinstance(catalog, str) else json.dumps(catalog, ensure_ascii=False)
         # 官方把工具集列成 "- 工具集名: 说明"。只数形如 "- xxx.yyy:" 的行，
         # 别把说明里的项目符号也算进去（实测：那样会数出 67，真实值是 52）。
         count = len(re.findall(r"^-\s+\S*\.\S*:", text, flags=re.MULTILINE))
+        _mark_link_state(True)
     except ToolError as exc:
+        _mark_link_state(False, str(exc))
         return OfficialStatus(reachable=False, error=str(exc))
 
     # 协商出的协议版本：上面那次 list_toolsets 调用已经把连接建起来了，
@@ -2003,6 +2039,125 @@ def _build_target_guard(level: str) -> None:
         )
 
 
+# --- 阶段三 · 「人工痕迹」的**两步闸**（2026-09-30 加，用户要求；**尚未实测**）------------  【模块：state】
+# 起因（**同类事故第二次**）：外部 agent 收到"有 N 处人工痕迹会被这次操作删掉"的拒收后，
+#   **自己**传了 `accept_user_edits=true`，把用户手拖过的水面（差 30 cm）覆盖掉了 —— 全程没问过人。
+#   当天早些时候的第一次加固只加了 `user_quote`：它至少得拿出一句话。但那仍是**一次调用里说完的事**。
+# 现在拆成两步（与 `check_build_target` 同构）：
+#   ① 第一次调（不带覆盖开关）→ 代码**记下"我问了哪几行"**再拒收（`views/user_edits_v1.json`）；
+#   ② 拿到用户答复后再调 → 核对「问过的那批 == 现在这批」+ 有他本人的原话 + 距提问够久 → 才放行。
+# ⚠ **边界说清**：这**拦不住"存心等够时间再编一句话"**（代码验不了真话）。它做到的是
+#   **不能悄悄干**，且台账里留下「问过哪几行 + 那句话原文」，事后可以当场对质。
+
+def _load_user_edits() -> dict:
+    """读「人工痕迹」问答台账；没有 / 格式不对都返回 `{}`（当"还没问过"处理）。"""
+    doc = load_json(USER_EDITS_PATH)
+    return doc if isinstance(doc, dict) else {}
+
+
+def _traces_key(traces: list) -> list[str]:
+    """这批人工痕迹的**身份** = 排好序的 label 列表（判"问过的那批"与"现在这批"是不是同一批）。"""
+    rows = [str(t.get("label") or "") for t in (traces or []) if isinstance(t, dict)]
+    return sorted(x for x in rows if x)
+
+
+def _save_user_edits_question(traces: list, level: str, mode: str) -> str:
+    """**第 1 步**：记下「问用户的是哪几行人工痕迹」（**不碰关卡、不改 plan**）。返回台账路径。"""
+    rows = _traces_key(traces)
+    doc = {
+        "stage": "阶段三 · 「人工痕迹」问答台账（我们自己的文件，非 UE 存盘）",
+        "asked_at": datetime.now(timezone.utc).isoformat(),
+        "asked_level": str(level or ""),
+        "asked_mode": str(mode or ""),
+        "asked_rows": rows,
+        "asked_count": len(rows),
+        "answer": None,
+        "history": list(_load_user_edits().get("history") or []),
+        "note": ("`asked_rows` = 问用户时逐行列出的那几行（关卡现状与台账不符 / 台账解释不了的 Actor）；"
+                 "`answer` = 他的答复（`decision` = overwrite + `quote` 原话 + `at`）。"
+                 "`execute_build` 要按 plan 覆盖之前会核对：**没问过 / 问过的那批与现在不一致 / "
+                 f"距提问不到 {MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒 → 拒收**（一个 Actor 都不动）。"
+                 "覆盖真跑成功之后这道问答被移进 `history`（下一批要重新问）。"),
+    }
+    save_json(USER_EDITS_PATH, doc)
+    return str(USER_EDITS_PATH)
+
+
+def _user_edits_gate(traces: list, level: str, mode: str, user_quote: str) -> str:
+    """**第 2 步**：要按 plan 覆盖这些人工痕迹之前先过这道闸。过不了抛 `ToolError`（= 拒收，一个 Actor 都不动）。
+
+    三条判据都要过：
+      ① **问过**：台账里有 `asked_at`（第 1 步真的跑过）—— 没问过直接要覆盖 = 拒收；
+      ② **问的就是现在这批**：`asked_rows == 现在这批的 label 集合`（多一行 / 少一行都要重问）；
+      ③ **有他本人的原话**，且**距提问 ≥ `MIN_USER_EDITS_ANSWER_DELAY_S` 秒**（问完立刻自己答复 = 没人看过）。
+    """
+    quote = str(user_quote or "").strip()
+    doc = _load_user_edits()
+    if not str(doc.get("asked_at") or ""):
+        raise ToolError(
+            "拒绝搭建：**你还没把这份人工痕迹清单问过用户**（或上一批问答已经用掉了）—— "
+            "一个 Actor 都没动。\n"
+            "正确顺序（**两步，别合成一步**）：① 先按**默认参数**（不带 `accept_user_edits`）调一次 —— "
+            "它会把清单逐行列出来、**拒绝执行**，同时留痕「你问的是哪几行」；"
+            "② **把那份清单原样交给用户、停下等他打字**；"
+            "③ 拿到他的原话再调 `execute_build(accept_user_edits=true, user_quote=…)`。\n"
+            "（为什么拦：这是同类事故第二次 —— 上一次外部 agent 收到拒收后**自己**传了 `true`，"
+            "把用户手拖过的东西覆盖掉了，全程没问过人。）"
+        )
+    asked = [str(x) for x in (doc.get("asked_rows") or [])]
+    now = _traces_key(traces)
+    if asked != now:
+        extra = [x for x in now if x not in asked]
+        gone = [x for x in asked if x not in now]
+        raise ToolError(
+            "拒绝搭建：**你问过的那批人工痕迹，与现在这批对不上** —— 一个 Actor 都没动。\n"
+            f"· 当初问的 {len(asked)} 行 / 现在 {len(now)} 行"
+            + (f"\n· **现在多出来的**（他没看过）：{'、'.join(extra[:8])}" if extra else "")
+            + (f"\n· **当初有、现在没了**：{'、'.join(gone[:8])}" if gone else "")
+            + "\n把**现在这份清单**重新交给用户、拿他的答复再来"
+              "（口径：问过的那批必须就是现在这批 —— 多一行少一行都说明他没看全）。"
+        )
+    if not quote:
+        raise ToolError(
+            "拒绝搭建：要给 `user_quote`（**用户本人的原话**，例：「那是我改的，按 plan 覆盖吧」）—— "
+            "一个 Actor 都没动。⚠ **不许自己编**（编了就是伪造人的确认）；拿不出原话就说明你还没问他。"
+        )
+    waited: float | None = None
+    try:
+        asked_ts = datetime.fromisoformat(str(doc.get("asked_at") or ""))
+        waited = (datetime.now(timezone.utc) - asked_ts).total_seconds()
+    except (TypeError, ValueError):
+        waited = None
+    if waited is not None and waited < MIN_USER_EDITS_ANSWER_DELAY_S:
+        raise ToolError(
+            f"拒绝搭建：你把清单交出去才 **{waited:.0f} 秒**，就带着『原话』回来了 —— "
+            f"用户不可能已经看完（这道下限是 {MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒）—— 一个 Actor 都没动。\n"
+            "正确顺序：**先调一次（不带覆盖开关）拿到清单 → 把清单原样交给用户 → 停下等他打字 → "
+            "再带他的原话回来**。"
+        )
+    return quote
+
+
+def _mark_user_edits_answered(quote: str) -> str:
+    """覆盖真跑成功后：把这次问答**移进 `history` 并清掉待答状态**（下一批人工痕迹要重新问一次）。"""
+    doc = _load_user_edits()
+    hist = list(doc.get("history") or [])
+    hist.append({
+        "asked_at": str(doc.get("asked_at") or ""),
+        "asked_level": str(doc.get("asked_level") or ""),
+        "asked_mode": str(doc.get("asked_mode") or ""),
+        "asked_rows": list(doc.get("asked_rows") or []),
+        "decision": "overwrite",
+        "quote": str(quote or ""),
+        "at": datetime.now(timezone.utc).isoformat(),
+    })
+    doc.update({"asked_at": "", "asked_level": "", "asked_mode": "", "asked_rows": [],
+                "asked_count": 0, "answer": None, "history": hist,
+                "note": "上一批问答已用掉（在 `history` 里）—— 下一批人工痕迹要重新走两步。"})
+    save_json(USER_EDITS_PATH, doc)
+    return str(USER_EDITS_PATH)
+
+
 def _xform_of(got: Any) -> tuple[list[float] | None, float | None, list[float] | None]:
     """官方 `get_actor_transform` 的返回 → `(loc_cm, yaw, scale)`；解析不了给 `(None, None, None)`。"""
     doc = got if isinstance(got, dict) else {}
@@ -2203,7 +2358,18 @@ def _row_changes(order: dict, old: dict) -> list[str]:
     except (TypeError, ValueError):
         why.append("yaw 读不出来")
     if not _scale_close(order.get("scale"), old.get("scale")):
-        why.append(f"缩放 {old.get('scale')} → {order.get('scale')}")
+        # ⚠ 第 3 维就是**高度**（`RelativeScale3D` 的 Z；资产行现在还会乘 `scale_z`）——
+        #   客户 agent 自评里点名「incremental 对比不够智能，识别不出『高度变了』」，
+        #   所以这里额外把话说清楚：**高度变了的行只有立面图看得出来**（2026-09-30 加）。
+        note = ""
+        try:
+            oz = float((old.get("scale") or [None, None, None])[2])
+            nz = float((order.get("scale") or [None, None, None])[2])
+            if abs(oz - nz) > 1e-6:
+                note = f"（**Z 分量变了 = 高度变了**：{oz:g} → {nz:g}）"
+        except (TypeError, ValueError, IndexError):
+            note = ""
+        why.append(f"缩放 {old.get('scale')} → {order.get('scale')}{note}")
     return why
 
 
@@ -2265,6 +2431,20 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
             except (TypeError, ValueError):
                 pass
 
+    # 资产**实测包围盒**（按资产路径）—— 2026-09-30 加：画立面图要知道楼有多高、
+    # 画平面图要知道它占多大（`get_plan().drawing`）。取的是阶段一那次 `get_bounds` 的实测值。
+    bbox_by_path: dict[str, list[float]] = {}
+    for it in (asset_list.get("items") or []):
+        if not isinstance(it, dict):
+            continue
+        _p = str(it.get("asset_path") or "")
+        _size = it.get("size_cm")
+        if _p and _p not in bbox_by_path and isinstance(_size, (list, tuple)) and len(_size) >= 3:
+            try:
+                bbox_by_path[_p] = [float(_size[0]), float(_size[1]), float(_size[2])]
+            except (TypeError, ValueError):
+                pass
+
     rows: list[dict] = []
     index = 0
 
@@ -2276,21 +2456,55 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
         path = str(a.get("asset_path") or "")
         pos = list(a.get("pos") or [0.0, 0.0])
         scale = float(a.get("scale") or 1.0)
+        # `scale_z`（**Z 方向倍率**，2026-09-30 加）：**只拉高 / 压低，占地一个数都不动** ——
+        # 用户要的"楼别一样高、但街道布局不变"就靠它（改 `scale` 是整体缩放，占地会跟着变）。
+        # 归一化在阶段二已经校验过（正的有限数）；这里再挡一次"读不出来"的情况，**不静默**。
+        scale_z = 1.0
+        if a.get("scale_z") is not None:
+            try:
+                _sz = float(a["scale_z"])
+            except (TypeError, ValueError):
+                _sz = 0.0
+            if math.isfinite(_sz) and _sz > 0:
+                scale_z = _sz
+            else:
+                warnings.append(
+                    f"⚠ 资产「{label}」的 `scale_z` 读不出来（{a.get('scale_z')!r}）—— 按 1.0 处理。")
         yaw = float(a.get("rot_deg") or 0.0)
         note = str(a.get("note") or "")
+        if abs(scale_z - 1.0) > 1e-9:
+            note += (f" ｜ 阶段三：`scale_z` = {scale_z:g}（Z 方向倍率）→ RelativeScale3D = "
+                     f"[{scale:g}, {scale:g}, {scale * scale_z:g}]（**占地仍是 {scale:g}**）")
 
         # Z：地面标高 + 「原点比底面高」的那一段（乘上这个资产的缩放）—— 见 ASSET_PIVOT_LIFT_CM
         lift_cm = ASSET_PIVOT_LIFT_CM.get(path, 0.0) * scale
         z_cm = GROUND_Z_M * 100.0 + lift_cm
         if a.get("z_m") is not None:
-            # plan 显式给了**中心绝对标高**（米）→ 用它，覆盖上面按口径推的值（2026-09-30 加）
+            # plan 显式给了**绝对标高**（米）→ 用它，覆盖上面按口径推的值（2026-09-30 加）
+            # ⚠ 对**资产行**这个值是 **Actor 原点**的标高（资产的 `loc.z` 就是原点，不是中心）——
+            #   原先这里写的是"中心绝对标高"，那是错的（2026-09-30 只改文案，坐标一个字没动）。
             z_cm = float(a["z_m"]) * 100.0
             note += (f" ｜ 阶段三：plan 显式给了 `z_m` = {float(a['z_m']):g} m"
-                     f" → 中心标高 {z_cm:.2f} cm（**覆盖**按口径推的值）")
+                     f" → **原点**标高 {z_cm:.2f} cm（**覆盖**按口径推的值）")
         if lift_cm:
             note += (f" ｜ 阶段三补 Z：该资产原点比底面高 {ASSET_PIVOT_LIFT_CM[path]:g} cm"
                      f"（scale 1 实测）×{scale:g} = {lift_cm:.2f} cm，"
-                     f"挪到地面 {GROUND_Z_M * 100:g} cm 之上 → z = {z_cm:.2f} cm")
+                     f"挪到地面 {GROUND_Z_M * 100:g} cm 之上 → 原点 z = {z_cm:.2f} cm")
+
+        # **画图用的底 / 顶绝对标高 + 占位包围盒**（2026-09-30 加，供 `get_plan().drawing`）：
+        # 立面图必须知道这两头；口径就在这一段里算（**同一处 Z 口径**，不让画图的人再推一遍）。
+        # ⚠ 顶面 = 底面 + 阶段一实测包围盒的高 × 缩放 × `scale_z`；**取不到就给 None 并如实报**。
+        _bb = bbox_by_path.get(path)
+        bbox_cm = ([num(_bb[0] * scale), num(_bb[1] * scale), num(_bb[2] * scale * scale_z)]
+                   if _bb else None)
+        z_base_cm = z_cm - lift_cm
+        if bbox_cm:
+            z_top_cm: float | None = z_base_cm + float(bbox_cm[2])
+        else:
+            z_top_cm = None
+            warnings.append(
+                f"⚠ 画图几何：资产「{label}」在资产清单里找不到实测包围盒（{path}）—— "
+                "这一行给不出 `z_top`（立面图画不出它的顶）。**不拿别的数顶替**，去阶段一清单核对。")
 
         rows.append({
             "index": index, "label": label,
@@ -2299,8 +2513,11 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
             "kind": "asset", "element_key": key, "asset_path": path, "primitive": "",
             "loc_cm": [num(pos[0] * 100.0), num(pos[1] * 100.0), num(z_cm)],
             "rot": {"pitch": 0.0, "yaw": num(yaw), "roll": 0.0},
-            "scale": [num(scale), num(scale), num(scale)],
+            "scale": [num(scale), num(scale), num(scale * scale_z)],
             "size_cm": None,
+            "bbox_cm": bbox_cm,
+            "z_base_cm": num(z_base_cm),
+            "z_top_cm": (num(z_top_cm) if z_top_cm is not None else None),
             "folder": FOLDER_BY_ELEMENT.get(key, f"{OUR_FOLDER_ROOT}/{key or 'misc'}"),
             "surface_material_hint": "",
             "note": note,
@@ -2348,6 +2565,10 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
             warnings.append(f"白膜「{label}」：plan 里的 shape 是 `{shape or '空'}`，"
                             "只认 cube / plane —— 按 cube 处理。")
 
+        # 画图用的**底 / 顶绝对标高**（2026-09-30 加，供 `get_plan().drawing`）：
+        # 官方 `add_cube` 的方块**以 Actor 原点为中心**（2026-09-26 实测）⇒
+        # 底面 = 中心 − 高/2、顶面 = 中心 + 高/2 —— 立面图直接用这两头，不必自己推。
+        size_cm_row = [num(fp[0] * 100.0), num(fp[1] * 100.0), num(height_m * 100.0)]
         rows.append({
             "index": index, "label": label,
             "uid": _row_uid(key, label),
@@ -2356,7 +2577,10 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
             "loc_cm": [num(pos[0] * 100.0), num(pos[1] * 100.0), num(z_m * 100.0)],
             "rot": {"pitch": 0.0, "yaw": num(yaw), "roll": 0.0},
             "scale": [1.0, 1.0, 1.0],
-            "size_cm": [num(fp[0] * 100.0), num(fp[1] * 100.0), num(height_m * 100.0)],
+            "size_cm": size_cm_row,
+            "bbox_cm": list(size_cm_row),
+            "z_base_cm": num(z_m * 100.0 - height_m * 100.0 / 2.0),
+            "z_top_cm": num(z_m * 100.0 + height_m * 100.0 / 2.0),
             "folder": FOLDER_BY_ELEMENT.get(key, f"{OUR_FOLDER_ROOT}/{key or 'misc'}"),
             "surface_material_hint": _mats.get(key, ""),
             "note": note,
@@ -2425,6 +2649,93 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
         "⚠ 上面几条是**口径**（依据写在常量旁），不是实测值 —— 觉得不对就说，改表里的数即可。",
     ]
     return rows, z_rules, warnings
+
+
+def _drawing_geometry(plan: dict) -> dict:
+    """给"画图的人"一份**可直接画**的逐行几何（含 Z）—— 出处是 `get_plan().drawing`。
+
+    为什么要有它（用户 2026-09-30：「当调整的是高度时生成的图得是正视图或者左右视图」）：
+      画立面图必须知道每一行的**底 / 顶绝对标高**，而 `plan_v1.json` 里只有平面坐标 `pos`
+      加高度字段。原先"Z 从哪来"要靠画图的人自己按 `WHITEBOX_VERTICAL` / `ASSET_PIVOT_LIFT_CM`
+      推 —— **推错就是两套口径**（图与数据对不上，而图是用户唯一的判断依据）。
+      这里直接复用 `_compose_build_rows()`（阶段三落关卡用的**同一处** Z 口径）⇒ 一张图一个数据源。
+
+    ⚠ **只读、不落盘、不进几何指纹**：它是 `get_plan()` 的返回值，不是 plan 的一部分 ——
+      往 `plan_v1.json` 里写派生数据，会让"读一次状态"就把上一次确认无谓作废。
+    ⚠ 取不到实测包围盒的行：`z_top_m` 给 `None` 并**如实写在报告里**（不拿平面数据冒充高度 ——
+      与硬规则 6「预估值不许伪装成实测值」同源）。
+    """
+    asset_list = load_json(ASSET_LIST_PATH) or {}
+    rows, z_rules, compose_warnings = _compose_build_rows(plan, asset_list)
+    compose_warnings = list(compose_warnings)
+
+    try:
+        cs = _planning_modules().change_set(plan)
+    except Exception as exc:                    # noqa: BLE001 —— 画图数据取不到不该把读工具带崩
+        cs = {}
+        compose_warnings.append(
+            f"⚠ 画图几何：变更集没算出来（{type(exc).__name__}: {exc}）—— "
+            "`changed` 这一列这次**没查**。")
+
+    changed = set(str(x) for x in (cs.get("changed") or []))
+    changed |= set(str(x) for x in (cs.get("added") or []))
+
+    def _m(val, digits: int = 4):
+        """厘米 → 米（取不到给 None）—— 画图数据一律用米，与 plan_v1.json 同口径。"""
+        try:
+            return round(float(val) / 100.0, digits)
+        except (TypeError, ValueError):
+            return None
+
+    out_rows: list[dict] = []
+    for r in rows:
+        loc = list(r.get("loc_cm") or [0.0, 0.0, 0.0])
+        bb = list(r.get("bbox_cm") or [None, None, None])
+        out_rows.append({
+            "label": str(r.get("label") or ""),
+            "kind": str(r.get("kind") or ""),
+            "element_key": str(r.get("element_key") or ""),
+            "layer": str(r.get("layer") or ""),
+            "x_m": _m(loc[0] if len(loc) > 0 else None),
+            "y_m": _m(loc[1] if len(loc) > 1 else None),
+            "z_base_m": _m(r.get("z_base_cm")),
+            "z_top_m": _m(r.get("z_top_cm")),
+            "w_m": _m(bb[0] if len(bb) > 0 else None),
+            "d_m": _m(bb[1] if len(bb) > 1 else None),
+            "h_m": _m(bb[2] if len(bb) > 2 else None),
+            "rot_deg": float((r.get("rot") or {}).get("yaw") or 0.0),
+            "changed": str(r.get("label") or "") in changed,
+        })
+
+    world = plan.get("world") or {}
+    return {
+        "unit": "m",
+        "world": {"center": world.get("center"), "size": world.get("size"),
+                  "bounds": world.get("bounds")},
+        "coordinate_system": world.get("coordinate_system"),
+        "required_views": list(cs.get("required_views") or ["top"]),
+        "views_why": str(cs.get("views_why") or ""),
+        "required_labels": list(cs.get("required_labels") or []),
+        "changed_dims": list(cs.get("changed_dims") or []),
+        "rows": out_rows,
+        "removed_labels": list(cs.get("removed") or []),
+        "z_rules": z_rules,
+        "compose_warnings": compose_warnings,
+        "note": (
+            "画图**直接用这份数据**，别再自己推 Z：坐标口径与 `plan_v1.json` 一致"
+            "（左手系 Z-up，X 前进 / Y 右 / Z 上，单位米）；`z_base_m` / `z_top_m` 是"
+            "**绝对标高**（按阶段三**同一套** Z 口径算出来的），`w_m` / `d_m` / `h_m` 是"
+            "**占位包围盒**（资产 = 阶段一实测包围盒 × 缩放）。"
+            "⚠ **每一版都出两张图**（2026-09-30 用户定案）：**顶视图 = X-Y 平面**（俯视）、"
+            "**原图视角正视图 = Y-Z 平面**（横轴 Y、纵轴 Z —— 因为本工程坐标系是 **X 前进**，"
+            "`world.coordinate_system` 里写着，所以「原图视角」= 沿 X 看）。"
+            "顶视图画 `x_m` / `y_m` + `w_m`×`d_m`（可画矩形 + 朝向）；"
+            "正视图画 `y_m`（横）× `z_base_m` / `z_top_m`（纵）。"
+            "⚠ 正视图是**立面展开图**（X 被压掉，不同 X 上的东西会叠在一起）："
+            "给用户核对体量与高度的**示意图，不是严格投影**；`rot_deg` 的影响按轴对齐近似。"
+            "本版图里要点名的行 = `required_labels`（其中 `changed=true` 的是本次动过的）。"
+            "⚠ **两张图**里都要写**当前几何指纹前 10 位**，否则 `confirm_plan` 拒收。"),
+    }
 
 
 def _write_build_orders(payload: dict) -> str:
@@ -3235,8 +3546,21 @@ async def execute_build(
             "对不上（人工挪过 / 转过 / 缩放过 / 改过白膜厚薄）的行、以及台账里没有的活 Actor，"
             "**一律拒收并列出来**（一个 Actor 都不动）。"
             "确认『这些人工改动可以按 plan 覆盖（会被删掉重摆）』才传 true。"
-            "⚠ 不要为了「让它过」随手传 true —— 那正是「用户手动改的东西被删了」的来源"
+            "⚠ 不要为了「让它过」随手传 true —— 那正是「用户手动改的东西被删了」的来源。"
+            "⚠ **这是两步闸（2026-09-30 加固）**：真跑要覆盖必须**先按默认参数调一次**（拿到那份"
+            "人工痕迹清单、代码会留痕「你问的是哪几行」）→ **把清单原样交给用户、停下等他打字** → "
+            "再带 `accept_user_edits=true` + 他的原话 `user_quote` 调第二次。"
+            "**没先问过 / 问的那批与现在这批不一致 / 答复来得太快，一律拒收**"
+            "（光有布尔开关，这道闸就只剩『靠自觉』）"
         ))] = False,
+    user_quote: Annotated[str, Field(
+        description=(
+            "**用户本人同意「按 plan 覆盖他手改的东西」的原话**（例：「那是我改的，按 plan 覆盖吧」）。"
+            "⚠ 只在 `accept_user_edits=true` **且真跑**（`dry_run=false`）时必填："
+            "没有它 = **证明不了有人确认过**，一律拒收；演练（`dry_run=true`）不需要。"
+            "⚠ 还要求：**距你用默认参数拿到那份清单至少 15 秒**（问完立刻自己答复 = 没人看过）。"
+            "⚠ **不许自己编** —— 拿不出原话，就说明你还没问他"
+        ))] = "",
 ) -> BuildReport:
     """阶段三第 2 步（后半）：**把放置表落进关卡 —— 默认只动改过的行（增量），不推倒重来**。
 
@@ -3249,9 +3573,21 @@ async def execute_build(
          资产路径逐个官方 `exists()`；白膜行不许带路径、必须有图元与三维尺寸；
          行数 == plan 的 `assets + whiteboxes` —— **任何一条不过 → 一个 Actor 都不落**
          （与 `confirm_assets` 拒收时"一个字节都不写"同一个道理）。
-      ② **人工痕迹闸**（2026-09-26 加；**2026-09-30 实测更正"扫描范围"**）：动手前读**关卡现状**
+      ② **人工痕迹闸**（2026-09-26 加；**2026-09-30 两次加固**）：动手前读**关卡现状**
          与台账比（位置 / 朝向 / 缩放 / 白膜厚薄）；对不上的行、以及台账解释不了的活 Actor，
-         **默认拒收**（一个 Actor 都不动），除非显式传 `accept_user_edits=true`。
+         **默认拒收**（一个 Actor 都不动）—— 拒收时**顺手留痕「这一批问的是哪几行」**
+         （`views/user_edits_v1.json`），第 2 步会拿它核对。
+         ⚠ **"按 plan 覆盖它们"＝ 用户本人的决定，而且现在是两步闸**：
+           ① 先按**默认参数**调一次 → 拿到那份清单（并已留痕）；
+           ② **把清单原样交给用户、停下等他打字**；
+           ③ 再带 `accept_user_edits=true` + `user_quote`（他的原话）调第二次。
+         判据（三条都要过）：**问过** + **问的那批就是现在这批**（多一行少一行都重问）+
+         **有他本人的原话且距提问 ≥ 15 秒**（`MIN_USER_EDITS_ANSWER_DELAY_S`）。
+         演练（`dry_run=true`）不要求原话 —— 它不碰关卡。
+         ⚠ **边界（不吹）**：这拦不住"存心等够时间再编一句话"（代码验不了真话）；它做到的是
+         **不能悄悄干** + 台账里留着「问过哪几行 + 那句话原文」可以事后对质。
+         ⚠ 为什么有它：2026-09-30 实测（**同类事故第二次**）—— 外部 Agent 收到拒收后**自己**传了
+         `accept_user_edits=true`，把用户手拖过的水面（差 30 cm）覆盖掉了，全程没问过人。
          ⚠ **但"拒收"只在"扫描范围"之内成立**（这一点 2026-09-30 实测两次、并已更正文档）：
            · `dry_run` / `accept_user_edits=true` / `mode="full"` → 扫**全表**；
            · **纯增量真跑（默认那条）→ 只扫「本次会被删 / 重摆的那些行」**。
@@ -3568,20 +3904,41 @@ async def execute_build(
         traces = list(manual) + [
             {"label": ref, "why": ["台账里没有它 —— 可能是你手动摆的，也可能是上一版没登记"]}
             for ref in unknown_refs]
-    if traces and not accept_user_edits and not dry_run:
+    if traces and not dry_run:
         head = "\n".join(f"· 「{t['label']}」{'；'.join(t['why'])}" for t in traces[:12])
         more = f"\n（还有 {len(traces) - 12} 处没列全）" if len(traces) > 12 else ""
-        raise ToolError(
-            f"拒绝搭建：`{OUR_FOLDER_ROOT}/` 下有 **{len(traces)} 处人工痕迹**会被这次操作删掉 —— "
-            "**一个 Actor 都没动**：\n" + head + more + "\n"
-            "两条出路：\n"
-            "· **保住它们**（推荐）：把用户想要的改动**写回阶段二** —— "
-            "`generate_plan(patch=[...])` → 重画图（写新指纹 + 本轮变更集那几行）→ 用户看图确认 → "
-            "`generate_build_orders()` → 增量落。这样 plan 与关卡就一致了。\n"
-            "· **按 plan 覆盖它们**（会把上面这些行删掉重摆）：跟用户确认过，再传 "
-            "`accept_user_edits=true` 调一次。\n"
-            "（为什么拦：客户原话「用户手动改的东西不该删」。以前 `full` 无条件把 "
-            f"`{OUR_FOLDER_ROOT}/` 下全清、增量**从不读现状** —— 手改的东西就这么没了，还没人报。）")
+        if not accept_user_edits:
+            # **第 1 步**：先留痕「我问了哪几行」（不碰关卡），再拒收 —— 与 `check_build_target` 同构。
+            try:
+                _save_user_edits_question(traces, level, mode)
+                led = ("（✅ 已留痕：**这一批问的是哪几行** → "
+                       f"`{USER_EDITS_PATH.name}`；第 2 步会拿它核对，别跳过这一步）")
+            except OSError as exc:
+                led = f"（⚠ 台账没写成：{exc} —— 这次**没留下**『问过哪几行』的记录）"
+            raise ToolError(
+                f"拒绝搭建：`{OUR_FOLDER_ROOT}/` 下有 **{len(traces)} 处人工痕迹**会被这次操作删掉 —— "
+                "**一个 Actor 都没动**：\n" + head + more + "\n" + led + "\n"
+                "两条出路：\n"
+                "· **保住它们**（推荐）：把用户想要的改动**写回阶段二** —— "
+                "`request_plan_change(items=[用户原话], by=\"用户\")` → `generate_plan(patch=[...])` → "
+                "**重画两张图** → 用户看图确认 → `generate_build_orders()` → 增量落。"
+                "这样 plan 与关卡就一致了（**用户手挪的那个位置会被保留**）。\n"
+                "· **按 plan 覆盖它们**（会把上面这些行删掉重摆）：**把上面这份清单原样交给他"
+                "（一行都别省）→ 停下等他打字**，拿到他本人的原话后再调 "
+                "`execute_build(accept_user_edits=true, user_quote=\"他的原话\")`。\n"
+                "⚠ 现在这是**两步闸**：没先问过 / 问过的那批与现在这批不一致 / 答复来得太快"
+                f"（< {MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒）—— **照样拒收**。"
+                "⚠ 想先看清「会覆盖什么」，用 `dry_run=true`（演练不碰关卡、也不要原话）。\n"
+                "（为什么拦：客户原话「用户手动改的东西不该删」。以前 `full` 无条件把 "
+                f"`{OUR_FOLDER_ROOT}/` 下全清、增量**从不读现状** —— 手改的东西就这么没了，还没人报。）")
+        # **第 2 步**：核对「问过没有 / 问的那批就是这批 / 有他本人的原话 / 距提问够久」。
+        #   加固由来：外部 Agent 收到上面那条拒收后**自己**传了 `accept_user_edits=true`，
+        #   用户手拖过的水面（差 30 cm）就这么被覆盖了 —— 覆盖必须是"两步 + 人的凭据"。
+        _quote_ok = _user_edits_gate(traces, level, mode, user_quote)
+        try:
+            _mark_user_edits_answered(_quote_ok)
+        except OSError:
+            pass
 
     if dry_run:
         if mode == "incremental":
@@ -3776,16 +4133,19 @@ async def execute_build(
             f"官方调用 {calls} 次。**下次只改几行时别传 `mode`**：默认 `auto` 只会动变动的那几个。")
     if manual:
         # 客户原话：「它不会告诉我『用户手动改了地皮你别删』」—— 这一条就是那句"告诉"。
+        # ⚠ 覆盖那一路必须**带上人的凭据**（`user_quote`）—— 不然这条报文只有"覆盖了"三个字，
+        #   事后谁也答不了"是谁同意的"（2026-09-30 加固）。
         warns.append(
             (f"⚠ 有 {len(manual)} 行**人工改过**（现状与台账不符），本次按 `accept_user_edits=true` "
-             "**按 plan 覆盖**（已删掉重摆）："
+             f"**按 plan 覆盖**（已删掉重摆）；依据 = **用户原话**：「{user_quote.strip()}」："
              if accept_user_edits else
              f"⚠ 有 {len(manual)} 行**人工改过**（现状与台账不符）—— 本次**没动它们**（默认保护）：")
             + "；".join(f"「{m['label']}」{'；'.join(m['why'])}" for m in manual[:6])
             + ("…" if len(manual) > 6 else "")
             + ("" if accept_user_edits else
                "。要让 plan 覆盖它们：回阶段二把改动写进 plan（`generate_plan(patch=[...])`）"
-               "→ 重画图 → 用户确认 → 增量落；或跟用户确认过之后传 `accept_user_edits=true`。"))
+               "→ 重画图 → 用户确认 → 增量落；或**先问用户、拿到他的原话**之后传 "
+               "`accept_user_edits=true, user_quote=\"他的原话\"`（只传 true 会被拒收）。"))
     if unknown_refs and mode == "full":
         warns.append(f"⚠ 全量里**顺手清掉了 {len(unknown_refs)} 个台账解释不了的 Actor**（你传了 "
                      "`accept_user_edits=true`）：" + "、".join(unknown_refs[:8])
@@ -5941,10 +6301,60 @@ def _readback_guard() -> None:
 
 _SESSION_PREREQ_DONE: set[str] = set()
 
+# --- 链路状态（2026-09-30 加：用户要求「每次要动 UE 必须检查连接状态」）--------------  【模块：gate】
+# 记的是 `official_status()` **这次的返回值**，不是"调过没有" —— 只记"调过"等于没检查：
+#   2026-09-30 实测踩到：开机后客户端与 MCP 断连（stdio 子进程没被拉起 / 会话工作区没恢复），
+#   Agent 一上来就调工具，一路以**最难懂的方式**失败，排查花很久。
+# `None` = 本进程里**还没检查过**；`True` = 上次检查**连上了**；`False` = 上次检查没连上（原因见 `_SESSION_LINK_ERR`）。
+_SESSION_LINK_OK: bool | None = None
+_SESSION_LINK_ERR: str = ""
+
 
 def _mark_session_prereq(name: str) -> None:
     """记下"本进程里调过某个开场工具了"。只加不减。"""
     _SESSION_PREREQ_DONE.add(str(name))
+
+
+def _mark_link_state(ok: bool, err: str = "") -> None:
+    """记下**链路检查的结果**（只有 `official_status()` 会调它）。
+
+    ⚠ 它与 `_mark_session_prereq` 的区别，就是这道闸的全部意义：
+      那个只记"**调过**"，这个记"**通的还是不通的**" —— 见 `_link_guard()`。
+    """
+    global _SESSION_LINK_OK, _SESSION_LINK_ERR
+    _SESSION_LINK_OK = bool(ok)
+    _SESSION_LINK_ERR = str(err or "")
+
+
+def _link_guard() -> None:
+    """**动 UE 之前必须先确认链路**（2026-09-30 用户要求：「每次要动 UE 必须检查连接状态」）。
+
+    谁调它：**所有碰 UE 的路径** —— 就一个咽喉：`official_client()`（官方客户端唯一的取用口，
+    任何要 UE 的工具都得从它这儿过），所以**一处改、全覆盖**。
+
+    判据是"**本进程里 `official_status()` 报过连上**"，不是"调过"：
+      · 还没检查过 → 拒收，让它先调 `official_status()`；
+      · 上次检查没连上 → 拒收，并把**当时的错误原文**摆出来（UE 没开 / 插件没启 / 8000 没听 /
+        **客户端侧 stdio 子进程没起来或工作区没切到本包** —— 这时连工具都看不到）。
+    ⚠ 为什么这么严：2026-09-30 实测，断连时一路以最难懂的方式失败；这条闸把"链路不通"
+      提前到**第一个动作**就说清，代价只是"先调一次只读的 `official_status()`"。
+    """
+    if _SESSION_LINK_OK is True:
+        return
+    if _SESSION_LINK_OK is None:
+        raise ToolError(
+            "拒收：**动 UE 之前必须先确认链路** —— 本 server 进程里还没做过链路检查。\n"
+            "请先调一次 `official_status()`（只读、一次就够）：它报协议版本与工具集数量，"
+            "连不上时给**错误原文**；它通过之后，这一步以及后面每一步才放行。"
+        )
+    raise ToolError(
+        "拒收：**链路没通**（本进程上一次 `official_status()` 报的是连不上）—— 先修好再动 UE：\n"
+        f"· 上次的错误原文：{_SESSION_LINK_ERR or '(没有留下原文)'}\n"
+        "· 常见原因：① UE 编辑器没打开 ② `ModelContextProtocol` 插件没启用 "
+        "③ 端口 8000 没在监听；④ **客户端侧的 stdio 子进程没起来 / 会话工作区没切到本包**"
+        "（这种连 19 个工具都看不到）。\n"
+        "修好后**再调一次 `official_status()`** 确认 —— 这道闸只认它这次的返回值。"
+    )
 
 
 def _session_prereq_guard() -> None:
@@ -6101,6 +6511,9 @@ def _stage2_next_step(plan: dict, acc: PlanAcceptance, empty: bool = False) -> s
             "→ 再把图使用成卡片给用户。循环到他说无误为止。"
             "⚠ **只改动的行才要重画**：改完调 `get_plan()` 看 `acceptance.change_set.required_labels` —— "
             "那就是这一轮图里**只需**出现的那几行（用户要求：局部改就全局部，不要全部重做）。"
+            "⚠ **要出哪几张图也看那里**（`required_views`）：**位移 / 朝向 → 顶视图；"
+            "大小 / 高度 → 正视图或左右视图**（`views/plan_v1_elevation*.svg`）；两样都动 → 两张都要。"
+            "⚠ 只动高度时**顶视图看不出高低** —— 那一版就只要立面。"
         )
     if acc.state == "awaiting_user":
         figs = "、".join(acc.figures) if acc.figures else "（没有认这份数据的图）"
@@ -6126,15 +6539,28 @@ def _stage2_next_step(plan: dict, acc: PlanAcceptance, empty: bool = False) -> s
         else:
             scope = (f"⚠ 还没有『确认过的基线』→ 这一版按**全量**画：图里要出现**每一行**的 label"
                      f"（共 {len(req)} 行），一行都不能漏。")
+        # ⚠ **每一版都出两张图**（2026-09-30 用户定案）⇒ 这里不再按维度挑图，只报"要出哪两张"
+        _views = [str(x) for x in (cs.get("required_views") or ["top", "elevation"])]
+        _names = " + ".join("**顶视图（X-Y，俯视）**" if v == "top"
+                            else "**原图视角正视图（Y-Z）**" for v in _views)
+        scope += ("⚠ 这一版**要出的图**：" + _names
+                  + (f"；{cs.get('views_why')}" if cs.get("views_why") else "") + "。")
+        _have = "、".join(str(x) for x in (acc.figures or [])) or "（一张都没有）"
+        scope += (f"⚠ **现在认账的图**：{_have} —— **缺哪张补哪张**"
+                  "（`acceptance.figures` 是「认账的」，上面那两张是「该有的」；"
+                  "两边齐了状态才会变成 `awaiting_user`）。")
         return (
             f"**当前在【阶段二验收】的「等出图」**（{head}views/ 里没有认这份数据的图）。"
             "下一步**先 `get_plan()`**（只读，过**回读闸** —— 这一版写完之后你还没回读，"
             "不调它，下一次 `generate_plan` / `execute_build` 都会被拒收），"
-            "② 再拿 `data_path`（views/plan_v1.json）**自己画一张**，**存成 "
-            "`views/plan_v1_overview*.svg`**（这个前缀是代码找图的约定；存成别的名字，确认时会报"
-            "「views/ 里没有图」）—— "
-            f"图内必须写明当前几何指纹 `{acc.plan_hash[:10]}…`（否则确认时会被判成「图不认数据」），"
-            + scope + "再使用给用户。**没有图不许让用户确认。**"
+            "② 再拿 `drawing` 段（`get_plan()` 里那份**每行带 `z_base_m` / `z_top_m`** 的几何）"
+            "**自己画两张图**（每一版都出这两张）—— "
+            "**顶视图**存 `views/plan_v1_overview*.svg`、**原图视角正视图**存 "
+            "`views/plan_v1_elevation*.svg`"
+            "（前缀是代码找图的约定；存成别的名字，确认时会报「views/ 里没有**那一路**的图」）—— "
+            f"**每一张**图内都必须写明当前几何指纹 `{acc.plan_hash[:10]}…`"
+            "（否则确认时会被判成「图不认数据」），"
+            + scope + "再使用给用户（**两张就是两张卡片**）。**没有图不许让用户确认。**"
         )
     return (
         "现在**没有任何坐标**：先去拿用户上传的图，走完阶段一（提元素 → 用户确认 → "
@@ -6155,12 +6581,14 @@ def _write_plan(plan: dict) -> dict:
 
 
 _PATCH_ASSET_FIELDS = {"label", "element_key", "asset_path", "pos", "footprint_m",
-                       "rot_deg", "scale", "note", "z_m"}
+                       "rot_deg", "scale", "scale_z", "note", "z_m"}
 _PATCH_BOX_FIELDS = {"label", "element_key", "shape", "pos", "footprint_m",
                      "rot_deg", "height_m", "size_source", "note", "z_m"}
 """补丁里**允许改**的字段（按行类型分）。白名单是刻意的：
 给资产行写 `height_m`、给白膜行写 `scale`/`asset_path` 都是**类型不对**的改法，
-不该被静默接受（它们会被 `normalize_*` 或后续阶段当成有效数据读走）。"""
+不该被静默接受（它们会被 `normalize_*` 或后续阶段当成有效数据读走）。
+⚠ 资产行的 `scale_z`（Z 方向倍率，2026-09-30 加）= **只拉高 / 压低、占地不动**；
+   白膜行对应的字段是 `height_m`（直接就是高度），所以 `scale_z` **不在**白膜行的白名单里。"""
 
 
 def _apply_plan_patch(cur_plan: dict, patch: list) -> tuple[list[dict], list[dict], list[str]]:
@@ -6290,7 +6718,10 @@ async def generate_plan(
             "**已有资产**的放置表（一物一行）。每行："
             "`element_key`（要与阶段一的元素名一致）、`label`（同类多个要能区分，如「行道树 #7」）、"
             "`asset_path`、`pos`（平面中心坐标 [X, Y]，米）、`footprint_m`（占地 [宽, 深]，米）、"
-            "`rot_deg`（绕 Z 逆时针，度）、`scale`（模型缩放倍率）、`note`。"
+            "`rot_deg`（绕 Z 逆时针，度）、`scale`（模型缩放倍率）、`note`；"
+            "**选填 `scale_z`**（**Z 方向倍率**，默认 1.0）= **只拉高 / 压低、占地不动** —— "
+            "要「楼别一样高、但街道布局不变」就用它（改 `scale` 是整体缩放，**占地会跟着变**）；"
+            "到 UE 那层是 `RelativeScale3D = [scale, scale, scale × scale_z]`。"
             "⚠ **没有 count 字段**：摆 20 栋就写 20 行 —— 一条记录只能有一个 pos。"
         )),
     ] = None,
@@ -6354,9 +6785,16 @@ async def generate_plan(
       要给人看，**你自己拿 `data_path` 里的数据画** —— 每条记录就是「中心 + 占地 + 朝向」，
       画法由你定，不写死在代码里。画完记得**图内写上当前几何指纹**：`confirm_plan` 会拿它
       核对"图认不认这份数据"（收尾清单 #8）。
-    ⚠ **图要存成 `views/plan_v1_overview*.svg`**（这个前缀是**代码找图的约定**；换成别的名字，
-      确认时会报"views/ 里没有图"）—— 判据是**图的内容**（当前指纹前 10 位 + 该覆盖的每一行
-      `label`），**位图一律不认账**。2026-09-26 客户反馈实测：agent 的图画对了、只是名字不合约定，
+    ⚠ **图有两种，可能要出两张**（2026-09-30 用户定的最终口径；前缀是**代码找图的约定**，
+      换成别的名字确认时会报"views/ 里没有**那一路**的图"）：
+        · **顶视图**（平面图，俯视）→ `views/plan_v1_overview*.svg`；
+        · **正视图或左右视图**（立面图）→ `views/plan_v1_elevation*.svg`。
+      **口径：位移 / 朝向 → 顶视图；大小 / 高度（含 Z 标高 / Z 倍率）→ 正视图或左右视图**；
+      两样都动 → 两张都要；**只动高度时顶视图看不出高低，那就只要立面**。
+      要出哪几张：`get_plan().acceptance.change_set.required_views`；画图**直接用**
+      `get_plan().drawing` 里的 `x_m` / `y_m` / `z_base_m` / `z_top_m`（**别自己推 Z**）。
+      判据是**图的内容**（当前几何指纹前 10 位 + 该覆盖的每一行 `label`），**位图一律不认账**。
+      2026-09-26 客户反馈实测：agent 的图画对了、只是名字不合约定，
       它读到"没有图"就**去把文件改了个名** —— 约定没写在工具描述里，只能靠撞墙学，这里补上。
     ⚠ **单位是米**（到 UE / Blender 那层才 ×100 转厘米）。
     ⚠ **顺序不能反**：先放**已有资产**（占地大小 = 阶段一实测包围盒 × `scale`，是**定的**），
@@ -6677,6 +7115,14 @@ async def get_plan(
       ±5° 抖动、阶段四的换小一号户型 / 微调边界，**这两个阶段都还没实现**），
       **照实说明，别拿「改参数」糊弄**（「错落」没有任何参数能表达）。
 
+    ⚠ **图有两种，可能要出两张**（2026-09-30 用户定的最终口径）：**顶视图**（平面图，俯视，前缀
+      `views/plan_v1_overview*.svg`）+ **正视图或左右视图**（立面图，前缀 `views/plan_v1_elevation*.svg`）。
+      **口径：位移 / 朝向 → 顶视图；大小 / 高度（含 Z 标高 / Z 倍率）→ 正视图或左右视图**；
+      两样都动 → 两张都要；**只动高度时顶视图看不出高低，那就只要立面**。
+      要出哪几张看图：`acceptance.change_set.required_views`；**画图直接读本工具返回的 `drawing` 段**
+      （每行带 `x_m` / `y_m` / `z_base_m` / `z_top_m` / `w_m` / `d_m` / `h_m`，Z 口径与阶段三**同源**）
+      —— **别自己推 Z**，推错就是两套口径（图与数据不一致 = 等于没确认）。
+
     ⚠ **开场先查状态**：任何「走到哪了 / 下一步干什么 / 怎么搭」的回答**之前**先调本工具
       （与 get_asset_list 配套）。
     ⚠ **只读**（**不改几何、不确认、不猜**）—— 唯一例外：它会在**验收台账**里记一条
@@ -6801,6 +7247,31 @@ async def get_plan(
             "先看一眼再搭。"
         )
 
+    # --- 画图几何（2026-09-30 加）：一份**可直接画**的逐行数据（含 Z = 底 / 顶绝对标高）--------
+    # 为什么放在这里：出图是阶段二验收的前置，而 `get_plan()` 是"开口之前必调"的那一个 ——
+    #   把 Z 口径直接给出来，画图的人就不用自己推（推错就是两套口径，而图是用户唯一的判断依据）。
+    # ⚠ 纯离线计算（**不碰 UE**）；`include_plan=false` 时不带（那是"只要状态"的用法）。
+    drawing: dict | None = None
+    if include_plan and status != "initialized":
+        try:
+            drawing = _drawing_geometry(plan)
+        except Exception as exc:        # noqa: BLE001 —— 画图数据算不动不该把读工具带崩
+            warnings.append(
+                f"⚠ 画图几何（`drawing`）这次没算出来（{type(exc).__name__}: {exc}）—— "
+                "**别自己推 Z**：先查为什么算不出来（`z_base` / `z_top` 就来自那段）。")
+    if drawing is not None and drawing.get("required_views"):
+        _need = [str(v) for v in (drawing.get("required_views") or [])]
+        _need_cn = "、".join(
+            ("顶视图（平面图，存成 `views/plan_v1_overview*.svg`）" if v == "top"
+             else "正视图或左右视图（立面图，存成 `views/plan_v1_elevation*.svg`）")
+            for v in _need)
+        warnings.append(
+            "⚠ **这一版要出的图**：" + _need_cn
+            + "。口径（用户定的）：**位移 / 朝向 → 顶视图；大小 / 高度 → 正视图或左右视图**。依据："
+            + str(drawing.get("views_why") or "")
+            + " ⚠ 要几张就给几张**卡片**使用给用户，然后停下等他打字。"
+        )
+
     ok = (status != "initialized") and gate.confirmed and gate.plan_hash_ok
     return PlanStatus(
         has_plan=True,
@@ -6811,6 +7282,7 @@ async def get_plan(
         gate=gate,
         acceptance=acceptance,
         plan=plan if include_plan else None,
+        drawing=drawing,
         next_step=_stage2_next_step(plan, acceptance, empty=(status == "initialized")),
         warnings=warnings,
     )
@@ -6931,8 +7403,12 @@ async def confirm_plan(
       ② 数据指纹对不上 → `plan_v1.json` 被手改过，与写进去时不一致；
       ③ **图不认这份数据**（`views/` 里没有图 / 图里没有当前几何指纹 / 图没覆盖该覆盖的行）——
          AGENTS：图与数据不一致 = 等于没确认。图由 AI 手绘，**画完把当前指纹写进图里**；
-         ⚠ **图要存成 `views/plan_v1_overview*.svg`**（代码按这个前缀找图；位图一律不认账）；
-         存成别的名字会被读成"views/ 里没有图" —— **改名可以让它被找到，但内容不对照样过不了**；
+         ⚠ **要出哪几张图由 `change_set.required_views` 定**（2026-09-30 加，用户最终口径）：
+         **位移 / 朝向 → 顶视图**（`views/plan_v1_overview*.svg`）；**大小 / 高度 → 正视图或
+         左右视图**（`views/plan_v1_elevation*.svg`）；两样都动 → 两张都要；
+         **只动高度时顶视图看不出高低，那就只要立面**；
+         存成别的名字会被读成"views/ 里没有**那一路**的图" ——
+         **改名可以让它被找到，但内容不对照样过不了**；
       ④ **证据链**（2026-09-26 加，堵最大的那个洞）：必须给 `user_quote`（用户原话），
          且那张图**出炉至少 `MIN_CONFIRM_DELAY_S` 秒** —— 画完就自己确认 = 没人看过。
 
@@ -6979,35 +7455,56 @@ async def confirm_plan(
     #   （有基线 = 本次改动的那几行；第一次搭 = 全部行）；**位图**一律不认账。
     fig = planning.figure_check(plan)
     if not fig["ok"]:
+        _miss = [str(x) for x in (fig.get("missing_views") or [])]
+        _views_msg = ""
+        if _miss:
+            _views_msg = (
+                "\n· **缺的视图**：" + "、".join(str(x) for x in (fig.get("view_labels") or _miss))
+                + " —— 平面图存 `views/plan_v1_overview*.svg`、"
+                  "**立面图存 `views/plan_v1_elevation*.svg`**；"
+                  "**每一张**图里都要写当前几何指纹前 10 位 + 该覆盖的那几行的 label"
+                  "（位图一律不认账）。改高度的那一版**只给俯视图是过不了的** —— "
+                  "俯视图看不出高低。"
+            )
         if fig.get("local"):
             raise ToolError(
-                "拒绝确认：图不认这份数据 —— " + fig["note"]
-                + " 这是**局部一轮**：拿 views/plan_v1.json 重画一张（图内写明当前几何指纹，"
-                  "**且把本次改动的那几行都画进去** —— 共 "
-                  + str(len(fig.get("required_labels") or [])) + " 行），没动的行不必重画。"
-                  "要画哪些行可跑：python -m mcp_server.planning.plan --figure-checklist"
+                "拒绝确认：图不认这份数据 —— " + fig["note"] + _views_msg
+                + "\n· 这是**局部一轮**：只画上面那几行（共 "
+                  + str(len(fig.get("required_labels") or [])) + " 行）"
+                  "（在**每一张**要出的图里）—— 没动的行不必重画。"
+                  "要画哪些行 / 要出哪几张图可跑："
+                  "python -m mcp_server.planning.plan --figure-checklist"
             )
         raise ToolError(
-            "拒绝确认：图不认这份数据 —— " + fig["note"]
-            + " 请拿 views/plan_v1.json 重画一张（**图内写明当前几何指纹，"
-              "且每一行的 label 都要出现**），再确认。"
-              "要画哪些行可跑：python -m mcp_server.planning.plan --figure-checklist"
+            "拒绝确认：图不认这份数据 —— " + fig["note"] + _views_msg
+            + "\n· 请拿 views/plan_v1.json 重画（**图内写明当前几何指纹，"
+              "且每一行的 label 都要出现**，每张图都要），再确认。"
+              "要画哪些行 / 要出哪几张图可跑："
+              "python -m mcp_server.planning.plan --figure-checklist"
         )
 
     # --- ⚠ 证据链：图出炉多久了？（防"画完立刻自己确认" = 没人看过）------------------
+    # ⚠ 2026-09-30 改：**认账的图可能不止一张**（平面图 + 立面图）—— 原先只拿第一张的图龄，
+    #   那就能用"早就画好的那张平面图"把"刚刚才画完的立面图"蒙过去。
+    #   现在取**最新画好的那张**（年龄最小）当判据：要确认，**每一张**都得等够时间。
     fig_names = [str(x) for x in (planning.accepted_figures(plan) or [])]
-    fig_name = fig_names[0] if fig_names else ""
-    fig_age: float | None = None
-    if fig_name:
+    now_ts = datetime.now(timezone.utc).timestamp()
+    fig_ages: list[tuple[str, float]] = []
+    for _n in fig_names:
         try:
-            fig_age = (datetime.now(timezone.utc).timestamp()
-                       - (planning.VIEWS_DIR / fig_name).stat().st_mtime)
+            fig_ages.append((_n, now_ts - (planning.VIEWS_DIR / _n).stat().st_mtime))
         except OSError:
-            fig_age = None
+            continue
+    fig_name = ""
+    fig_age: float | None = None
+    if fig_ages:
+        fig_name, fig_age = min(fig_ages, key=lambda x: x[1])
     if fig_age is not None and fig_age < MIN_CONFIRM_DELAY_S:
         raise ToolError(
-            f"拒绝确认：认账的那张图（`{fig_name}`）是 **{fig_age:.0f} 秒前**才画好的 —— "
-            f"用户不可能已经看过（这道下限是 {MIN_CONFIRM_DELAY_S:.0f} 秒）。\n"
+            f"拒绝确认：认账的那张图（`{fig_name}`）是 **{fig_age:.0f} 秒前**才画好的"
+            + (f"（认账的图共 {len(fig_ages)} 张，这里挑的是**最新画好的**那一张）"
+               if len(fig_ages) > 1 else "")
+            + f" —— 用户不可能已经看过（这道下限是 {MIN_CONFIRM_DELAY_S:.0f} 秒）。\n"
             "正确顺序：**把图使用给用户（做成他能点开的卡片）→ 停下等他打字 → 带着他的原话回来**。\n"
             "（若你确实刚把图给过他、他也回话了，那就**等够时间再调本工具**。）"
         )
