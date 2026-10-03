@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1360" height="1020" viewBox="0 0 1360 1020" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <rect width="1360" height="1020" fill="#ffffff"/>
+
+  <text x="40" y="34" font-size="20" font-weight="bold" fill="#111">阶段二 · 平面放置表（第 38 轮）—— 增量测试：**只移动 1 行**</text>
+  <text x="40" y="58" font-size="13" fill="#333">几何指纹 bd2f8b05613721fc89d255f430e7992331920a2932ee414602472ed516e3551b　（图内须写前 10 位：bd2f8b0561）</text>
+  <text x="40" y="78" font-size="12" fill="#555">世界中心 (0, 0)　世界大小 120 × 80 m　单位：米　+ X 向右　+ Y 向上　比例 10 px = 1 m</text>
+  <text x="800" y="58" font-size="13" fill="#a00" font-weight="bold">本图由 AI 按 views/plan_v1.json 现画</text>
+
+  <text x="40" y="104" font-size="13" fill="#0a5" font-weight="bold">本轮变更集 = **1 行**（没动 25 行）：把「住宅 #3（house1）」从 (0, −20) 往南挪到 (0, −24) —— 只为验「增量是不是只动这 1 个 Actor」</text>
+  <text x="40" y="124" font-size="12" fill="#a60" font-weight="bold">⚠ 这一轮**只该动 1 个 Actor**：其余 25 个（含另外 4 栋房、10 棵树、2 条路、草坪、5 条灌木带、地基）**一个都不许碰**。</text>
+
+  <!-- 世界矩形 -->
+  <rect x="40" y="140" width="1200" height="800" fill="#f2f2ee" stroke="#666" stroke-width="2"/>
+
+  <!-- 北侧草坪 + 树（背景，未改动） -->
+  <rect x="40" y="180" width="1200" height="300" fill="#eef5e6" stroke="#c9dcc0" stroke-dasharray="4,3"/>
+  <text x="60" y="204" font-size="12" fill="#8aa87a">北侧草坪（整块）+ 行道树 #1~#10　—— 本轮没动，画在这里只作参照</text>
+  <circle cx="140" cy="460" r="14" fill="#cfe0c6"/><circle cx="340" cy="460" r="14" fill="#cfe0c6"/>
+  <circle cx="540" cy="460" r="14" fill="#cfe0c6"/><circle cx="740" cy="460" r="14" fill="#cfe0c6"/>
+  <circle cx="940" cy="460" r="14" fill="#cfe0c6"/>
+  <circle cx="240" cy="360" r="14" fill="#cfe0c6"/><circle cx="440" cy="360" r="14" fill="#cfe0c6"/>
+  <circle cx="640" cy="360" r="14" fill="#cfe0c6"/><circle cx="840" cy="360" r="14" fill="#cfe0c6"/>
+  <circle cx="1040" cy="360" r="14" fill="#cfe0c6"/>
+
+  <!-- 主路（未改动） -->
+  <rect x="40" y="500" width="1200" height="80" fill="#6f6f6f"/>
+  <text x="60" y="528" font-size="12" fill="#eee">沥青车行道（主路）120 × 8 m　—— 本轮没动</text>
+  <!-- 支路 -->
+  <rect x="1120" y="740" width="80" height="200" fill="#8a8a8a"/>
+  <text x="1108" y="730" font-size="11" fill="#666" text-anchor="end">东侧支路 —— 没动</text>
+
+  <!-- 其它四栋房（未改动） -->
+  <rect x="184.35" y="668.75" width="111.3" height="142.5" fill="#efe0cd" stroke="#c0a98c"/>
+  <text x="240" y="660" font-size="12" fill="#8a7a66" text-anchor="middle">住宅 #1</text>
+  <rect x="390.65" y="657.95" width="98.7" height="164.1" fill="#efe0cd" stroke="#c0a98c"/>
+  <text x="440" y="845" font-size="12" fill="#8a7a66" text-anchor="middle">住宅 #2</text>
+  <rect x="790.65" y="657.95" width="98.7" height="164.1" fill="#efe0cd" stroke="#c0a98c"/>
+  <text x="840" y="845" font-size="12" fill="#8a7a66" text-anchor="middle">住宅 #4</text>
+  <rect x="984.35" y="668.75" width="111.3" height="142.5" fill="#efe0cd" stroke="#c0a98c"/>
+  <text x="1040" y="660" font-size="12" fill="#8a7a66" text-anchor="middle">住宅 #5</text>
+
+  <!-- 灌木带（未改动） -->
+  <rect x="600" y="649" width="80" height="12" fill="#d6e6cc" stroke="#a8c49a"/>
+
+  <!-- 住宅 #3：旧位置（虚线）+ 新位置（实线）+ 箭头 -->
+  <rect x="584.35" y="668.75" width="111.3" height="142.5" fill="none" stroke="#999" stroke-dasharray="6,4"/>
+  <text x="640" y="660" font-size="12" fill="#999" text-anchor="middle">旧 (0, −20)</text>
+
+  <rect x="584.35" y="708.75" width="111.3" height="142.5" fill="#f0c0c0" stroke="#c00" stroke-width="3"/>
+  <text x="640" y="700" font-size="14" fill="#c00" font-weight="bold" text-anchor="middle">住宅 #3（house1）　★ 本轮唯一改动</text>
+  <text x="640" y="878" font-size="13" fill="#c00" font-weight="bold" text-anchor="middle">新 (0, −24)</text>
+
+  <line x1="640" y1="672" x2="640" y2="706" stroke="#c00" stroke-width="3"/>
+  <polygon points="640,714 632,700 648,700" fill="#c00"/>
+  <text x="656" y="694" font-size="12" fill="#c00" font-weight="bold">往南 4 m</text>
+
+  <text x="40" y="982" font-size="11" fill="#777">X = -60（左边界）　Y = -40（下边界）　Y = +40（上边界）　—— 新位置四角 y ∈ [−31.1, −16.9]，仍全在界内</text>
+
+  <!-- 说明面板 -->
+  <rect x="1020" y="176" width="230" height="330" fill="#f7fff7" stroke="#0a5" stroke-dasharray="4,3"/>
+  <text x="1032" y="198" font-size="12" font-weight="bold" fill="#0a5">这一轮要验四件事</text>
+  <text x="1032" y="224" font-size="11" fill="#333">① 增量是不是**只动 1 个</text>
+  <text x="1042" y="240" font-size="11" fill="#333">Actor**（其余 25 个一个</text>
+  <text x="1042" y="256" font-size="11" fill="#333">都不碰）</text>
+  <text x="1032" y="282" font-size="11" fill="#333">② 官方调用数是否回到</text>
+  <text x="1042" y="298" font-size="11" fill="#333">**个位数**（对比 24 行</text>
+  <text x="1042" y="314" font-size="11" fill="#333">那次的 **153 次**）</text>
+  <text x="1032" y="340" font-size="11" fill="#333">③ 台账有没有乱：其余</text>
+  <text x="1042" y="356" font-size="11" fill="#333">行的 Actor 引用应**原样</text>
+  <text x="1042" y="372" font-size="11" fill="#333">保留**</text>
+  <text x="1032" y="398" font-size="11" fill="#333">④ 复查时应当仍是</text>
+  <text x="1042" y="414" font-size="11" fill="#333" font-weight="bold">ok 26 / 差异 0</text>
+  <text x="1032" y="446" font-size="11" fill="#777">⚠ 这一轮动的是一栋**资产行**</text>
+  <text x="1032" y="462" font-size="11" fill="#777">（不是白膜），所以</text>
+  <text x="1032" y="478" font-size="11" fill="#777">`[完工-19]` 不该触发。</text>
+</svg>

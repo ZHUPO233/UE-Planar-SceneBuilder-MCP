@@ -23,6 +23,10 @@ catalog/*
 !catalog/elements.json
 !catalog/asset_list.json
 !catalog/library_snapshot.json
+# ⚠ 2026-10-04 补：`catalog/README.md` 是**目录说明**（告诉人这三份是什么、别手改），
+#   不是运行时产物 —— 与 `views/README.md` 同等对待，**要入库**。
+#   由来：远端 `origin/main` 一直有这份，本地被上面那条 `catalog/*` 挡着，两边对不上。
+!catalog/README.md
 
 # 手工备份目录：check_tools.py 已内置运行时快照 / 还原，这些是冗余的，不入库。
 catalog.bak-*/
@@ -54,6 +58,11 @@ views/ref_*/
 views/ref_*.jpg
 views/diag_*.png
 views/stage3_viewport*.png
+# ⚠ 2026-10-03 补：`views/preview/` = `capture_preview`（阶段七）每次出图写下的预览 PNG。
+#   它是**产物**（能重新出图），按上面 36-39 行的分类口径**不入库**。
+#   为什么以前没挡住：这个目录 2026-09-29 才加进来，而上面那几条是按**文件名**挑的 ——
+#   于是它**每出一张图就往版本库里塞 ~1 MB**（实测已攒到 31 MB / 26 张）。图留在盘上看，别进历史。
+views/preview/
 # 归档目录只入库 README（说明它是什么），图不入库 —— 那 30 MB 截图留在盘上。
 views/_archive_pre_geometry/*
 !views/_archive_pre_geometry/README.md
@@ -65,3 +74,15 @@ views/_archive_pre_geometry/*
 #   - 被自动清走的旧图（*.svg / *.png …）= 产物，不入库
 views/archive/*
 !views/archive/*_confirmed.json
+
+# --- 客户端 MCP 配置：**全是本机生成物**（setup.ps1 现场写，含本机绝对路径 / 各家专有文件名）-----
+# 一律不入库；仓库里只提交一份通用模板 `mcp.json.example`（它的 `_doc` 写明各家读哪个文件 / 键名）。
+# ⚠ 2026-09-29 修正：原先**只有** `.trae/mcp.json` 被提交进了库 —— 于是仓库里躺着一份"只有 Trae 能用"
+#   的配置（用户原话：「我要通用的，不是只有他 trae 能用」）。已用 `git rm --cached` 移出，并在此挡住。
+/mcp.json
+/connect-config.json
+/.trae/
+/.cursor/
+/.vscode/
+# setup.ps1 会先备份它要改的配置（`<配置>.bak-<时间戳>`），那些备份同样不入库
+*.bak-*

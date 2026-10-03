@@ -1,14 +1,14 @@
 {
   "stage": "阶段二验收",
   "note": "阶段二验收台账。**不参与几何指纹**、不参与自检；只记「这一轮验的是哪个几何指纹、用户说了什么」。",
-  "round": 24,
+  "round": 38,
   "state": "accepted",
   "state_cn": "验收通过：闸门已开，可以进第三阶段",
-  "plan_hash": "ecd6f40890388b099b9bb7411ffedd125d925278cceca533c442ded68cd68271",
+  "plan_hash": "bd2f8b05613721fc89d255f430e7992331920a2932ee414602472ed516e3551b",
   "figures": [
-    "plan_v1_overview_r24.svg"
+    "plan_v1_overview_r38.svg"
   ],
-  "updated_at": "2026-09-27T10:44:02.326105+00:00",
+  "updated_at": "2026-09-30T13:05:13.858571+00:00",
   "events": [
     {
       "at": "2026-09-25T07:11:18.145046+00:00",
@@ -629,102 +629,621 @@
       "figure": "plan_v1_overview_r24.svg",
       "note": "用户看过图并确认（阶段二验收通过）",
       "figure_age_s": 1027.5
+    },
+    {
+      "at": "2026-09-30T04:59:33.063044+00:00",
+      "round": 24,
+      "kind": "change_requested",
+      "by": "用户",
+      "items": [
+        "B —— 把场景重排成五元素简单场景（Ground / House / Tree / Road / Prop），用来测 Stage 7 最小闭环"
+      ],
+      "reason": "用户原话「B」。这是从我给的选项里选的：『场景走 B：把 plan 整表重排成 Ground/House/Tree/Road/Prop 五元素 → 重画图 → 你看图确认 → 落关卡。等于把已确认的 90 行那一版换掉』（2026-09-30 今日任务单 §①）。⚠ 改的是一份**已被用户确认过**的规划（r24 指纹 ecd6f40890…），所以必须先留这条痕。",
+      "plan_hash": "ecd6f40890388b099b9bb7411ffedd125d925278cceca533c442ded68cd68271",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T04:59:47.387209+00:00",
+      "round": 25,
+      "kind": "plan_written",
+      "plan_hash": "db1b6e832099d5b4c0fba625368c8dea4af354cd271abe92eea854147271b635",
+      "figures": [],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T05:03:28.102151+00:00",
+      "round": 25,
+      "kind": "change_requested",
+      "by": "用户",
+      "items": [
+        "房子正门得朝公路",
+        "三棵树间距小点儿"
+      ],
+      "reason": "用户原话（2026-09-30，看过第 25 轮规划图后）：「房子正门得朝公路，三棵树间距小点儿」。⚠ 背景：`docs/阶段三-资产布局生成.md` 第 39 行明写「资产 `rot 0` 时朝哪边**未测**（决定 5 栋房子正门相对还是背对背）」—— 也就是说「哪个 yaw 是正门朝公路」本项目**没有实测依据**。我今天上午那三张实景图（r24：house1 rot 90 / house2 rot 270）分辨率**不足以认出正门/门廊**。所以本次是**推断**：把住宅 #1 由 rot 90 翻成 rot 270（依据是用户多半看的是上午那两张图，而最近的两栋正是 rot 90 的 house1）—— 落完立刻出一张正对房子的预览图让用户判，不对就翻 180°。",
+      "plan_hash": "db1b6e832099d5b4c0fba625368c8dea4af354cd271abe92eea854147271b635",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T05:03:31.785777+00:00",
+      "round": 26,
+      "kind": "plan_written",
+      "plan_hash": "57af976290538cd8442145866586f6a3a6e585a3d074f0dca175ca3f4587dd60",
+      "figures": [
+        "plan_v1_overview_r26.svg"
+      ],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T05:04:32.855401+00:00",
+      "round": 26,
+      "kind": "accepted",
+      "by": "用户",
+      "plan_hash": "57af976290538cd8442145866586f6a3a6e585a3d074f0dca175ca3f4587dd60",
+      "rows": {
+        "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [-20.0, -18.0], [11.13, 14.25], 270.0, 16.0]",
+        "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [12.0, -12.0], [4.45, 3.63], 0.0, 0.31]",
+        "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, -12.0], [4.45, 3.63], 0.0, 0.31]",
+        "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [28.0, -12.0], [4.45, 3.63], 0.0, 0.31]",
+        "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2]",
+        "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null]",
+        "灌木带（顶 GPT 说的 Prop）": "[\"shrub\", \"cube\", [-20.0, 8.0], [12.0, 1.2], 0.0, 0.8]"
+      },
+      "user_quote": "行了",
+      "figure": "plan_v1_overview_r26.svg",
+      "note": "用户看过图并确认（阶段二验收通过）",
+      "figure_age_s": 40.5
+    },
+    {
+      "at": "2026-09-30T05:08:54.857678+00:00",
+      "round": 26,
+      "kind": "change_requested",
+      "by": "用户",
+      "items": [
+        "门是对着树的"
+      ],
+      "reason": "用户原话（2026-09-30）：「门是对着树的」。上下文：上一轮我把住宅 #1 改成 rot 270° 后出了四个立面的实景图（house_front=北/朝公路、face_west=西、face_east=东、face_south=南），并问他「正门是西面那扇带亮子的门（→180°）还是东面车库/门廊那侧（→0°）」。他用「对着树」来指认：树在房子的东侧（+X，x=12/20/28，y=-12；房子在 (-20,-18)，房子→树 ≈ (32,6) 基本是正东），而在 rot 270° 下**朝 +X 的那一面正是东面（车库 + 门廊，有门）** —— 所以他的意思是「正门 = 现在朝树的那一面」，即东面那扇门；把它转到朝公路（+Y）需逆时针 +90°：**rot 270° → 0°**。⚠ 我的读法可能反（若他指的是西面那扇带亮子的门要朝树，则应是 90°）—— 已在回复里请他一句话纠正。",
+      "plan_hash": "57af976290538cd8442145866586f6a3a6e585a3d074f0dca175ca3f4587dd60",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T05:08:58.621847+00:00",
+      "round": 27,
+      "kind": "plan_written",
+      "plan_hash": "63484816df1b6adc0a171a231492f8dd9d6641dffd1e3c0620f464d53272de5b",
+      "figures": [
+        "plan_v1_overview_r27.svg"
+      ],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T05:09:54.189148+00:00",
+      "round": 27,
+      "kind": "accepted",
+      "by": "用户",
+      "plan_hash": "63484816df1b6adc0a171a231492f8dd9d6641dffd1e3c0620f464d53272de5b",
+      "rows": {
+        "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [-20.0, -18.0], [11.13, 14.25], 0.0, 16.0]",
+        "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [12.0, -12.0], [4.45, 3.63], 0.0, 0.31]",
+        "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, -12.0], [4.45, 3.63], 0.0, 0.31]",
+        "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [28.0, -12.0], [4.45, 3.63], 0.0, 0.31]",
+        "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2]",
+        "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null]",
+        "灌木带（顶 GPT 说的 Prop）": "[\"shrub\", \"cube\", [-20.0, 8.0], [12.0, 1.2], 0.0, 0.8]"
+      },
+      "user_quote": "可以",
+      "figure": "plan_v1_overview_r27.svg",
+      "note": "用户看过图并确认（阶段二验收通过）",
+      "figure_age_s": 44.6
+    },
+    {
+      "at": "2026-09-30T05:14:33.503737+00:00",
+      "round": 27,
+      "kind": "change_requested",
+      "by": "用户",
+      "items": [
+        "S2：走正规改，把住宅 #1 挪到世界外（越界），验「越界只报红、不拦」"
+      ],
+      "reason": "用户在我给的三个选项里选了「走正规改：挪到越界处 → 只报红不拦」（2026-09-30）。计划：住宅 #1 由 `[-20,-18]` 挪到 `[0,-48]` —— 世界边界是 x∈[-60,60]、y∈[-40,40]，房子占地 11.13×14.25（rot 0），落点四角 y∈[-55.1,-40.9] **全部在界外**，属「硬·实体」越界。⚠ 预期：`generate_plan` 的越界体检**报红但不拒**；`execute_build` **照落不拦** —— 所以这一轮验的是「**不拦**」那半。要验「拒收」那半得让那一行**进入改动集**（见 `docs/全流程-闸门地图.md` §G7 的更正）。",
+      "plan_hash": "63484816df1b6adc0a171a231492f8dd9d6641dffd1e3c0620f464d53272de5b",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T05:14:37.589849+00:00",
+      "round": 28,
+      "kind": "plan_written",
+      "plan_hash": "0e452d0280052c85f3cfe0fd7a2c6d08626e16746614872191fbac2286f88760",
+      "figures": [
+        "plan_v1_overview_r28.svg"
+      ],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T05:25:13.275119+00:00",
+      "round": 28,
+      "kind": "accepted",
+      "by": "用户",
+      "plan_hash": "0e452d0280052c85f3cfe0fd7a2c6d08626e16746614872191fbac2286f88760",
+      "rows": {
+        "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [0.0, -48.0], [11.13, 14.25], 0.0, 16.0]",
+        "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [12.0, -12.0], [4.45, 3.63], 0.0, 0.31]",
+        "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, -12.0], [4.45, 3.63], 0.0, 0.31]",
+        "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [28.0, -12.0], [4.45, 3.63], 0.0, 0.31]",
+        "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2]",
+        "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null]",
+        "灌木带（顶 GPT 说的 Prop）": "[\"shrub\", \"cube\", [-20.0, 8.0], [12.0, 1.2], 0.0, 0.8]"
+      },
+      "user_quote": "先把S2实验做完",
+      "figure": "plan_v1_overview_r28.svg",
+      "note": "用户看过图并确认（阶段二验收通过）",
+      "figure_age_s": 623.5
+    },
+    {
+      "at": "2026-09-30T05:27:31.471076+00:00",
+      "round": 28,
+      "kind": "change_requested",
+      "by": "用户",
+      "items": [
+        "2 —— 先做 GPT 的实验：手动修改 house #1 ＋ Patch 也改 house #1 → execute_build 预期 REJECT"
+      ],
+      "reason": "用户在我给的两个选项里选了「2 · 先做 GPT 的实验」（2026-09-30，用户原话「2」）。实验设计（来自 ChatGPT 的评估）：**手动修改 house #1 → Patch 恰好也要修改 house #1 → execute_build → 预期 REJECT** —— 这才是真正证明「User Edit Protection 在**冲突对象**上有效」。⚠ **实测已确认\"手动修改\"那一半已完成**：房子的实际变换是 `(0, -2090, 15)`（用户手拖的），而台账记的是 `(0, -4800, 15)`（第 28 轮落下去时的值），差 27.1 m ≫ 0.5 cm 容差。本轮的 patch 同时也是**把房子挪回原位 `[-20,-18]`**（S2 越界测试的收尾）—— 两件事共用这一轮。预期：`execute_build` 在**扫描范围内**（house #1 在 changed 里）读到现状与台账不符 → `traces` 非空 → **REJECT，一个 Actor 都不动**。",
+      "plan_hash": "0e452d0280052c85f3cfe0fd7a2c6d08626e16746614872191fbac2286f88760",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T05:27:35.283358+00:00",
+      "round": 29,
+      "kind": "plan_written",
+      "plan_hash": "fcdccb832da0694c7bab54dd46cd1822effb547d4d7964f992a6cb5fe67a670c",
+      "figures": [
+        "plan_v1_overview_r29.svg"
+      ],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T05:33:45.986033+00:00",
+      "round": 29,
+      "kind": "accepted",
+      "by": "用户",
+      "plan_hash": "fcdccb832da0694c7bab54dd46cd1822effb547d4d7964f992a6cb5fe67a670c",
+      "rows": {
+        "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [-20.0, -18.0], [11.13, 14.25], 0.0, 16.0]",
+        "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [12.0, -12.0], [4.45, 3.63], 0.0, 0.31]",
+        "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, -12.0], [4.45, 3.63], 0.0, 0.31]",
+        "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [28.0, -12.0], [4.45, 3.63], 0.0, 0.31]",
+        "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2]",
+        "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null]",
+        "灌木带（顶 GPT 说的 Prop）": "[\"shrub\", \"cube\", [-20.0, 8.0], [12.0, 1.2], 0.0, 0.8]"
+      },
+      "user_quote": "继续r29，可以了",
+      "figure": "plan_v1_overview_r29.svg",
+      "note": "用户看过图并确认（阶段二验收通过）",
+      "figure_age_s": 360.4
+    },
+    {
+      "at": "2026-09-30T05:45:56.563095+00:00",
+      "round": 29,
+      "kind": "change_requested",
+      "by": "用户",
+      "items": [
+        "A —— 把你手挪的两处写回 plan：住宅 #1 → (0, -20.9)；世界地基 z_m → -0.05"
+      ],
+      "reason": "用户原话「A」（2026-09-30）—— 在「两处都保住 / 只保地基 / 两处都按 plan 覆盖」里选了「两处都保住」。**实测值**（adopt 后从关卡读回来的）：住宅 #1 实际 `(0, -2090, 15)` cm（用户手拖，台账里原来是 `(0, -4800, 15)`）、世界地基实际中心 `z = -5` cm（用户手挪，plan 口径算出来是 `+5`）。⚠ 地基那半**原本 plan 表达不了**（竖直位置只由代码常量 `WHITEBOX_VERTICAL`/`GROUND_Z_M` 算）—— 所以先按用户拍板的 **D 案**给放置表加了可选字段 `z_m`（米，中心绝对标高），代码已改、用户已跑预检（绿）、已重启。本轮就是它的**第一次真用**。",
+      "plan_hash": "fcdccb832da0694c7bab54dd46cd1822effb547d4d7964f992a6cb5fe67a670c",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T05:46:03.720130+00:00",
+      "round": 30,
+      "kind": "plan_written",
+      "plan_hash": "7ab0bdeccc3439836861078e300518bafdd868c4bf9acac4a15be98017e56697",
+      "figures": [
+        "plan_v1_overview_r30.svg"
+      ],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T05:54:39.198416+00:00",
+      "round": 30,
+      "kind": "accepted",
+      "by": "用户",
+      "plan_hash": "7ab0bdeccc3439836861078e300518bafdd868c4bf9acac4a15be98017e56697",
+      "rows": {
+        "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [0.0, -20.9], [11.13, 14.25], 0.0, 16.0, null]",
+        "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [12.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [28.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2, -0.05]",
+        "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null, null]",
+        "灌木带（顶 GPT 说的 Prop）": "[\"shrub\", \"cube\", [-20.0, 8.0], [12.0, 1.2], 0.0, 0.8, null]"
+      },
+      "user_quote": "上次待我确认的我也确认了",
+      "figure": "plan_v1_overview_r30.svg",
+      "note": "用户看过图并确认（阶段二验收通过）",
+      "figure_age_s": 499.7
+    },
+    {
+      "at": "2026-09-30T11:55:35.519701+00:00",
+      "round": 30,
+      "kind": "change_requested",
+      "by": "用户",
+      "items": [
+        "B —— 把沥青车行道抬到与地基顶面齐平（加 z_m = -0.025 m）"
+      ],
+      "reason": "用户原话「B」（2026-09-30 18:00 后第一件事）。背景：`evaluate_layout()` + 两张人视图查出「沥青车行道**在关卡里看不见**」—— 台账读回的地基中心 −5 cm、厚 20 → **顶面 +5 cm**；车行道中心 −7.5、厚 15 → **顶面 0 cm**，`0 < 5` → 整条路在地基**实体内部**。⚠ 不是手挪地基造成的：13:10 的 `scene_final.png`（手挪之前）同样没有沥青带，按原口径（地基顶面 +15 cm）埋得更深。三条修法里用户选了 B（最省：只改 1 行）；代价是**没有路缘石落差**。算出来的目标值：路顶面 = 地基顶面 +5 cm，路厚 15 → 中心 = 5 − 7.5 = **−2.5 cm = −0.025 m**。",
+      "plan_hash": "7ab0bdeccc3439836861078e300518bafdd868c4bf9acac4a15be98017e56697",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T11:55:37.366400+00:00",
+      "round": 31,
+      "kind": "plan_written",
+      "plan_hash": "3eaf8aa515c21ce74005c450ce84d651db3df779a830bf6198c34d6d452d9ff4",
+      "figures": [
+        "plan_v1_overview_r31.svg"
+      ],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T11:57:14.726163+00:00",
+      "round": 31,
+      "kind": "accepted",
+      "by": "用户",
+      "plan_hash": "3eaf8aa515c21ce74005c450ce84d651db3df779a830bf6198c34d6d452d9ff4",
+      "rows": {
+        "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [0.0, -20.9], [11.13, 14.25], 0.0, 16.0, null]",
+        "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [12.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [28.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2, -0.05]",
+        "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null, -0.025]",
+        "灌木带（顶 GPT 说的 Prop）": "[\"shrub\", \"cube\", [-20.0, 8.0], [12.0, 1.2], 0.0, 0.8, null]"
+      },
+      "user_quote": "可以",
+      "figure": "plan_v1_overview_r31.svg",
+      "note": "用户看过图并确认（阶段二验收通过）",
+      "figure_age_s": 48.0
+    },
+    {
+      "at": "2026-09-30T12:08:08.941794+00:00",
+      "round": 31,
+      "kind": "change_requested",
+      "by": "agent 自查",
+      "items": [
+        "自查修正：沥青车行道再抬 5 cm —— z_m 由 -0.025 改为 +0.025 m（顶面 +5 → +10 cm），与地基顶面留 5 cm 净空"
+      ],
+      "reason": "**这是我自己上一轮推荐错的修正，不是用户提的**（按纪律用 `by=\"agent 自查\"` 留一条对应关系）。r31 我把路顶面做成与地基顶面**严格齐平**（两个都是 +5.00 cm）——\"齐平\"的物理含义就是两个面**完全共面** → 深度打架（z-fighting），地基网格大得多，**草赢了**。实测证据（两张新图，相机一个压在路中线上 `road_on_axis.png`、一个站路边 2 m `road_side_east.png`）：**都是纯草坪，没有沥青带**；而同一时刻 `evaluate_layout()` 是 **ok 7/7 / edited 0**（几何对、材质对、东西就在那儿）。修法：**不能齐平，要让路明确高于草坪** —— 顶面 +10 cm（比草坪顶面 +5 高 5 cm），中心 = 10 − 7.5 = **+2.5 cm = +0.025 m**。5 cm 是可调的判断值（2 cm 也大概率够，但越紧越可能又打起来），图上按 5 cm 画。",
+      "plan_hash": "3eaf8aa515c21ce74005c450ce84d651db3df779a830bf6198c34d6d452d9ff4",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T12:08:10.665362+00:00",
+      "round": 32,
+      "kind": "plan_written",
+      "plan_hash": "444f33693594de43fb5fc96697d1b011c8a9c7cc2d9f5490fbb8154306b6b53c",
+      "figures": [],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T12:10:50.488715+00:00",
+      "round": 32,
+      "kind": "change_requested",
+      "by": "用户",
+      "items": [
+        "用户手挪的两处，写回 plan：① 世界地基 中心 z = +5 cm（顶面 +15）；② 沥青车行道 中心 z = +17.5 cm（顶面 +25）"
+      ],
+      "reason": "用户原话「我自己手动挪了下」（2026-09-30 晚）。**数值不是他报的，是我用 `evaluate_layout()` 从关卡读回来的**（只读工具，读的是组件实际变换）：世界地基 `[0,0,5]` cm（台账 −5）、沥青车行道 `[0,0,17.5]` cm（台账 −2.5）。**这比我的 r31/r32 两版都更对**：① 地基顶面 `5 + 20/2 = +15 cm`，**正好等于房子 / 树 / 灌木的底面 +15**（`ASSET_PIVOT_LIFT_CM` 那条口径）→ 它们不再悬空 10 cm，真正坐在草坪上；② 路顶面 `17.5 + 7.5 = +25 cm`，比草坪高 10 cm → 有净空，不会再像 r31 那样因为\"严格齐平\"而深度打架。r32 那版（road z_m=+0.025）被这一版**取代**（那一轮还没确认过，不算作废谁的确认）。",
+      "plan_hash": "444f33693594de43fb5fc96697d1b011c8a9c7cc2d9f5490fbb8154306b6b53c",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T12:10:52.292128+00:00",
+      "round": 33,
+      "kind": "plan_written",
+      "plan_hash": "317785b835c4c3e57d9a2558de9b80c6bc108350723a96d95c982a6fead64471",
+      "figures": [
+        "plan_v1_overview_r33.svg"
+      ],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T12:12:27.235396+00:00",
+      "round": 33,
+      "kind": "accepted",
+      "by": "用户",
+      "plan_hash": "317785b835c4c3e57d9a2558de9b80c6bc108350723a96d95c982a6fead64471",
+      "rows": {
+        "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [0.0, -20.9], [11.13, 14.25], 0.0, 16.0, null]",
+        "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [12.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [28.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2, 0.05]",
+        "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null, 0.175]",
+        "灌木带（顶 GPT 说的 Prop）": "[\"shrub\", \"cube\", [-20.0, 8.0], [12.0, 1.2], 0.0, 0.8, null]"
+      },
+      "user_quote": "落",
+      "figure": "plan_v1_overview_r33.svg",
+      "note": "用户看过图并确认（阶段二验收通过）",
+      "figure_age_s": 81.8
+    },
+    {
+      "at": "2026-09-30T12:16:58.368668+00:00",
+      "round": 33,
+      "kind": "change_requested",
+      "by": "agent 自查",
+      "items": [
+        "③ 拒收测试（agent 发起，**验完立刻回滚**）：把「住宅 #1（house1）」的 `asset_path` 改成一条不存在的路径 `/Game/__UEMCP_SELFTEST_DOES_NOT_EXIST__/Nope`"
+      ],
+      "reason": "用户原话「继续」（2026-09-30 晚；今天任务单 §一 ③ 的剩余项 + 用户已授权的代码改动要验）。**这是我自己发起的验证，不是用户提的需求** —— 按纪律用 `by=\"agent 自查\"` 留对应关系。要验两件事，用一对轮次一起验掉：① **`execute_build` 那一层的「Asset 不存在」拒收**（任务单 §七 记的\"仍未验\"那条）：预期 `_precheck_build` 的逐条 `exists()` 在**动手之前**就拒收 → 一个 Actor 都不动、点名那条路径。刚验过的只是 `confirm_assets` 那层（catalog 一个字节不写）。② **`[完工-19]`（重摆后自动补材质）**：它现在是\"尚未实测\"的新代码，而它只在**有白膜被重摆**时才跑 —— 所以下一轮（r35）会把本条这条假路径改回**并**把「沥青车行道」抬 1 cm（`z_m` 0.175 → 0.185），让路被重摆一次，从而真跑到那段新代码。⚠ 本轮改的是**故意做坏的假路径**，只为触发拒收，**不留**；r35 会恢复。⚠ 几何上本轮**只动这一条的 asset_path**，其余 6 行一个字不动。",
+      "plan_hash": "317785b835c4c3e57d9a2558de9b80c6bc108350723a96d95c982a6fead64471",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T12:17:00.764992+00:00",
+      "round": 34,
+      "kind": "plan_written",
+      "plan_hash": "fd3a8eea73af6af3bbdd9b41e6198f5f18bc3b95448a6968b2742b83288024fe",
+      "figures": [
+        "plan_v1_overview_r34.svg"
+      ],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T12:19:02.884462+00:00",
+      "round": 34,
+      "kind": "accepted",
+      "by": "用户",
+      "plan_hash": "fd3a8eea73af6af3bbdd9b41e6198f5f18bc3b95448a6968b2742b83288024fe",
+      "rows": {
+        "住宅 #1（house1）": "[\"house\", \"/Game/__UEMCP_SELFTEST_DOES_NOT_EXIST__/Nope\", [0.0, -20.9], [11.13, 14.25], 0.0, 16.0, null]",
+        "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [12.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [28.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2, 0.05]",
+        "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null, 0.175]",
+        "灌木带（顶 GPT 说的 Prop）": "[\"shrub\", \"cube\", [-20.0, 8.0], [12.0, 1.2], 0.0, 0.8, null]"
+      },
+      "user_quote": "可以继续",
+      "figure": "plan_v1_overview_r34.svg",
+      "note": "用户看过图并确认（阶段二验收通过）",
+      "figure_age_s": 111.9
+    },
+    {
+      "at": "2026-09-30T12:19:23.142892+00:00",
+      "round": 34,
+      "kind": "change_requested",
+      "by": "agent 自查",
+      "items": [
+        "回滚 r34 的假路径：「住宅 #1（house1）」的 asset_path 改回 /Game/demo/Item/ItemMesh/House/house1；同时把「沥青车行道」抬 1 cm（z_m 0.175 → 0.185）以触发 [完工-19] 自动补材质"
+      ],
+      "reason": "用户原话「可以继续」（2026-09-30 晚）。**r34 那一轮的假路径验完即弃**（拒收报文 + `evaluate_layout` 独立复核 `edited: 0`：一个 Actor 都没碰）—— 本条把它改回来。⚠ **同时抬路 1 cm 是为了跑代码**：`[完工-19]` = \"重摆后自动补材质\"，它只在**有白膜被重摆**时才执行，而现在 plan / 台账 / 关卡三方一致、没有任何白膜需要重摆 → 抬 1 cm 是能想到的**最小真实白膜变更**（路顶面 +25 → +26 cm），落下去那行会被删了重建，正好走到那段新代码。⚠ 这是**agent 自查**发起的，不是用户提的需求；用户在选项里选的是「A · 授权改那两处代码」+ 后续「继续」。⚠ 假路径**必须**改回，否则下一轮还会被同一条闸拦下。⚠ 除这两条外，其余 5 行一个字不动。",
+      "plan_hash": "fd3a8eea73af6af3bbdd9b41e6198f5f18bc3b95448a6968b2742b83288024fe",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T12:19:25.621126+00:00",
+      "round": 35,
+      "kind": "plan_written",
+      "plan_hash": "a3b86f97e4bc5edc8f32f3586160b811963ca8f534e650647108777c20ce9805",
+      "figures": [
+        "plan_v1_overview_r35.svg"
+      ],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T12:20:55.818111+00:00",
+      "round": 35,
+      "kind": "accepted",
+      "by": "用户",
+      "plan_hash": "a3b86f97e4bc5edc8f32f3586160b811963ca8f534e650647108777c20ce9805",
+      "rows": {
+        "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [0.0, -20.9], [11.13, 14.25], 0.0, 16.0, null]",
+        "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [12.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [28.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2, 0.05]",
+        "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null, 0.185]",
+        "灌木带（顶 GPT 说的 Prop）": "[\"shrub\", \"cube\", [-20.0, 8.0], [12.0, 1.2], 0.0, 0.8, null]"
+      },
+      "user_quote": "现在就改",
+      "figure": "plan_v1_overview_r35.svg",
+      "note": "用户看过图并确认（阶段二验收通过）",
+      "figure_age_s": 76.8
+    },
+    {
+      "at": "2026-09-30T12:27:34.895372+00:00",
+      "round": 35,
+      "kind": "change_requested",
+      "by": "agent 自查",
+      "items": [
+        "③ 幂等测试：把与 r35 **完全相同**的一条补丁再发一遍（「沥青车行道」z_m = 0.185，值一模一样）—— 看它报不报错、指纹动没动、闸门会不会被关"
+      ],
+      "reason": "用户原话「ok了，你继续」（2026-09-30 晚）。这是今天任务单 §一 ③ 的**最后一条没验的**（\"✗ 重复 Apply 同一个 Patch\"），任务单里当时的预期是「第二次不报错、`要摆 []`」—— 但**读源码发现那个预期只对了一半**：`main.py:6413` 的补丁路与整表路**都**经 `planning.build_plan()`，而 `plan.py:689` 把 `confirmation.confirmed` **硬编码成 False** → 任何一次落盘都会把闸门关掉（哪怕几何一个字节没变）。所以本条要实测三件事：① 重发同一条补丁**报不报错**；② **几何指纹动不动**（预期不动 —— 内容一样）；③ **闸门会不会被关**（源码说会关；真关了就说明\"幂等\"这句要按两半说：几何幂等、**闸门不幂等**）。⚠ 本条**零几何改动**（值一样），但按现在的代码它仍会落一次盘、开新一轮。验完用你一句话就能复原（图 r35 的指纹没变、仍然认账）。",
+      "plan_hash": "a3b86f97e4bc5edc8f32f3586160b811963ca8f534e650647108777c20ce9805",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T12:27:38.139867+00:00",
+      "round": 36,
+      "kind": "plan_written",
+      "plan_hash": "700566b5bfad5a0671d9f44e6a6505e22e3e4a8e09669c7058201838785489f9",
+      "figures": [
+        "plan_v1_overview_r36.svg"
+      ],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T12:30:43.011854+00:00",
+      "round": 36,
+      "kind": "accepted",
+      "by": "用户",
+      "plan_hash": "700566b5bfad5a0671d9f44e6a6505e22e3e4a8e09669c7058201838785489f9",
+      "rows": {
+        "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [0.0, -20.9], [11.13, 14.25], 0.0, 16.0, null]",
+        "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [12.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [28.0, -12.0], [4.45, 3.63], 0.0, 0.31, null]",
+        "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2, 0.05]",
+        "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null, 0.185]",
+        "灌木带（顶 GPT 说的 Prop）": "[\"shrub\", \"cube\", [-20.0, 8.0], [12.0, 1.2], 0.0, 0.8, null]"
+      },
+      "user_quote": "可以",
+      "figure": "plan_v1_overview_r36.svg",
+      "note": "用户看过图并确认（阶段二验收通过）",
+      "figure_age_s": 162.7
+    },
+    {
+      "at": "2026-09-30T12:55:28.992272+00:00",
+      "round": 36,
+      "kind": "change_requested",
+      "by": "用户",
+      "items": [
+        "GPT 第二优先：把场景重排成 20~50 Actor 的压测场景（26 行）—— ground1 / grass1 / house5 / road2 / path2 / tree10 / shrub5"
+      ],
+      "reason": "用户原话「这是GPT安排的规划为新任务表」＋「先修1，a」＋「ok了」（2026-09-30 晚）。GPT 原文：「现在 7 个 Actor 已经证明机制成立。下一步要证明：它不是只对 7 个 Actor 成立。不用上 200 个，先做 ground×1 / grass×1 / house×5 / road×2 / path×2 / tree×10 / shrub×5，大概 25 个」，然后走 `Asset → Plan → Confirm → Build → Preview → 改并移动 1 个 → Patch → verify`，重点看：Tool Calls 有没有暴涨 / Agent 有没有乱序 / 增量是不是真的只动目标 Actor / ledger 有没有乱 / 验证时间有没有明显增长。⚠ 本轮是**整表重排**（7 行 → 26 行），会走完整的阶段二：落盘 → 重画图 → 用户看图确认 → 才落关卡。⚠ 契约不变：坐标由我按参考图景（一条街、南侧 5 栋房、北侧草坪+行道树）排，**代码不规划坐标**。",
+      "plan_hash": "700566b5bfad5a0671d9f44e6a6505e22e3e4a8e09669c7058201838785489f9",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T12:55:51.087061+00:00",
+      "round": 37,
+      "kind": "plan_written",
+      "plan_hash": "d6e765022dc357269aa80fc762c40f063a5e95c5fad64939eecf32135b251363",
+      "figures": [
+        "plan_v1_overview_r37.svg"
+      ],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T12:57:07.984193+00:00",
+      "round": 37,
+      "kind": "accepted",
+      "by": "用户",
+      "plan_hash": "d6e765022dc357269aa80fc762c40f063a5e95c5fad64939eecf32135b251363",
+      "rows": {
+        "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [-40.0, -20.0], [11.13, 14.25], 0.0, 16.0, null]",
+        "住宅 #2（house2）": "[\"house\", \"/Game/demo/Item/ItemMesh/House2/house2\", [-20.0, -20.0], [9.87, 16.41], 0.0, 16.0, null]",
+        "住宅 #3（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [0.0, -20.0], [11.13, 14.25], 0.0, 16.0, null]",
+        "住宅 #4（house2）": "[\"house\", \"/Game/demo/Item/ItemMesh/House2/house2\", [20.0, -20.0], [9.87, 16.41], 0.0, 16.0, null]",
+        "住宅 #5（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [40.0, -20.0], [11.13, 14.25], 0.0, 16.0, null]",
+        "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-50.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-30.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-10.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #4": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [10.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #5": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [30.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #6": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-40.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #7": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-20.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #8": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [0.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #9": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #10": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [40.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2, 0.05]",
+        "北侧草坪（整块）": "[\"grass\", \"cube\", [0.0, 21.0], [120.0, 30.0], 0.0, 0.05, 0.175]",
+        "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null, 0.185]",
+        "沥青车行道（东侧支路）": "[\"road\", \"plane\", [52.0, -10.0], [8.0, 60.0], 0.0, null, 0.195]",
+        "连接路 #1": "[\"path\", \"cube\", [-30.0, -9.0], [2.0, 10.0], 0.0, 0.15, 0.105]",
+        "连接路 #2": "[\"path\", \"cube\", [30.0, -9.0], [2.0, 10.0], 0.0, 0.15, 0.105]",
+        "灌木带 #1": "[\"shrub\", \"cube\", [-40.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]",
+        "灌木带 #2": "[\"shrub\", \"cube\", [-20.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]",
+        "灌木带 #3": "[\"shrub\", \"cube\", [0.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]",
+        "灌木带 #4": "[\"shrub\", \"cube\", [20.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]",
+        "灌木带 #5": "[\"shrub\", \"cube\", [40.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]"
+      },
+      "user_quote": "可以继续",
+      "figure": "plan_v1_overview_r37.svg",
+      "note": "用户看过图并确认（阶段二验收通过）",
+      "figure_age_s": 54.5
+    },
+    {
+      "at": "2026-09-30T12:57:50.360373+00:00",
+      "round": 37,
+      "kind": "change_requested",
+      "by": "agent 自查",
+      "items": [
+        "压测链的最后一步：把「住宅 #3（house1）」从 (0,-20) 移到 (0,-24) —— 只为验「增量是不是真的只动这 1 个 Actor」"
+      ],
+      "reason": "用户原话「这是GPT安排的规划为新任务表」＋「可以继续」。GPT 那条链写的是：`Asset → Plan → Confirm → Build → Preview → **改并移动 1 个** → Patch → verify`。26 行那一版（r37）已经落完（removed 5 / placed 24 / verified 24 / mismatches 0 / official_calls 153），现在做最后一步：**只改 1 行的位置**，然后走完整闸门（patch → 重画图 → 用户确认 → 增量落），验四件事：① 增量是不是**只动那 1 个 Actor**（其余 25 个一个都不碰）；② 官方调用数是不是回到**个位数**（对比 24 行的 153 次）；③ 台账有没有乱（其余行的 `actor` 引用是否原样保留）；④ `[完工-19]` 会不会只为这 1 行（如果是白膜）补材质。⚠ 这是**agent 自查**发起的验证步骤，不是用户提的需求 —— 按纪律用 `by=\"agent 自查\"` 留对应关系。",
+      "plan_hash": "d6e765022dc357269aa80fc762c40f063a5e95c5fad64939eecf32135b251363",
+      "note": "用户看图后提出要改的地方（还没落到数据里）"
+    },
+    {
+      "at": "2026-09-30T12:57:53.374826+00:00",
+      "round": 38,
+      "kind": "plan_written",
+      "plan_hash": "bd2f8b05613721fc89d255f430e7992331920a2932ee414602472ed516e3551b",
+      "figures": [
+        "plan_v1_overview_r38.svg"
+      ],
+      "note": "这一版几何进验收（生图 = 阶段二结束）"
+    },
+    {
+      "at": "2026-09-30T13:05:13.857180+00:00",
+      "round": 38,
+      "kind": "accepted",
+      "by": "用户",
+      "plan_hash": "bd2f8b05613721fc89d255f430e7992331920a2932ee414602472ed516e3551b",
+      "rows": {
+        "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [-40.0, -20.0], [11.13, 14.25], 0.0, 16.0, null]",
+        "住宅 #2（house2）": "[\"house\", \"/Game/demo/Item/ItemMesh/House2/house2\", [-20.0, -20.0], [9.87, 16.41], 0.0, 16.0, null]",
+        "住宅 #3（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [0.0, -24.0], [11.13, 14.25], 0.0, 16.0, null]",
+        "住宅 #4（house2）": "[\"house\", \"/Game/demo/Item/ItemMesh/House2/house2\", [20.0, -20.0], [9.87, 16.41], 0.0, 16.0, null]",
+        "住宅 #5（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [40.0, -20.0], [11.13, 14.25], 0.0, 16.0, null]",
+        "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-50.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-30.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-10.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #4": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [10.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #5": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [30.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #6": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-40.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #7": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-20.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #8": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [0.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #9": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "行道树 #10": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [40.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+        "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2, 0.05]",
+        "北侧草坪（整块）": "[\"grass\", \"cube\", [0.0, 21.0], [120.0, 30.0], 0.0, 0.05, 0.175]",
+        "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null, 0.185]",
+        "沥青车行道（东侧支路）": "[\"road\", \"plane\", [52.0, -10.0], [8.0, 60.0], 0.0, null, 0.195]",
+        "连接路 #1": "[\"path\", \"cube\", [-30.0, -9.0], [2.0, 10.0], 0.0, 0.15, 0.105]",
+        "连接路 #2": "[\"path\", \"cube\", [30.0, -9.0], [2.0, 10.0], 0.0, 0.15, 0.105]",
+        "灌木带 #1": "[\"shrub\", \"cube\", [-40.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]",
+        "灌木带 #2": "[\"shrub\", \"cube\", [-20.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]",
+        "灌木带 #3": "[\"shrub\", \"cube\", [0.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]",
+        "灌木带 #4": "[\"shrub\", \"cube\", [20.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]",
+        "灌木带 #5": "[\"shrub\", \"cube\", [40.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]"
+      },
+      "user_quote": "欧克继续",
+      "figure": "plan_v1_overview_r38.svg",
+      "note": "用户看过图并确认（阶段二验收通过）",
+      "figure_age_s": 428.9
     }
   ],
   "accepted_rows": {
-    "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [-50.0, -32.0], [11.13, 14.25], 90.0, 16.0]",
-    "住宅 #2（house2）": "[\"house\", \"/Game/demo/Item/ItemMesh/House2/house2\", [-28.0, -32.0], [9.87, 16.41], 270.0, 16.0]",
-    "住宅 #3（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [-6.0, -32.0], [11.13, 14.25], 90.0, 16.0]",
-    "住宅 #4（house2）": "[\"house\", \"/Game/demo/Item/ItemMesh/House2/house2\", [16.0, -32.0], [9.87, 16.41], 270.0, 16.0]",
-    "住宅 #5（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [38.0, -32.0], [11.13, 14.25], 90.0, 16.0]",
-    "行道树 路左 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-48.0, -6.25], [4.45, 3.63], 0.0, 0.31]",
-    "行道树 路左 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-24.0, -6.25], [4.45, 3.63], 0.0, 0.31]",
-    "行道树 路左 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [0.0, -6.25], [4.45, 3.63], 0.0, 0.31]",
-    "行道树 路左 #4": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [24.0, -6.25], [4.45, 3.63], 0.0, 0.31]",
-    "行道树 路左 #5": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [48.0, -6.25], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #01": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-56.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #02": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-52.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #03": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-48.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #04": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-44.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #05": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-40.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #06": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-36.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #07": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-32.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #08": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-28.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #09": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-24.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #10": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-20.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #11": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-16.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #12": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-12.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #13": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-8.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #14": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-4.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #15": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [0.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #16": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [4.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #17": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [8.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #18": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [12.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #19": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [16.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #20": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #21": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [24.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #22": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [28.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #23": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [32.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #24": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [36.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #25": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [40.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #26": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [44.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #27": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [48.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #28": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [52.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "路右密林 #29": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [56.0, 14.0], [4.45, 3.63], 0.0, 0.31]",
-    "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null]",
-    "人行道（我方一侧，沿公路）": "[\"sidewalk\", \"cube\", [0.0, -9.25], [120.0, 1.5], 0.0, 0.15]",
-    "人行道（公路对面）": "[\"sidewalk\", \"cube\", [0.0, 8.75], [120.0, 1.5], 0.0, 0.15]",
-    "草坪 我方路缘草带（人行道↔公路）": "[\"grass\", \"plane\", [0.0, -6.25], [120.0, 4.5], 0.0, null]",
-    "草坪 住宅带（一整片，y -40～-10）": "[\"grass\", \"plane\", [0.0, -25.0], [120.0, 30.0], 0.0, null]",
-    "草坪 右 #1（对面路缘草带）": "[\"grass\", \"plane\", [0.0, 6.0], [120.0, 4.0], 0.0, null]",
-    "草坪 右 #3（路右林带，树下草皮）": "[\"grass\", \"plane\", [0.0, 14.25], [120.0, 9.5], 0.0, null]",
-    "草坪 右 #2（林带外侧）": "[\"grass\", \"plane\", [0.0, 29.5], [120.0, 21.0], 0.0, null]",
-    "连接路 #1（住宅 #1 ↔ #2 之间，直通公路）": "[\"path\", \"cube\", [-39.54, -22.0], [4.0, 36.0], 0.0, 0.15]",
-    "连接路 #2（住宅 #2 ↔ #3 之间，直通公路）": "[\"path\", \"cube\", [-16.46, -22.0], [4.0, 36.0], 0.0, 0.15]",
-    "连接路 #3（住宅 #3 ↔ #4 之间，直通公路）": "[\"path\", \"cube\", [4.46, -22.0], [4.0, 36.0], 0.0, 0.15]",
-    "连接路 #4（住宅 #4 ↔ #5 之间，直通公路）": "[\"path\", \"cube\", [27.54, -22.0], [4.0, 36.0], 0.0, 0.15]",
-    "连接路 #5（房子排东端，直通公路）": "[\"path\", \"cube\", [53.0, -22.0], [4.0, 36.0], 0.0, 0.15]",
-    "走道·住宅 #1 朝公路面（灌木带外侧）": "[\"path\", \"cube\", [-50.0, -23.175], [15.93, 1.4], 0.0, 0.15]",
-    "走道·住宅 #1 端头 -X": "[\"path\", \"cube\", [-57.265, -31.5], [1.4, 15.25], 0.0, 0.15]",
-    "走道·住宅 #1 端头 +X": "[\"path\", \"cube\", [-42.735, -31.5], [1.4, 15.25], 0.0, 0.15]",
-    "走道·住宅 #1 屋后": "[\"path\", \"cube\", [-50.0, -39.825], [15.93, 1.4], 0.0, 0.15]",
-    "走道·住宅 #2 朝公路面（灌木带外侧）": "[\"path\", \"cube\", [-28.0, -22.095], [14.67, 1.4], 0.0, 0.15]",
-    "走道·住宅 #2 端头 -X": "[\"path\", \"cube\", [-34.635, -31.5], [1.4, 17.41], 0.0, 0.15]",
-    "走道·住宅 #2 端头 +X": "[\"path\", \"cube\", [-21.365, -31.5], [1.4, 17.41], 0.0, 0.15]",
-    "走道·住宅 #2 屋后": "[\"path\", \"cube\", [-28.0, -40.905], [14.67, 1.4], 0.0, 0.15]",
-    "走道·住宅 #3 朝公路面（灌木带外侧）": "[\"path\", \"cube\", [-6.0, -23.175], [15.93, 1.4], 0.0, 0.15]",
-    "走道·住宅 #3 端头 -X": "[\"path\", \"cube\", [-13.265, -31.5], [1.4, 15.25], 0.0, 0.15]",
-    "走道·住宅 #3 端头 +X": "[\"path\", \"cube\", [1.265, -31.5], [1.4, 15.25], 0.0, 0.15]",
-    "走道·住宅 #3 屋后": "[\"path\", \"cube\", [-6.0, -39.825], [15.93, 1.4], 0.0, 0.15]",
-    "走道·住宅 #4 朝公路面（灌木带外侧）": "[\"path\", \"cube\", [16.0, -22.095], [14.67, 1.4], 0.0, 0.15]",
-    "走道·住宅 #4 端头 -X": "[\"path\", \"cube\", [9.365, -31.5], [1.4, 17.41], 0.0, 0.15]",
-    "走道·住宅 #4 端头 +X": "[\"path\", \"cube\", [22.635, -31.5], [1.4, 17.41], 0.0, 0.15]",
-    "走道·住宅 #4 屋后": "[\"path\", \"cube\", [16.0, -40.905], [14.67, 1.4], 0.0, 0.15]",
-    "走道·住宅 #5 朝公路面（灌木带外侧）": "[\"path\", \"cube\", [38.0, -23.175], [15.93, 1.4], 0.0, 0.15]",
-    "走道·住宅 #5 端头 -X": "[\"path\", \"cube\", [30.735, -31.5], [1.4, 15.25], 0.0, 0.15]",
-    "走道·住宅 #5 端头 +X": "[\"path\", \"cube\", [45.265, -31.5], [1.4, 15.25], 0.0, 0.15]",
-    "走道·住宅 #5 屋后": "[\"path\", \"cube\", [38.0, -39.825], [15.93, 1.4], 0.0, 0.15]",
-    "灌木·住宅 #1 朝公路面带": "[\"shrub\", \"cube\", [-50.0, -24.375], [11.13, 1.0], 0.0, 0.8]",
-    "灌木·住宅 #1 端头 -X": "[\"shrub\", \"cube\", [-56.065, -31.5], [1.0, 15.25], 0.0, 0.8]",
-    "灌木·住宅 #1 端头 +X": "[\"shrub\", \"cube\", [-43.935, -31.5], [1.0, 15.25], 0.0, 0.8]",
-    "灌木·住宅 #2 朝公路面带": "[\"shrub\", \"cube\", [-28.0, -23.295], [9.87, 1.0], 0.0, 0.8]",
-    "灌木·住宅 #2 端头 -X": "[\"shrub\", \"cube\", [-33.435, -31.5], [1.0, 17.41], 0.0, 0.8]",
-    "灌木·住宅 #2 端头 +X": "[\"shrub\", \"cube\", [-22.565, -31.5], [1.0, 17.41], 0.0, 0.8]",
-    "灌木·住宅 #3 朝公路面带": "[\"shrub\", \"cube\", [-6.0, -24.375], [11.13, 1.0], 0.0, 0.8]",
-    "灌木·住宅 #3 端头 -X": "[\"shrub\", \"cube\", [-12.065, -31.5], [1.0, 15.25], 0.0, 0.8]",
-    "灌木·住宅 #3 端头 +X": "[\"shrub\", \"cube\", [0.065, -31.5], [1.0, 15.25], 0.0, 0.8]",
-    "灌木·住宅 #4 朝公路面带": "[\"shrub\", \"cube\", [16.0, -23.295], [9.87, 1.0], 0.0, 0.8]",
-    "灌木·住宅 #4 端头 -X": "[\"shrub\", \"cube\", [10.565, -31.5], [1.0, 17.41], 0.0, 0.8]",
-    "灌木·住宅 #4 端头 +X": "[\"shrub\", \"cube\", [21.435, -31.5], [1.0, 17.41], 0.0, 0.8]",
-    "灌木·住宅 #5 朝公路面带": "[\"shrub\", \"cube\", [38.0, -24.375], [11.13, 1.0], 0.0, 0.8]",
-    "灌木·住宅 #5 端头 -X": "[\"shrub\", \"cube\", [31.935, -31.5], [1.0, 15.25], 0.0, 0.8]",
-    "灌木·住宅 #5 端头 +X": "[\"shrub\", \"cube\", [44.065, -31.5], [1.0, 15.25], 0.0, 0.8]",
-    "灌木幼树根部植被丛": "[\"shrub\", \"cube\", [0.0, -6.25], [3.0, 3.0], 0.0, 0.6]",
-    "灌木路对面丛": "[\"shrub\", \"cube\", [20.0, 6.0], [6.0, 2.0], 0.0, 1.2]",
-    "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2]"
+    "住宅 #1（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [-40.0, -20.0], [11.13, 14.25], 0.0, 16.0, null]",
+    "住宅 #2（house2）": "[\"house\", \"/Game/demo/Item/ItemMesh/House2/house2\", [-20.0, -20.0], [9.87, 16.41], 0.0, 16.0, null]",
+    "住宅 #3（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [0.0, -24.0], [11.13, 14.25], 0.0, 16.0, null]",
+    "住宅 #4（house2）": "[\"house\", \"/Game/demo/Item/ItemMesh/House2/house2\", [20.0, -20.0], [9.87, 16.41], 0.0, 16.0, null]",
+    "住宅 #5（house1）": "[\"house\", \"/Game/demo/Item/ItemMesh/House/house1\", [40.0, -20.0], [11.13, 14.25], 0.0, 16.0, null]",
+    "行道树 #1": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-50.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+    "行道树 #2": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-30.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+    "行道树 #3": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-10.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+    "行道树 #4": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [10.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+    "行道树 #5": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [30.0, 8.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+    "行道树 #6": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-40.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+    "行道树 #7": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [-20.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+    "行道树 #8": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [0.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+    "行道树 #9": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [20.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+    "行道树 #10": "[\"tree\", \"/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree\", [40.0, 18.0], [4.45, 3.63], 0.0, 0.31, 0.2975]",
+    "世界地基（整块底板，铺满世界）": "[\"ground\", \"cube\", [0.0, 0.0], [120.0, 80.0], 0.0, 0.2, 0.05]",
+    "北侧草坪（整块）": "[\"grass\", \"cube\", [0.0, 21.0], [120.0, 30.0], 0.0, 0.05, 0.175]",
+    "沥青车行道": "[\"road\", \"plane\", [0.0, 0.0], [120.0, 8.0], 0.0, null, 0.185]",
+    "沥青车行道（东侧支路）": "[\"road\", \"plane\", [52.0, -10.0], [8.0, 60.0], 0.0, null, 0.195]",
+    "连接路 #1": "[\"path\", \"cube\", [-30.0, -9.0], [2.0, 10.0], 0.0, 0.15, 0.105]",
+    "连接路 #2": "[\"path\", \"cube\", [30.0, -9.0], [2.0, 10.0], 0.0, 0.15, 0.105]",
+    "灌木带 #1": "[\"shrub\", \"cube\", [-40.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]",
+    "灌木带 #2": "[\"shrub\", \"cube\", [-20.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]",
+    "灌木带 #3": "[\"shrub\", \"cube\", [0.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]",
+    "灌木带 #4": "[\"shrub\", \"cube\", [20.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]",
+    "灌木带 #5": "[\"shrub\", \"cube\", [40.0, -11.5], [8.0, 1.2], 0.0, 0.8, null]"
   },
   "awaiting_readback": null,
-  "readback_at": "2026-09-27T10:44:35.118282+00:00",
-  "accepted_user_quote": "行",
+  "readback_at": "2026-09-30T13:05:18.892081+00:00",
+  "accepted_user_quote": "欧克继续",
   "change_window_open": false
 }

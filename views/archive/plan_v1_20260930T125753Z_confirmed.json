@@ -1,0 +1,502 @@
+{
+  "stage": "阶段二 · 平面放置规划",
+  "unit": "m",
+  "world": {
+    "center": [
+      0.0,
+      0.0
+    ],
+    "size": [
+      120.0,
+      80.0
+    ],
+    "size_source": "阶段一 elements.json 的『地图大小』场景项",
+    "bounds": {
+      "min": [
+        -60.0,
+        -40.0
+      ],
+      "max": [
+        60.0,
+        40.0
+      ]
+    },
+    "coordinate_system": {
+      "handedness": "left",
+      "height_axis": "Z",
+      "forward_axis": "X",
+      "right_axis": "Y",
+      "right_normal_rule": "right_normal(d) = (-dy, dx)"
+    }
+  },
+  "assets": [
+    {
+      "element_key": "house",
+      "label": "住宅 #1（house1）",
+      "pos": [
+        -40.0,
+        -20.0
+      ],
+      "footprint_m": [
+        11.13,
+        14.25
+      ],
+      "rot_deg": 0.0,
+      "note": "压测场景：南侧 5 栋房的第 1 栋",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "住宅 #2（house2）",
+      "pos": [
+        -20.0,
+        -20.0
+      ],
+      "footprint_m": [
+        9.87,
+        16.41
+      ],
+      "rot_deg": 0.0,
+      "note": "house1/house2 混搭（阶段一确认过可以混搭）",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "住宅 #3（house1）",
+      "pos": [
+        0.0,
+        -20.0
+      ],
+      "footprint_m": [
+        11.13,
+        14.25
+      ],
+      "rot_deg": 0.0,
+      "note": "原来那栋（r36 在 [0,-20.9]），本轮归位到 [-20] 与邻居对齐",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "住宅 #4（house2）",
+      "pos": [
+        20.0,
+        -20.0
+      ],
+      "footprint_m": [
+        9.87,
+        16.41
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "asset_path": "/Game/demo/Item/ItemMesh/House2/house2",
+      "scale": 16.0
+    },
+    {
+      "element_key": "house",
+      "label": "住宅 #5（house1）",
+      "pos": [
+        40.0,
+        -20.0
+      ],
+      "footprint_m": [
+        11.13,
+        14.25
+      ],
+      "rot_deg": 0.0,
+      "note": "与东侧支路（x=48~56）不重叠",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #1",
+      "pos": [
+        -50.0,
+        8.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "北侧草坪（顶面 +20）上 → 原点 = 20 + 9.75 = 29.75 cm",
+      "z_m": 0.2975,
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #2",
+      "pos": [
+        -30.0,
+        8.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "z_m": 0.2975,
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #3",
+      "pos": [
+        -10.0,
+        8.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "z_m": 0.2975,
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #4",
+      "pos": [
+        10.0,
+        8.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "z_m": 0.2975,
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #5",
+      "pos": [
+        30.0,
+        8.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "z_m": 0.2975,
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #6",
+      "pos": [
+        -40.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "第二排（草坪深处）",
+      "z_m": 0.2975,
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #7",
+      "pos": [
+        -20.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "z_m": 0.2975,
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #8",
+      "pos": [
+        0.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "z_m": 0.2975,
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #9",
+      "pos": [
+        20.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "z_m": 0.2975,
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #10",
+      "pos": [
+        40.0,
+        18.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "z_m": 0.2975,
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    }
+  ],
+  "whiteboxes": [
+    {
+      "element_key": "ground",
+      "label": "世界地基（整块底板，铺满世界）",
+      "pos": [
+        0.0,
+        0.0
+      ],
+      "footprint_m": [
+        120.0,
+        80.0
+      ],
+      "rot_deg": 0.0,
+      "note": "第①层。项面 +15 cm —— 与 r36 一致，本轮未改动",
+      "z_m": 0.05,
+      "shape": "cube",
+      "size_source": "预估（沿用已确认版本 r24 的尺寸）",
+      "height_m": 0.2
+    },
+    {
+      "element_key": "grass",
+      "label": "北侧草坪（整块）",
+      "pos": [
+        0.0,
+        21.0
+      ],
+      "footprint_m": [
+        120.0,
+        30.0
+      ],
+      "rot_deg": 0.0,
+      "note": "顶面 = 17.5 + 2.5 = **+20 cm**，比地基顶面（+15）高 5 cm —— 今天实测过：**严格齐平 = 两个面共面 = 深度打架（草赢了）**，所以要留净空",
+      "z_m": 0.175,
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.05
+    },
+    {
+      "element_key": "road",
+      "label": "沥青车行道",
+      "pos": [
+        0.0,
+        0.0
+      ],
+      "footprint_m": [
+        120.0,
+        8.0
+      ],
+      "rot_deg": 0.0,
+      "note": "主路 120×8。z_m 与 r36 一致（中心 18.5 → 顶面 +26）",
+      "z_m": 0.185,
+      "shape": "plane",
+      "size_source": "预估（沿用 r24 的尺寸）"
+    },
+    {
+      "element_key": "road",
+      "label": "沥青车行道（东侧支路）",
+      "pos": [
+        52.0,
+        -10.0
+      ],
+      "footprint_m": [
+        8.0,
+        60.0
+      ],
+      "rot_deg": 0.0,
+      "note": "压测用的第 2 条路。⚠ 顶面 +27，比主路高 **1 cm** —— 两条路在交叉口会重叠，同一标高就会共面打架（今天学到的）",
+      "z_m": 0.195,
+      "shape": "plane",
+      "size_source": "预估（参考图目测，待核实）"
+    },
+    {
+      "element_key": "path",
+      "label": "连接路 #1",
+      "pos": [
+        -30.0,
+        -9.0
+      ],
+      "footprint_m": [
+        2.0,
+        10.0
+      ],
+      "rot_deg": 0.0,
+      "note": "从主路横穿到两栋房之间的草坪前。顶面 +18（比地基顶面高 3 cm）",
+      "z_m": 0.105,
+      "shape": "cube",
+      "size_source": "预估（沿用阶段一清单 path 的 2 m × 15 cm）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "path",
+      "label": "连接路 #2",
+      "pos": [
+        30.0,
+        -9.0
+      ],
+      "footprint_m": [
+        2.0,
+        10.0
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "z_m": 0.105,
+      "shape": "cube",
+      "size_source": "预估（同上）",
+      "height_m": 0.15
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木带 #1",
+      "pos": [
+        -40.0,
+        -11.5
+      ],
+      "footprint_m": [
+        8.0,
+        1.2
+      ],
+      "rot_deg": 0.0,
+      "note": "贴住宅 #1 门前（房前缘 y=-12.9，这条在 y=-12.1~-10.9，不重叠）",
+      "shape": "cube",
+      "size_source": "预估（参考图目测，待核实）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木带 #2",
+      "pos": [
+        -20.0,
+        -11.5
+      ],
+      "footprint_m": [
+        8.0,
+        1.2
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "shape": "cube",
+      "size_source": "预估（同上）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木带 #3",
+      "pos": [
+        0.0,
+        -11.5
+      ],
+      "footprint_m": [
+        8.0,
+        1.2
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "shape": "cube",
+      "size_source": "预估（同上）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木带 #4",
+      "pos": [
+        20.0,
+        -11.5
+      ],
+      "footprint_m": [
+        8.0,
+        1.2
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "shape": "cube",
+      "size_source": "预估（同上）",
+      "height_m": 0.8
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木带 #5",
+      "pos": [
+        40.0,
+        -11.5
+      ],
+      "footprint_m": [
+        8.0,
+        1.2
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "shape": "cube",
+      "size_source": "预估（同上）",
+      "height_m": 0.8
+    }
+  ],
+  "params": {
+    "这一版是什么": "GPT 第二优先：20~50 Actor 压测场景（26 行：ground1 / grass1 / house5 / road2 / path2 / tree10 / shrub5）",
+    "用户原话": "这是GPT安排的规划为新任务表",
+    "布局": "一条东西向街道：主路 y=0（120×8）；南侧 5 栋房 y=-20（x=-40/-20/0/20/40，house1 与 house2 混搭）；北侧草坪 y=6~36（整块）；两排行道树 y=+8 / +18；东侧支路 x=52；两条连接路 x=∓30；5 条灌木带贴房前 y=-11.5",
+    "z_m 的用法": "草坪顶面 +20（比地基顶面 +15 高 5 cm）；支路比主路高 1 cm（避开交叉口共面）；树按草坪顶面起算 → 原点 20+9.75=29.75 cm；连接路顶面 +18",
+    "房子的 footprint": "沿用 r36 那版的口径（house1 = [11.13, 14.25]、house2 = [9.87, 16.41]）—— ⚠ 实测包围盒 ×scale 推出来的是 [14.25, 11.13]（X/Y 像是反的）；**本轮不动它**，免得情情改掉你确认过的值 —— 要不要纠正在下一轮定"
+  },
+  "previous_elements": {
+    "path": "catalog/elements.json",
+    "confirmed_at": "2026-09-26T04:37:04.524978+00:00",
+    "scene": {
+      "size_m": "120×80 m（阶段一记录）",
+      "time_of_day": "sunset"
+    }
+  },
+  "note": "一个物体一行、自带 pos（平面中心坐标，米）。**没有 count 字段** —— 摆几个就写几行，不许用一条记录代表多个不同位置的物体（那样谁也看不见它们）。已有资产先放（大小是阶段一实测的）、白膜后放（大小要等资产占完位再估）。本数据不依赖任何图片；要图就由 AI 拿这份数据自己画（代码不出图）。",
+  "confirmation": {
+    "required": true,
+    "confirmed": true,
+    "confirmed_by": "用户",
+    "confirmed_at": "2026-09-30T12:57:07.967051+00:00",
+    "note": "已确认。几何一变，指纹就对不上，本次确认自动作废。",
+    "plan_hash": "d6e765022dc357269aa80fc762c40f063a5e95c5fad64939eecf32135b251363",
+    "user_quote": "可以继续"
+  }
+}

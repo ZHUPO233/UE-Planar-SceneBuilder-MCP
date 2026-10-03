@@ -1,0 +1,1299 @@
+{
+  "stage": "阶段七 · 落位对账（我们自己的报告；不碰关卡、不存盘、不改 plan）",
+  "at": "2026-09-30T13:06:02.033362+00:00",
+  "level": "/Game/demo/Landscape/MCP",
+  "level_checked": true,
+  "plan_hash": "bd2f8b05613721fc89d255f430e7992331920a2932ee414602472ed516e3551b",
+  "plan_confirmed": true,
+  "ledger_path": "F:\\MCP_Server\\views\\build_state_v1.json",
+  "ledger_level": "/Game/demo/Landscape/MCP",
+  "ledger_plan_hash": "bd2f8b05613721fc89d255f430e7992331920a2932ee414602472ed516e3551b",
+  "ledger_stale": false,
+  "rows_total": 26,
+  "counts": {
+    "ok": 26,
+    "never_built": 0,
+    "drifted": 0,
+    "plan_changed": 0,
+    "edited": 0,
+    "material_missing": 0,
+    "material_unreadable": 0,
+    "unchecked": 0
+  },
+  "rows": [
+    {
+      "uid": "ground|世界地基（整块底板，铺满世界）",
+      "label": "世界地基（整块底板，铺满世界）",
+      "kind": "whitebox",
+      "element_key": "ground",
+      "layer": "① 世界地基",
+      "folder": "UEMCP/ground",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.Actor_6",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          0.0,
+          0.0,
+          5.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          12000.0,
+          8000.0,
+          20.0
+        ],
+        "folder": "UEMCP/ground"
+      },
+      "ledger": {
+        "loc_cm": [
+          0.0,
+          0.0,
+          5.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          12000.0,
+          8000.0,
+          20.0
+        ],
+        "folder": "UEMCP/ground",
+        "readback": true
+      },
+      "found": {
+        "material": "/Game/demo/Landscape/mcp_mats/MI_Lawn.MI_Lawn"
+      }
+    },
+    {
+      "uid": "grass|北侧草坪（整块）",
+      "label": "北侧草坪（整块）",
+      "kind": "whitebox",
+      "element_key": "grass",
+      "layer": "② 地皮",
+      "folder": "UEMCP/grass",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.Actor_9",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          0.0,
+          2100.0,
+          17.5
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          12000.0,
+          3000.0,
+          5.0
+        ],
+        "folder": "UEMCP/grass"
+      },
+      "ledger": {
+        "loc_cm": [
+          0.0,
+          2100.0,
+          17.5
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          12000.0,
+          3000.0,
+          5.0
+        ],
+        "folder": "UEMCP/grass",
+        "readback": true
+      },
+      "found": {
+        "material": "/Game/demo/Landscape/mcp_mats/MI_Lawn.MI_Lawn"
+      }
+    },
+    {
+      "uid": "house|住宅 #1（house1）",
+      "label": "住宅 #1（house1）",
+      "kind": "asset",
+      "element_key": "house",
+      "layer": "③ 建筑层",
+      "folder": "UEMCP/houses",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_18",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          -4000.0,
+          -2000.0,
+          15.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          16.0,
+          16.0,
+          16.0
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/houses"
+      },
+      "ledger": {
+        "loc_cm": [
+          -4000.0,
+          -2000.0,
+          15.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          16.0,
+          16.0,
+          16.0
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/houses",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "house|住宅 #2（house2）",
+      "label": "住宅 #2（house2）",
+      "kind": "asset",
+      "element_key": "house",
+      "layer": "③ 建筑层",
+      "folder": "UEMCP/houses",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_7",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          -2000.0,
+          -2000.0,
+          15.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          16.0,
+          16.0,
+          16.0
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/houses"
+      },
+      "ledger": {
+        "loc_cm": [
+          -2000.0,
+          -2000.0,
+          15.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          16.0,
+          16.0,
+          16.0
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/houses",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "house|住宅 #3（house1）",
+      "label": "住宅 #3（house1）",
+      "kind": "asset",
+      "element_key": "house",
+      "layer": "③ 建筑层",
+      "folder": "UEMCP/houses",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_62",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          0.0,
+          -2400.0,
+          15.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          16.0,
+          16.0,
+          16.0
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/houses"
+      },
+      "ledger": {
+        "loc_cm": [
+          0.0,
+          -2400.0,
+          15.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          16.0,
+          16.0,
+          16.0
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/houses",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "house|住宅 #4（house2）",
+      "label": "住宅 #4（house2）",
+      "kind": "asset",
+      "element_key": "house",
+      "layer": "③ 建筑层",
+      "folder": "UEMCP/houses",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_9",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          2000.0,
+          -2000.0,
+          15.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          16.0,
+          16.0,
+          16.0
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/houses"
+      },
+      "ledger": {
+        "loc_cm": [
+          2000.0,
+          -2000.0,
+          15.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          16.0,
+          16.0,
+          16.0
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/houses",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "house|住宅 #5（house1）",
+      "label": "住宅 #5（house1）",
+      "kind": "asset",
+      "element_key": "house",
+      "layer": "③ 建筑层",
+      "folder": "UEMCP/houses",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_10",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          4000.0,
+          -2000.0,
+          15.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          16.0,
+          16.0,
+          16.0
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/houses"
+      },
+      "ledger": {
+        "loc_cm": [
+          4000.0,
+          -2000.0,
+          15.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          16.0,
+          16.0,
+          16.0
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/houses",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "road|沥青车行道",
+      "label": "沥青车行道",
+      "kind": "whitebox",
+      "element_key": "road",
+      "layer": "④ 设施层",
+      "folder": "UEMCP/road",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.Actor_8",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          0.0,
+          0.0,
+          18.5
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          12000.0,
+          800.0,
+          15.0
+        ],
+        "folder": "UEMCP/road"
+      },
+      "ledger": {
+        "loc_cm": [
+          0.0,
+          0.0,
+          18.5
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          12000.0,
+          800.0,
+          15.0
+        ],
+        "folder": "UEMCP/road",
+        "readback": true
+      },
+      "found": {
+        "material": "/Game/demo/Landscape/mcp_mats/MI_Asphalt.MI_Asphalt"
+      }
+    },
+    {
+      "uid": "road|沥青车行道（东侧支路）",
+      "label": "沥青车行道（东侧支路）",
+      "kind": "whitebox",
+      "element_key": "road",
+      "layer": "④ 设施层",
+      "folder": "UEMCP/road",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.Actor_10",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          5200.0,
+          -1000.0,
+          19.5
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          800.0,
+          6000.0,
+          15.0
+        ],
+        "folder": "UEMCP/road"
+      },
+      "ledger": {
+        "loc_cm": [
+          5200.0,
+          -1000.0,
+          19.5
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          800.0,
+          6000.0,
+          15.0
+        ],
+        "folder": "UEMCP/road",
+        "readback": true
+      },
+      "found": {
+        "material": "/Game/demo/Landscape/mcp_mats/MI_Asphalt.MI_Asphalt"
+      }
+    },
+    {
+      "uid": "path|连接路 #1",
+      "label": "连接路 #1",
+      "kind": "whitebox",
+      "element_key": "path",
+      "layer": "④ 设施层",
+      "folder": "UEMCP/paths",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.Actor_11",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          -3000.0,
+          -900.0,
+          10.5
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          200.0,
+          1000.0,
+          15.0
+        ],
+        "folder": "UEMCP/paths"
+      },
+      "ledger": {
+        "loc_cm": [
+          -3000.0,
+          -900.0,
+          10.5
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          200.0,
+          1000.0,
+          15.0
+        ],
+        "folder": "UEMCP/paths",
+        "readback": true
+      },
+      "found": {
+        "material": "/Game/demo/Landscape/mcp_mats/MI_Concrete.MI_Concrete"
+      }
+    },
+    {
+      "uid": "path|连接路 #2",
+      "label": "连接路 #2",
+      "kind": "whitebox",
+      "element_key": "path",
+      "layer": "④ 设施层",
+      "folder": "UEMCP/paths",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.Actor_12",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          3000.0,
+          -900.0,
+          10.5
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          200.0,
+          1000.0,
+          15.0
+        ],
+        "folder": "UEMCP/paths"
+      },
+      "ledger": {
+        "loc_cm": [
+          3000.0,
+          -900.0,
+          10.5
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          200.0,
+          1000.0,
+          15.0
+        ],
+        "folder": "UEMCP/paths",
+        "readback": true
+      },
+      "found": {
+        "material": "/Game/demo/Landscape/mcp_mats/MI_Concrete.MI_Concrete"
+      }
+    },
+    {
+      "uid": "tree|行道树 #1",
+      "label": "行道树 #1",
+      "kind": "asset",
+      "element_key": "tree",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/trees",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_59",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          -5000.0,
+          800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees"
+      },
+      "ledger": {
+        "loc_cm": [
+          -5000.0,
+          800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "tree|行道树 #2",
+      "label": "行道树 #2",
+      "kind": "asset",
+      "element_key": "tree",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/trees",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_60",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          -3000.0,
+          800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees"
+      },
+      "ledger": {
+        "loc_cm": [
+          -3000.0,
+          800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "tree|行道树 #3",
+      "label": "行道树 #3",
+      "kind": "asset",
+      "element_key": "tree",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/trees",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_61",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          -1000.0,
+          800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees"
+      },
+      "ledger": {
+        "loc_cm": [
+          -1000.0,
+          800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "tree|行道树 #4",
+      "label": "行道树 #4",
+      "kind": "asset",
+      "element_key": "tree",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/trees",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_11",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          1000.0,
+          800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees"
+      },
+      "ledger": {
+        "loc_cm": [
+          1000.0,
+          800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "tree|行道树 #5",
+      "label": "行道树 #5",
+      "kind": "asset",
+      "element_key": "tree",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/trees",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_12",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          3000.0,
+          800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees"
+      },
+      "ledger": {
+        "loc_cm": [
+          3000.0,
+          800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "tree|行道树 #6",
+      "label": "行道树 #6",
+      "kind": "asset",
+      "element_key": "tree",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/trees",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_13",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          -4000.0,
+          1800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees"
+      },
+      "ledger": {
+        "loc_cm": [
+          -4000.0,
+          1800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "tree|行道树 #7",
+      "label": "行道树 #7",
+      "kind": "asset",
+      "element_key": "tree",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/trees",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_14",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          -2000.0,
+          1800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees"
+      },
+      "ledger": {
+        "loc_cm": [
+          -2000.0,
+          1800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "tree|行道树 #8",
+      "label": "行道树 #8",
+      "kind": "asset",
+      "element_key": "tree",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/trees",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_15",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          0.0,
+          1800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees"
+      },
+      "ledger": {
+        "loc_cm": [
+          0.0,
+          1800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "tree|行道树 #9",
+      "label": "行道树 #9",
+      "kind": "asset",
+      "element_key": "tree",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/trees",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_16",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          2000.0,
+          1800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees"
+      },
+      "ledger": {
+        "loc_cm": [
+          2000.0,
+          1800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "tree|行道树 #10",
+      "label": "行道树 #10",
+      "kind": "asset",
+      "element_key": "tree",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/trees",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.StaticMeshActor_17",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          4000.0,
+          1800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees"
+      },
+      "ledger": {
+        "loc_cm": [
+          4000.0,
+          1800.0,
+          29.75
+        ],
+        "yaw": 0.0,
+        "scale": [
+          0.31,
+          0.31,
+          0.31
+        ],
+        "size_cm": null,
+        "folder": "UEMCP/trees",
+        "readback": true
+      },
+      "found": {}
+    },
+    {
+      "uid": "shrub|灌木带 #1",
+      "label": "灌木带 #1",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/shrubs",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.Actor_13",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          -4000.0,
+          -1150.0,
+          55.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          800.0,
+          120.0,
+          80.0
+        ],
+        "folder": "UEMCP/shrubs"
+      },
+      "ledger": {
+        "loc_cm": [
+          -4000.0,
+          -1150.0,
+          55.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          800.0,
+          120.0,
+          80.0
+        ],
+        "folder": "UEMCP/shrubs",
+        "readback": true
+      },
+      "found": {
+        "material": "/Game/Fab/Materials/Standard/M_MS_Foliage.M_MS_Foliage"
+      }
+    },
+    {
+      "uid": "shrub|灌木带 #2",
+      "label": "灌木带 #2",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/shrubs",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.Actor_14",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          -2000.0,
+          -1150.0,
+          55.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          800.0,
+          120.0,
+          80.0
+        ],
+        "folder": "UEMCP/shrubs"
+      },
+      "ledger": {
+        "loc_cm": [
+          -2000.0,
+          -1150.0,
+          55.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          800.0,
+          120.0,
+          80.0
+        ],
+        "folder": "UEMCP/shrubs",
+        "readback": true
+      },
+      "found": {
+        "material": "/Game/Fab/Materials/Standard/M_MS_Foliage.M_MS_Foliage"
+      }
+    },
+    {
+      "uid": "shrub|灌木带 #3",
+      "label": "灌木带 #3",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/shrubs",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.Actor_15",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          0.0,
+          -1150.0,
+          55.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          800.0,
+          120.0,
+          80.0
+        ],
+        "folder": "UEMCP/shrubs"
+      },
+      "ledger": {
+        "loc_cm": [
+          0.0,
+          -1150.0,
+          55.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          800.0,
+          120.0,
+          80.0
+        ],
+        "folder": "UEMCP/shrubs",
+        "readback": true
+      },
+      "found": {
+        "material": "/Game/Fab/Materials/Standard/M_MS_Foliage.M_MS_Foliage"
+      }
+    },
+    {
+      "uid": "shrub|灌木带 #4",
+      "label": "灌木带 #4",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/shrubs",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.Actor_66",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          2000.0,
+          -1150.0,
+          55.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          800.0,
+          120.0,
+          80.0
+        ],
+        "folder": "UEMCP/shrubs"
+      },
+      "ledger": {
+        "loc_cm": [
+          2000.0,
+          -1150.0,
+          55.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          800.0,
+          120.0,
+          80.0
+        ],
+        "folder": "UEMCP/shrubs",
+        "readback": true
+      },
+      "found": {
+        "material": "/Game/Fab/Materials/Standard/M_MS_Foliage.M_MS_Foliage"
+      }
+    },
+    {
+      "uid": "shrub|灌木带 #5",
+      "label": "灌木带 #5",
+      "kind": "whitebox",
+      "element_key": "shrub",
+      "layer": "⑤ 植被层",
+      "folder": "UEMCP/shrubs",
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.Actor_67",
+      "verdict": "ok",
+      "why": [],
+      "expected": {
+        "loc_cm": [
+          4000.0,
+          -1150.0,
+          55.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          800.0,
+          120.0,
+          80.0
+        ],
+        "folder": "UEMCP/shrubs"
+      },
+      "ledger": {
+        "loc_cm": [
+          4000.0,
+          -1150.0,
+          55.0
+        ],
+        "yaw": 0.0,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "size_cm": [
+          800.0,
+          120.0,
+          80.0
+        ],
+        "folder": "UEMCP/shrubs",
+        "readback": true
+      },
+      "found": {
+        "material": "/Game/Fab/Materials/Standard/M_MS_Foliage.M_MS_Foliage"
+      }
+    }
+  ],
+  "groups": {
+    "UEMCP/grass": {
+      "应到": 1,
+      "实到": 1,
+      "缺": [],
+      "多": []
+    },
+    "UEMCP/ground": {
+      "应到": 1,
+      "实到": 1,
+      "缺": [],
+      "多": []
+    },
+    "UEMCP/houses": {
+      "应到": 5,
+      "实到": 5,
+      "缺": [],
+      "多": []
+    },
+    "UEMCP/paths": {
+      "应到": 2,
+      "实到": 2,
+      "缺": [],
+      "多": []
+    },
+    "UEMCP/road": {
+      "应到": 2,
+      "实到": 2,
+      "缺": [],
+      "多": []
+    },
+    "UEMCP/shrubs": {
+      "应到": 5,
+      "实到": 5,
+      "缺": [],
+      "多": []
+    },
+    "UEMCP/trees": {
+      "应到": 10,
+      "实到": 10,
+      "缺": [],
+      "多": []
+    }
+  },
+  "stray_actors": [],
+  "note": "每一行的 `expected` = plan 现算的指令值，`ledger` = 搭建台账记的，`found` = 关卡现读的（空 = 没读到，**不等于没问题**）。`readback=false` 表示台账那几个数是**指令值**、没从关卡核实过。"
+}

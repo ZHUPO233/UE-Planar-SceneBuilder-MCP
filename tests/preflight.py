@@ -6,13 +6,13 @@
 #   ① `NameError: name 'FoundAsset' is not defined`
 #      —— Python 里函数**签名上的注解**是在 def 执行那一刻求值的，定义顺序摆错就炸。
 #   ② `ImportError: attempted relative import with no known parent package`
-#      —— 宿主是按**脚本方式**起 main.py 的（`python ...\src\mcp_server\main.py`），
+#      —— Agent是按**脚本方式**起 main.py 的（`python ...\src\mcp_server\main.py`），
 #         此时 `__package__` 为空，文件顶部的相对导入 `from .planning import ...` 必然失败。
 #   ⚠ ② 之所以漏网，是因为当时的预检用 `import mcp_server.main`（**模块方式**）跑，
-#     **没有复现宿主的启动方式**，于是给了个假绿。所以本脚本第一条就是复现它。
+#     **没有复现Agent的启动方式**，于是给了个假绿。所以本脚本第一条就是复现它。
 #
 # 【怎么跑】
-#   & F:\MCP_Server\.venv\Scripts\python.exe tests\preflight.py
+#   & "<仓库根>\.venv\Scripts\python.exe" "<仓库根>\tests\preflight.py"
 #   退出码 0 = 全绿 → 可以重启；非 0 = **别重启**，先修。
 #
 # ⚠ **必须用上面那条 venv 的解释器，别用 PATH 上的 `python`。**
@@ -38,16 +38,33 @@ MAIN_PY = ROOT / "src" / "mcp_server" / "main.py"
 # ⚠ 2026-09-25：新增 `request_plan_change`（阶段二验收：记「用户要改什么」）→ 9 → 10 个。
 # ⚠ 2026-09-26：新增 `generate_build_orders` + `execute_build`
 #   （阶段三第 2 步：放置表 → 搭建指令表 → 批量落关卡）→ 10 → **12** 个；
-#   同一批还加了 `check_build_target`（阶段三第 1 步的只读检查）→ 最终 **13** 个。
+#   同一批还加了 `check_build_target`（阶段三第 1 步的只读检查）→ 那一批 **13** 个。
 # ⚠ 2026-09-27：曾短暂加过 `generate_layout`（阶段四 · 布局序列化），**当天按用户指令整块回退** ——
-#   理由：阶段一资产表 + 阶段二位置表已是全局权威，那份只是派生件，先不做。所以仍是 **13** 个。
+#   理由：阶段一资产表 + 阶段二位置表已是全局权威，那份只是派生件，先不做。
+# ⚠ 2026-09-27（晚）：新增 `apply_surfaces`（**阶段五 · 第 1 步**：给白膜贴表面材质）
+#   —— 13 → **14** 个。机制是实测出来的（组件级 `overrideMaterials`），见 main.py 那段说明。
+# ⚠ 2026-09-27（晚二）：第四阶段**按用户指令不跳了**，实现成**导出/交换**（消费者明确了：
+#   要在 Blender / UE 之间搬同一套布局）→ 新增 `export_layout`（导出）+ `check_exchange`
+#   （回读对账，只出报告、不改 plan）—— 14 → **16** 个。
 #   ⚠ `tests/check_tools.py` 里那份名单必须与这里逐字一致（本次已同步）。
+# ⚠ 2026-09-29：阶段六**按用户指令扩范围**（不只有灯光 —— 天空/大气/天光/雾/云/后处理/时段
+#   全都要）→ 新增 `setup_environment`（配整套环境：读现值台账 → 幂等 → 写 → 读回核对 →
+#   可回滚、绝不存盘）+ `capture_preview`（按世界坐标摆机位出图，PNG 落 views/preview/，
+#   **不动用户的视口相机**）—— 16 → **18** 个。
+#   ⚠ 阶段六**最终定名「环境搭建」**（当天用户又收回了"相机预览"）：出图归**阶段七** ——
+#     `capture_preview` 仍在工具面里（代码保留、归阶段七用），所以那一批是 **18 个**。
+# ⚠ 2026-09-30：阶段七**只加「评估」这一个工具** —— `evaluate_layout`（落位对账：
+#   plan ↔ 搭建台账 ↔ 关卡现状，**只读**、不碰关卡、不改 plan）→ **19 个**。
+#   ⚠ 闭环**不新造工具**（用户拍板的 A 案）：`request_plan_change` → `generate_plan(patch=…)`
+#     → 重画图 → `confirm_plan` → `execute_build()`（增量）这条链早就通了。
 EXPECTED_TOOLS = [
-    "check_build_target", "confirm_assets", "confirm_elements", "confirm_plan",
-    "execute_build", "generate_build_orders", "generate_plan",
+    "apply_surfaces", "capture_preview",
+    "check_build_target", "check_exchange", "confirm_assets", "confirm_elements",
+    "confirm_plan", "evaluate_layout", "execute_build", "export_layout",
+    "generate_build_orders", "generate_plan",
     "get_asset_list", "get_plan",
     "official_status", "plan_assets", "rename_assets",
-    "request_plan_change",
+    "request_plan_change", "setup_environment",
 ]
 
 FAILED: list[str] = []
@@ -65,7 +82,7 @@ def check(name: str, ok: bool, detail: str = "") -> None:
 
 
 def main() -> int:
-    # --- ① 按**脚本方式**执行 main.py：复现宿主的启动方式，但不会启动 server ---
+    # --- ① 按**脚本方式**执行 main.py：复现Agent的启动方式，但不会启动 server ---
     # run_name 不是 "__main__"，所以文件末尾那句 `if __name__ == "__main__": mcp.run()` 不触发。
     # ⚠ 忠实复现：`python ...\main.py` 时 CPython 会把**脚本所在目录**放进 sys.path[0]，
     #   而 runpy.run_path **不会**。所以这里手动补上，否则预检会比真实启动更严（假红）。
@@ -74,9 +91,9 @@ def main() -> int:
         sys.path.insert(0, script_dir)
     try:
         mod = runpy.run_path(str(MAIN_PY), run_name="not_main")
-        check("① main.py 能按【脚本方式】执行（宿主就是这么起它的）", True)
+        check("① main.py 能按【脚本方式】执行（Agent就是这么起它的）", True)
     except BaseException as exc:                      # BaseException：连 CancelledError 也接住
-        check("① main.py 能按【脚本方式】执行（宿主就是这么起它的）", False,
+        check("① main.py 能按【脚本方式】执行（Agent就是这么起它的）", False,
               f"{type(exc).__name__}: {exc}")
         print("\n**别重启**：先把这个错修掉 —— 它会让整个 server 起不来。")
         return 1
@@ -121,6 +138,7 @@ def main() -> int:
                       "asset_path": "/Game/Fake", "pos": [0.0, 0.0],
                       "footprint_m": [10.0, 8.0], "rot_deg": 0.0, "scale": 1.0, "note": ""}]
         ok_boxes = [{"element_key": "road_fake", "label": "假路", "shape": "plane",
+                     "height_m": 0.15,
                      "pos": [0.0, -15.0], "footprint_m": [90.0, 6.0], "rot_deg": 0.0,
                      "size_source": "预估（预检）", "note": ""}]
         plan = planning.build_plan(ok_assets, ok_boxes, world)

@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # 一条命令：把环境备好 + 把所有已知客户端的 MCP 配置写好
 #
 #   cd <解压出来的目录>
@@ -7,12 +7,16 @@
 # 它做五件事：
 #   ① 找 Python（有 uv 用 uv，没有回退 python -m venv + pip）
 #   ② 建 .venv 装依赖（mcp[cli]>=2.2.0 / anyio>=4.0）
-#   ③ 跑 tests/preflight.py（**脚本方式** —— 复现宿主是怎么起 server 的）
+#   ③ 跑 tests/preflight.py（**脚本方式** —— 复现Agent是怎么起 server 的）
 #   ④ **把已知客户端的配置文件都写好**（已存在的先备份，再加/并我们这一条，不动别人）：
-#        - <根>\mcp.json            ← 豆包 PC（实测它的工作区根就是读这个）/ 通用 stdio 客户端
+#        - <根>\mcp.json            ← 通用 stdio 客户端（读工作区根那个；实测过）
 #        - <根>\.trae\mcp.json      ← Trae（用 ${workspaceFolder}，**不含绝对路径**）
 #        - <根>\.cursor\mcp.json    ← Cursor 项目级（按 Cursor 文档的位置，**未实测**）
-#        - <根>\connect-config.json ← 汇总：DSH 片段 / 通用片段 / 豆包 HTTP 备选 / 自检命令
+#        - <根>\.vscode\mcp.json    ← VS Code 项目级（⚠ 它的键名是 `servers`，**不是** `mcpServers`）
+#        - <根>\connect-config.json ← 汇总：DSH 片段 / 通用片段 / HTTP 备选 / 自检命令
+#      ⚠ **"一份通吃"不存在**：各家读的**文件名不同**、键名也可能不同（VS Code 是 `servers`）——
+#        所以这里给每家各写一份；仓库里**不提交**其中任何一份（它们都是本机生成物，见 .gitignore），
+#        只提交一份 `mcp.json.example` 模板。要不要哪一份由你决定。
 #   ⑤ 打印"下一步该干什么"
 #
 # ⚠ 首次要联网（装依赖）。⚠ 解压路径**别带空格**（Trae 的 command 不允许含空格）。
@@ -83,7 +87,10 @@ function Set-McpEntry {
     param(
         [string]$Path,
         [string]$ServerName,
-        [System.Collections.IDictionary]$Entry
+        [System.Collections.IDictionary]$Entry,
+        # 服务清单挂在哪个**根键**下：多数客户端是 `mcpServers`，**VS Code 是 `servers`**。
+        # （2026-09-29 加：VS Code 的 .vscode/mcp.json 用的就是这个不同的键名。）
+        [string]$RootKey = 'mcpServers'
     )
     $dir = Split-Path $Path -Parent
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
@@ -97,15 +104,15 @@ function Set-McpEntry {
         catch { Warn "原配置解析不了（坏 JSON？）—— 本次按新文件写，原文件见备份：$bak"; $doc = $null }
     }
     if ($null -eq $doc) { $doc = @{} }
-    if (-not $doc.Contains('mcpServers')) { $doc['mcpServers'] = @{} }
-    $doc['mcpServers'][$ServerName] = $Entry
+    if (-not $doc.Contains($RootKey)) { $doc[$RootKey] = @{} }
+    $doc[$RootKey][$ServerName] = $Entry
     ($doc | ConvertTo-Json -Depth 12) | Set-Content -Path $Path -Encoding utf8
-    Say "已写入：$Path（server 名 = $ServerName）"
+    Say "已写入：$Path（根键 = $RootKey，server 名 = $ServerName）"
 }
 
 $serverName = 'scene-stage'
 
-# ① 工作区根 mcp.json —— 豆包 PC 实测就读这个；也是很多 stdio 客户端的通用约定
+# ① 工作区根 mcp.json —— 实测很多 stdio 客户端就读这个（通用约定）
 $genericEntry = [ordered]@{ command = $venvPy; args = @($mainPy) }
 # ② Trae 项目级：用 ${workspaceFolder}，**不含绝对路径**（换机器/换目录都不用改）
 #    ⚠ 单引号是故意的：双引号里 PowerShell 会把 ${workspaceFolder} 当自己的变量展开成空串。
@@ -118,13 +125,23 @@ if (-not $SkipClientConfig) {
     Set-McpEntry -Path (Join-Path $root '.trae\mcp.json')    -ServerName $serverName -Entry $traeEntry
     # Cursor 项目级：按 Cursor 文档的位置写；它大概率不认 ${workspaceFolder}，所以用绝对路径
     Set-McpEntry -Path (Join-Path $root '.cursor\mcp.json')  -ServerName $serverName -Entry $genericEntry
+    # VS Code 项目级：⚠ 它的**根键是 `servers`**（不是 `mcpServers`）—— 所以必须传 -RootKey。
+    # 这里同样用**绝对路径**（不赌它认不认 ${workspaceFolder}；你要可移植就自己换成变量形式）。
+    # ⚠ **单独包一层 try/catch**（2026-09-29 加）：这一份是后加的、还要**新建 `.vscode` 目录** ——
+    #   万一它失败（权限 / 目录被占 / 名字冲突），**不许把前面三份与收尾提示一起带崩**
+    #   （脚本顶层是 `$ErrorActionPreference='Stop'`，不拦就会中断在第 ④ 步）。
+    try {
+        Set-McpEntry -Path (Join-Path $root '.vscode\mcp.json') -ServerName $serverName -Entry $genericEntry -RootKey 'servers'
+    } catch {
+        Warn "VS Code 那份没写成（$($_.Exception.Message)）—— 其余三份与 connect-config.json 不受影响；要它的话手动建 .vscode\mcp.json（根键 servers）。"
+    }
 }
 
 # ③ 汇总片段（给不读工作区文件的客户端，例如 DSH；也是你手动核对用的）
 $cfg = [ordered]@{
     '生成时间' = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     '项目根'   = $root
-    '说明'     = '本目录已自动写好 mcp.json / .trae/mcp.json / .cursor/mcp.json；下面这份是给"不读工作区文件的客户端"（DSH 等）和手动核对的。'
+    '说明'     = '本目录已自动写好 mcp.json / .trae/mcp.json / .cursor/mcp.json / .vscode/mcp.json；下面这份是给"不读工作区文件的客户端"（DSH 等）和手动核对的。⚠ 仓库里**不提交**这四份（都是本机生成物），只提交 mcp.json.example 模板。'
     'DSH（stdio，字段来自 dsh-mcp-client 插件 schema）' = [ordered]@{
         transport  = 'stdio'
         serverName = $serverName
@@ -139,7 +156,7 @@ $cfg = [ordered]@{
         url        = 'http://127.0.0.1:8770/mcp'
         headers    = @{}
     }
-    '豆包 PC（若连接器只让填 URL，起 HTTP 后按这个填）' = [ordered]@{
+    '通用 stdio（若连接器只让填 URL，起 HTTP 后按这个填）' = [ordered]@{
         '传输类型'      = 'HTTP'
         '服务器URL'    = 'http://127.0.0.1:8770/mcp'
         '启动命令'      = "& `"$venvPy`" `"$servePy`""
@@ -158,9 +175,10 @@ Say "汇总片段已写入：$out"
 # --- ⑤ 下一步 -----------------------------------------------------------------
 Write-Host ''
 Write-Host '下一步：' -ForegroundColor Cyan
-Write-Host '  · 豆包 PC ：重启客户端（它按启动时的配置挂载）→ 问它"看看有什么工具"'
+Write-Host '  · 通用 stdio：重启客户端（它按启动时的配置挂载）→ 问它"看看有什么工具"'
 Write-Host '  · Trae    ：设置 → MCP → 打开「启用项目级 MCP」（.trae/mcp.json 已写好，路径不用改）'
 Write-Host '  · Cursor  ：重载窗口（.cursor/mcp.json 已写好）'
+Write-Host '  · VS Code ：重载窗口（.vscode/mcp.json 已写好；它那份的根键是 servers）'
 Write-Host '  · DSH     ：把 connect-config.json 里「DSH（stdio）」那段填进 MCP 设置 → 重启会话'
 Write-Host '  · 连上后第一件事：让 agent 调 get_plan() —— 返回得出来就说明链路通了'
 Write-Host ''

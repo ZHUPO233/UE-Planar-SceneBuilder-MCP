@@ -1,0 +1,178 @@
+{
+  "stage": "阶段二 · 平面放置规划",
+  "unit": "m",
+  "world": {
+    "center": [
+      0.0,
+      0.0
+    ],
+    "size": [
+      120.0,
+      80.0
+    ],
+    "size_source": "阶段一 elements.json 的『地图大小』场景项",
+    "bounds": {
+      "min": [
+        -60.0,
+        -40.0
+      ],
+      "max": [
+        60.0,
+        40.0
+      ]
+    },
+    "coordinate_system": {
+      "handedness": "left",
+      "height_axis": "Z",
+      "forward_axis": "X",
+      "right_axis": "Y",
+      "right_normal_rule": "right_normal(d) = (-dy, dx)"
+    }
+  },
+  "assets": [
+    {
+      "element_key": "house",
+      "label": "住宅 #1（house1）",
+      "pos": [
+        0.0,
+        -20.9
+      ],
+      "footprint_m": [
+        11.13,
+        14.25
+      ],
+      "rot_deg": 0.0,
+      "note": "五元素里的 House。⚠ 就是等下要「故意摆错」的那一栋",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #1",
+      "pos": [
+        12.0,
+        -12.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "五元素里的 Tree（一物一行，共 3 棵）",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #2",
+      "pos": [
+        20.0,
+        -12.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #3",
+      "pos": [
+        28.0,
+        -12.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    }
+  ],
+  "whiteboxes": [
+    {
+      "element_key": "ground",
+      "label": "世界地基（整块底板，铺满世界）",
+      "pos": [
+        0.0,
+        0.0
+      ],
+      "footprint_m": [
+        120.0,
+        80.0
+      ],
+      "rot_deg": 0.0,
+      "note": "第①层世界地基（BUILD_LAYERS 要求它在最前）。尺寸沿用 r24",
+      "z_m": 0.05,
+      "shape": "cube",
+      "size_source": "预估（沿用已确认版本 r24 的尺寸）",
+      "height_m": 0.2
+    },
+    {
+      "element_key": "road",
+      "label": "沥青车行道",
+      "pos": [
+        0.0,
+        0.0
+      ],
+      "footprint_m": [
+        120.0,
+        8.0
+      ],
+      "rot_deg": 0.0,
+      "note": "五元素里的 Road。尺寸沿用 r24（沿街 120 m × 车行道 8 m）",
+      "z_m": 0.175,
+      "shape": "plane",
+      "size_source": "预估（沿用已确认版本 r24 的尺寸）"
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木带（顶 GPT 说的 Prop）",
+      "pos": [
+        -20.0,
+        8.0
+      ],
+      "footprint_m": [
+        12.0,
+        1.2
+      ],
+      "rot_deg": 0.0,
+      "note": "⚠ 元素表里没有 Prop 这一类，用 shrub 顶；放在公路对面 y=+8，与房子 y=-18 不重叠",
+      "shape": "cube",
+      "size_source": "预估（沿用已确认版本 r24 的尺寸）",
+      "height_m": 0.8
+    }
+  ],
+  "params": {
+    "世界地基": "新增 `z_m = -0.05`（米，中心绝对标高）—— 用新字段把你手挪的位置写进 plan。顶面仍按厚度推：−0.05 + 0.10 = **+0.05 m**（与关卡现状一致）",
+    "新字段首次真用": "`z_m` （2026-09-30 用户拍板 D 案加）：不给就按代码口径推（`WHITEBOX_VERTICAL` / `GROUND_Z_M`），给了就以它为准",
+    "用户原话": "A",
+    "签名基线变更": "⚠ 一次性：把 `z_m` 加进逐行签名后，基线里存的旧 6 字段签名与新的 7 字段不再相等 → 变更集显示 7 行全改。确认后基线即为新格式，之后恢复正常。",
+    "住宅 #1": "pos [-20,-18] → **[0,-20.9]**（你手拖到的位置，adopt 读回来是 (0,-2090,15) cm）",
+    "本版变更（补丁）": "按 label 打了 2 条补丁，几何只动了这几处：改 世界地基（整块底板，铺满世界）：z_m -0.05 → 0.05；改 沥青车行道：z_m 0.025 → 0.175"
+  },
+  "previous_elements": {
+    "path": "catalog/elements.json",
+    "confirmed_at": "2026-09-26T04:37:04.524978+00:00",
+    "scene": {
+      "size_m": "120×80 m（阶段一记录）",
+      "time_of_day": "sunset"
+    }
+  },
+  "note": "一个物体一行、自带 pos（平面中心坐标，米）。**没有 count 字段** —— 摆几个就写几行，不许用一条记录代表多个不同位置的物体（那样谁也看不见它们）。已有资产先放（大小是阶段一实测的）、白膜后放（大小要等资产占完位再估）。本数据不依赖任何图片；要图就由 AI 拿这份数据自己画（代码不出图）。",
+  "confirmation": {
+    "required": true,
+    "confirmed": true,
+    "confirmed_by": "用户",
+    "confirmed_at": "2026-09-30T12:12:27.218268+00:00",
+    "note": "已确认。几何一变，指纹就对不上，本次确认自动作废。",
+    "plan_hash": "317785b835c4c3e57d9a2558de9b80c6bc108350723a96d95c982a6fead64471",
+    "user_quote": "落"
+  }
+}

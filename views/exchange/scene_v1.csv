@@ -1,0 +1,91 @@
+﻿id,layer,element_key,kind,label,pos_m,footprint_m,height_m,rot_deg,scale,material,asset_path,folder
+ground|世界地基（整块底板，铺满世界）,① 世界地基,ground,whitebox,世界地基（整块底板，铺满世界）,"0,0,0.05","120,80",0.2,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Lawn,,UEMCP/ground
+grass|草坪 我方路缘草带（人行道↔公路）,② 地皮,grass,whitebox,草坪 我方路缘草带（人行道↔公路）,"0,-6.25,0.125","120,4.5",0.05,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Lawn,,UEMCP/grass
+grass|草坪 住宅带（一整片，y -40～-10）,② 地皮,grass,whitebox,草坪 住宅带（一整片，y -40～-10）,"0,-25,0.125","120,30",0.05,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Lawn,,UEMCP/grass
+grass|草坪 右 #1（对面路缘草带）,② 地皮,grass,whitebox,草坪 右 #1（对面路缘草带）,"0,6,0.125","120,4",0.05,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Lawn,,UEMCP/grass
+grass|草坪 右 #3（路右林带，树下草皮）,② 地皮,grass,whitebox,草坪 右 #3（路右林带，树下草皮）,"0,14.25,0.125","120,9.5",0.05,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Lawn,,UEMCP/grass
+grass|草坪 右 #2（林带外侧）,② 地皮,grass,whitebox,草坪 右 #2（林带外侧）,"0,29.5,0.125","120,21",0.05,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Lawn,,UEMCP/grass
+house|住宅 #1（house1）,③ 建筑层,house,asset,住宅 #1（house1）,"-50,-32,0.15","11.13,14.25",8.0192,90,"16,16,16",,/Game/demo/Item/ItemMesh/House/house1,UEMCP/houses
+house|住宅 #2（house2）,③ 建筑层,house,asset,住宅 #2（house2）,"-28,-32,0.15","9.87,16.41",5.3696,270,"16,16,16",,/Game/demo/Item/ItemMesh/House2/house2,UEMCP/houses
+house|住宅 #3（house1）,③ 建筑层,house,asset,住宅 #3（house1）,"-6,-32,0.15","11.13,14.25",8.0192,90,"16,16,16",,/Game/demo/Item/ItemMesh/House/house1,UEMCP/houses
+house|住宅 #4（house2）,③ 建筑层,house,asset,住宅 #4（house2）,"16,-32,0.15","9.87,16.41",5.3696,270,"16,16,16",,/Game/demo/Item/ItemMesh/House2/house2,UEMCP/houses
+house|住宅 #5（house1）,③ 建筑层,house,asset,住宅 #5（house1）,"38,-32,0.15","11.13,14.25",8.0192,90,"16,16,16",,/Game/demo/Item/ItemMesh/House/house1,UEMCP/houses
+road|沥青车行道,④ 设施层,road,whitebox,沥青车行道,"0,0,-0.075","120,8",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Asphalt,,UEMCP/road
+sidewalk|人行道（我方一侧，沿公路）,④ 设施层,sidewalk,whitebox,人行道（我方一侧，沿公路）,"0,-9.25,0.075","120,1.5",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/sidewalk
+sidewalk|人行道（公路对面）,④ 设施层,sidewalk,whitebox,人行道（公路对面）,"0,8.75,0.075","120,1.5",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/sidewalk
+path|连接路 #1（住宅 #1 ↔ #2 之间，直通公路）,④ 设施层,path,whitebox,连接路 #1（住宅 #1 ↔ #2 之间，直通公路）,"-39.54,-22,0.075","4,36",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|连接路 #2（住宅 #2 ↔ #3 之间，直通公路）,④ 设施层,path,whitebox,连接路 #2（住宅 #2 ↔ #3 之间，直通公路）,"-16.46,-22,0.075","4,36",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|连接路 #3（住宅 #3 ↔ #4 之间，直通公路）,④ 设施层,path,whitebox,连接路 #3（住宅 #3 ↔ #4 之间，直通公路）,"4.46,-22,0.075","4,36",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|连接路 #4（住宅 #4 ↔ #5 之间，直通公路）,④ 设施层,path,whitebox,连接路 #4（住宅 #4 ↔ #5 之间，直通公路）,"27.54,-22,0.075","4,36",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|连接路 #5（房子排东端，直通公路）,④ 设施层,path,whitebox,连接路 #5（房子排东端，直通公路）,"53,-22,0.075","4,36",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #1 朝公路面（灌木带外侧）,④ 设施层,path,whitebox,走道·住宅 #1 朝公路面（灌木带外侧）,"-50,-23.175,0.075","15.93,1.4",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #1 端头 -X,④ 设施层,path,whitebox,走道·住宅 #1 端头 -X,"-57.265,-31.5,0.075","1.4,15.25",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #1 端头 +X,④ 设施层,path,whitebox,走道·住宅 #1 端头 +X,"-42.735,-31.5,0.075","1.4,15.25",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #1 屋后,④ 设施层,path,whitebox,走道·住宅 #1 屋后,"-50,-39.825,0.075","15.93,1.4",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #2 朝公路面（灌木带外侧）,④ 设施层,path,whitebox,走道·住宅 #2 朝公路面（灌木带外侧）,"-28,-22.095,0.075","14.67,1.4",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #2 端头 -X,④ 设施层,path,whitebox,走道·住宅 #2 端头 -X,"-34.635,-31.5,0.075","1.4,17.41",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #2 端头 +X,④ 设施层,path,whitebox,走道·住宅 #2 端头 +X,"-21.365,-31.5,0.075","1.4,17.41",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #2 屋后,④ 设施层,path,whitebox,走道·住宅 #2 屋后,"-28,-40.905,0.075","14.67,1.4",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #3 朝公路面（灌木带外侧）,④ 设施层,path,whitebox,走道·住宅 #3 朝公路面（灌木带外侧）,"-6,-23.175,0.075","15.93,1.4",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #3 端头 -X,④ 设施层,path,whitebox,走道·住宅 #3 端头 -X,"-13.265,-31.5,0.075","1.4,15.25",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #3 端头 +X,④ 设施层,path,whitebox,走道·住宅 #3 端头 +X,"1.265,-31.5,0.075","1.4,15.25",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #3 屋后,④ 设施层,path,whitebox,走道·住宅 #3 屋后,"-6,-39.825,0.075","15.93,1.4",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #4 朝公路面（灌木带外侧）,④ 设施层,path,whitebox,走道·住宅 #4 朝公路面（灌木带外侧）,"16,-22.095,0.075","14.67,1.4",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #4 端头 -X,④ 设施层,path,whitebox,走道·住宅 #4 端头 -X,"9.365,-31.5,0.075","1.4,17.41",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #4 端头 +X,④ 设施层,path,whitebox,走道·住宅 #4 端头 +X,"22.635,-31.5,0.075","1.4,17.41",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #4 屋后,④ 设施层,path,whitebox,走道·住宅 #4 屋后,"16,-40.905,0.075","14.67,1.4",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #5 朝公路面（灌木带外侧）,④ 设施层,path,whitebox,走道·住宅 #5 朝公路面（灌木带外侧）,"38,-23.175,0.075","15.93,1.4",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #5 端头 -X,④ 设施层,path,whitebox,走道·住宅 #5 端头 -X,"30.735,-31.5,0.075","1.4,15.25",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #5 端头 +X,④ 设施层,path,whitebox,走道·住宅 #5 端头 +X,"45.265,-31.5,0.075","1.4,15.25",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+path|走道·住宅 #5 屋后,④ 设施层,path,whitebox,走道·住宅 #5 屋后,"38,-39.825,0.075","15.93,1.4",0.15,0,"1,1,1",/Game/demo/Landscape/mcp_mats/MI_Concrete,,UEMCP/paths
+tree|行道树 路左 #1,⑤ 植被层,tree,asset,行道树 路左 #1,"-48,-6.25,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|行道树 路左 #2,⑤ 植被层,tree,asset,行道树 路左 #2,"-24,-6.25,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|行道树 路左 #3,⑤ 植被层,tree,asset,行道树 路左 #3,"0,-6.25,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|行道树 路左 #4,⑤ 植被层,tree,asset,行道树 路左 #4,"24,-6.25,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|行道树 路左 #5,⑤ 植被层,tree,asset,行道树 路左 #5,"48,-6.25,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #01,⑤ 植被层,tree,asset,路右密林 #01,"-56,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #02,⑤ 植被层,tree,asset,路右密林 #02,"-52,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #03,⑤ 植被层,tree,asset,路右密林 #03,"-48,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #04,⑤ 植被层,tree,asset,路右密林 #04,"-44,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #05,⑤ 植被层,tree,asset,路右密林 #05,"-40,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #06,⑤ 植被层,tree,asset,路右密林 #06,"-36,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #07,⑤ 植被层,tree,asset,路右密林 #07,"-32,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #08,⑤ 植被层,tree,asset,路右密林 #08,"-28,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #09,⑤ 植被层,tree,asset,路右密林 #09,"-24,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #10,⑤ 植被层,tree,asset,路右密林 #10,"-20,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #11,⑤ 植被层,tree,asset,路右密林 #11,"-16,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #12,⑤ 植被层,tree,asset,路右密林 #12,"-12,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #13,⑤ 植被层,tree,asset,路右密林 #13,"-8,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #14,⑤ 植被层,tree,asset,路右密林 #14,"-4,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #15,⑤ 植被层,tree,asset,路右密林 #15,"0,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #16,⑤ 植被层,tree,asset,路右密林 #16,"4,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #17,⑤ 植被层,tree,asset,路右密林 #17,"8,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #18,⑤ 植被层,tree,asset,路右密林 #18,"12,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #19,⑤ 植被层,tree,asset,路右密林 #19,"16,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #20,⑤ 植被层,tree,asset,路右密林 #20,"20,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #21,⑤ 植被层,tree,asset,路右密林 #21,"24,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #22,⑤ 植被层,tree,asset,路右密林 #22,"28,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #23,⑤ 植被层,tree,asset,路右密林 #23,"32,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #24,⑤ 植被层,tree,asset,路右密林 #24,"36,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #25,⑤ 植被层,tree,asset,路右密林 #25,"40,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #26,⑤ 植被层,tree,asset,路右密林 #26,"44,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #27,⑤ 植被层,tree,asset,路右密林 #27,"48,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #28,⑤ 植被层,tree,asset,路右密林 #28,"52,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+tree|路右密林 #29,⑤ 植被层,tree,asset,路右密林 #29,"56,14,0.2475","4.45,3.63",4.977,0,"0.31,0.31,0.31",,/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree,UEMCP/trees
+shrub|灌木·住宅 #1 朝公路面带,⑤ 植被层,shrub,whitebox,灌木·住宅 #1 朝公路面带,"-50,-24.375,0.55","11.13,1",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #1 端头 -X,⑤ 植被层,shrub,whitebox,灌木·住宅 #1 端头 -X,"-56.065,-31.5,0.55","1,15.25",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #1 端头 +X,⑤ 植被层,shrub,whitebox,灌木·住宅 #1 端头 +X,"-43.935,-31.5,0.55","1,15.25",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #2 朝公路面带,⑤ 植被层,shrub,whitebox,灌木·住宅 #2 朝公路面带,"-28,-23.295,0.55","9.87,1",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #2 端头 -X,⑤ 植被层,shrub,whitebox,灌木·住宅 #2 端头 -X,"-33.435,-31.5,0.55","1,17.41",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #2 端头 +X,⑤ 植被层,shrub,whitebox,灌木·住宅 #2 端头 +X,"-22.565,-31.5,0.55","1,17.41",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #3 朝公路面带,⑤ 植被层,shrub,whitebox,灌木·住宅 #3 朝公路面带,"-6,-24.375,0.55","11.13,1",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #3 端头 -X,⑤ 植被层,shrub,whitebox,灌木·住宅 #3 端头 -X,"-12.065,-31.5,0.55","1,15.25",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #3 端头 +X,⑤ 植被层,shrub,whitebox,灌木·住宅 #3 端头 +X,"0.065,-31.5,0.55","1,15.25",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #4 朝公路面带,⑤ 植被层,shrub,whitebox,灌木·住宅 #4 朝公路面带,"16,-23.295,0.55","9.87,1",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #4 端头 -X,⑤ 植被层,shrub,whitebox,灌木·住宅 #4 端头 -X,"10.565,-31.5,0.55","1,17.41",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #4 端头 +X,⑤ 植被层,shrub,whitebox,灌木·住宅 #4 端头 +X,"21.435,-31.5,0.55","1,17.41",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #5 朝公路面带,⑤ 植被层,shrub,whitebox,灌木·住宅 #5 朝公路面带,"38,-24.375,0.55","11.13,1",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #5 端头 -X,⑤ 植被层,shrub,whitebox,灌木·住宅 #5 端头 -X,"31.935,-31.5,0.55","1,15.25",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木·住宅 #5 端头 +X,⑤ 植被层,shrub,whitebox,灌木·住宅 #5 端头 +X,"44.065,-31.5,0.55","1,15.25",0.8,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木幼树根部植被丛,⑤ 植被层,shrub,whitebox,灌木幼树根部植被丛,"0,-6.25,0.45","3,3",0.6,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs
+shrub|灌木路对面丛,⑤ 植被层,shrub,whitebox,灌木路对面丛,"20,6,0.75","6,2",1.2,0,"1,1,1",/Game/Fab/Materials/Standard/M_MS_Foliage,,UEMCP/shrubs

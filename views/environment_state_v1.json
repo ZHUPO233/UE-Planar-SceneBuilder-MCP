@@ -1,0 +1,1433 @@
+{
+  "level": "/Game/demo/Landscape/MCP",
+  "created_at": "2026-09-29T06:57:29.190111+00:00",
+  "_doc": [
+    "环境台账：**第一次改之前**每个环境因素的现值（含太阳的整份变换）。",
+    "用途：`setup_environment(restore=true)` 照着它把关卡写回原样。",
+    "⚠ 同一因素只记第一次 —— 覆盖式记录会让回滚退不回原地。",
+    "⚠ 这是我们自己的 JSON，不是 UE 存盘。"
+  ],
+  "factors": {
+    "sun": {
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.DirectionalLight_0",
+      "component": "LightComponent0",
+      "first_preset": "sunset",
+      "recorded_at": "2026-09-29T06:57:29.190130+00:00",
+      "props": {
+        "bUseTemperature": true,
+        "intensity": 6,
+        "lightColor": {
+          "r": 1,
+          "g": 1,
+          "b": 1,
+          "a": 1
+        },
+        "temperature": 6500,
+        "volumetricScatteringIntensity": 1
+      },
+      "settings": {},
+      "transform": {
+        "rotation": {
+          "pitch": -49.51711035415601,
+          "yaw": -10.308600787602979,
+          "roll": 112.36067200001972
+        }
+      }
+    },
+    "sky_atmosphere": {
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.SkyAtmosphere_0",
+      "component": "SkyAtmosphereComponent",
+      "first_preset": "sunset",
+      "recorded_at": "2026-09-29T06:57:29.190141+00:00",
+      "props": {
+        "heightFogContribution": 1,
+        "mieScatteringScale": 0.003996000159531832,
+        "rayleighScatteringScale": 0.03310000151395798,
+        "skyLuminanceFactor": {
+          "r": 1,
+          "g": 1,
+          "b": 1,
+          "a": 1
+        }
+      },
+      "settings": {},
+      "transform": {}
+    },
+    "sky_light": {
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.SkyLight_0",
+      "component": "SkyLightComponent0",
+      "first_preset": "sunset",
+      "recorded_at": "2026-09-29T06:57:29.190148+00:00",
+      "props": {
+        "intensity": 1,
+        "lightColor": {
+          "r": 1,
+          "g": 1,
+          "b": 1,
+          "a": 1
+        }
+      },
+      "settings": {},
+      "transform": {}
+    },
+    "fog": {
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.ExponentialHeightFog_0",
+      "component": "HeightFogComponent0",
+      "first_preset": "sunset",
+      "recorded_at": "2026-09-29T06:57:29.190153+00:00",
+      "props": {
+        "bEnableVolumetricFog": false,
+        "directionalInscatteringLuminance": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "fogDensity": 0.04360000044107437,
+        "fogHeightFalloff": 0.20000000298023224,
+        "fogInscatteringLuminance": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "startDistance": 0,
+        "volumetricFogAlbedo": {
+          "r": 1,
+          "g": 1,
+          "b": 1,
+          "a": 1
+        },
+        "volumetricFogExtinctionScale": 1
+      },
+      "settings": {},
+      "transform": {}
+    },
+    "cloud": {
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.VolumetricCloud_0",
+      "component": "VolumetricCloudComponent",
+      "first_preset": "sunset",
+      "recorded_at": "2026-09-29T06:57:29.190158+00:00",
+      "props": {
+        "layerBottomAltitude": 5,
+        "layerHeight": 10,
+        "tracingMaxDistance": 200
+      },
+      "settings": {},
+      "transform": {}
+    },
+    "post_process": {
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.PostProcessVolume_1",
+      "component": "",
+      "first_preset": "sunset",
+      "recorded_at": "2026-09-29T06:57:29.190163+00:00",
+      "props": {
+        "bUnbound": false,
+        "blendWeight": 1,
+        "priority": 0
+      },
+      "settings": {
+        "bOverride_AutoExposureMinBrightness": false,
+        "autoExposureMinBrightness": -10,
+        "bOverride_AutoExposureMaxBrightness": false,
+        "autoExposureMaxBrightness": 20,
+        "bOverride_AutoExposureBias": false,
+        "autoExposureBias": 1,
+        "bOverride_BloomIntensity": false,
+        "bloomIntensity": 0.675000011920929,
+        "bOverride_BloomThreshold": false,
+        "bloomThreshold": -1,
+        "bOverride_WhiteTemp": false,
+        "whiteTemp": 6500,
+        "bOverride_VignetteIntensity": false,
+        "vignetteIntensity": 0.4000000059604645,
+        "bOverride_FilmGrainIntensity": false,
+        "filmGrainIntensity": 0,
+        "bOverride_SceneFringeIntensity": false,
+        "sceneFringeIntensity": 0,
+        "bOverride_ToneCurveAmount": false,
+        "toneCurveAmount": 1
+      },
+      "transform": {}
+    },
+    "local_fog": {
+      "actor": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.LocalFogVolume_0",
+      "component": "LocalFogVolumeComponent",
+      "first_preset": "sunset",
+      "recorded_at": "2026-09-29T07:40:16.415126+00:00",
+      "props": {
+        "fogAlbedo": {
+          "r": 1,
+          "g": 1,
+          "b": 1,
+          "a": 1
+        },
+        "fogEmissive": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "fogStartDistance": 0,
+        "heightFogExtinction": 1,
+        "heightFogFalloff": 1000,
+        "radialFogExtinction": 1
+      },
+      "settings": {},
+      "transform": {},
+      "material": {}
+    }
+  },
+  "history": [
+    {
+      "at": "2026-09-29T06:57:29.190168+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {
+        "sun": {
+          "intensity": 3.2,
+          "temperature": 3200.0,
+          "lightColor": {
+            "r": 1.0,
+            "g": 0.82,
+            "b": 0.62,
+            "a": 1.0
+          },
+          "volumetricScatteringIntensity": 1.4,
+          "_rotation": {
+            "pitch": -8.0,
+            "yaw": -22.0,
+            "roll": 0.0
+          }
+        },
+        "sky_atmosphere": {
+          "rayleighScatteringScale": 0.045,
+          "mieScatteringScale": 0.006,
+          "skyLuminanceFactor": {
+            "r": 1.0,
+            "g": 0.86,
+            "b": 0.72,
+            "a": 1.0
+          }
+        },
+        "sky_light": {
+          "intensity": 0.7,
+          "lightColor": {
+            "r": 1.0,
+            "g": 0.86,
+            "b": 0.72,
+            "a": 1.0
+          }
+        },
+        "fog": {
+          "fogDensity": 0.02,
+          "fogInscatteringLuminance": {
+            "r": 0.35,
+            "g": 0.22,
+            "b": 0.16,
+            "a": 1.0
+          },
+          "directionalInscatteringLuminance": {
+            "r": 0.9,
+            "g": 0.55,
+            "b": 0.3,
+            "a": 1.0
+          },
+          "bEnableVolumetricFog": true,
+          "volumetricFogAlbedo": {
+            "r": 1.0,
+            "g": 0.85,
+            "b": 0.75,
+            "a": 1.0
+          }
+        },
+        "cloud": {
+          "layerBottomAltitude": 4.0,
+          "layerHeight": 8.0,
+          "tracingMaxDistance": 60.0
+        },
+        "post_process": {
+          "bUnbound": true,
+          "priority": 1,
+          "settings": {
+            "bOverride_TemperatureType": false,
+            "bOverride_WhiteTemp": true,
+            "bOverride_WhiteTint": false,
+            "bOverride_ColorSaturation": false,
+            "bOverride_ColorContrast": false,
+            "bOverride_ColorGamma": false,
+            "bOverride_ColorGain": false,
+            "bOverride_ColorOffset": false,
+            "bOverride_ColorSaturationShadows": false,
+            "bOverride_ColorContrastShadows": false,
+            "bOverride_ColorGammaShadows": false,
+            "bOverride_ColorGainShadows": false,
+            "bOverride_ColorOffsetShadows": false,
+            "bOverride_ColorSaturationMidtones": false,
+            "bOverride_ColorContrastMidtones": false,
+            "bOverride_ColorGammaMidtones": false,
+            "bOverride_ColorGainMidtones": false,
+            "bOverride_ColorOffsetMidtones": false,
+            "bOverride_ColorSaturationHighlights": false,
+            "bOverride_ColorContrastHighlights": false,
+            "bOverride_ColorGammaHighlights": false,
+            "bOverride_ColorGainHighlights": false,
+            "bOverride_ColorOffsetHighlights": false,
+            "bOverride_ColorCorrectionShadowsMax": false,
+            "bOverride_ColorCorrectionHighlightsMin": false,
+            "bOverride_ColorCorrectionHighlightsMax": false,
+            "bOverride_BlueCorrection": false,
+            "bOverride_ExpandGamut": false,
+            "bOverride_ToneCurveAmount": true,
+            "bOverride_TonemappingMethod": false,
+            "bOverride_FilmSlope": false,
+            "bOverride_FilmToe": false,
+            "bOverride_FilmShoulder": false,
+            "bOverride_FilmBlackClip": false,
+            "bOverride_FilmWhiteClip": false,
+            "bOverride_SceneColorTint": false,
+            "bOverride_SceneFringeIntensity": true,
+            "bOverride_ChromaticAberrationStartOffset": false,
+            "bOverride_bMegaLights": false,
+            "bOverride_MegaLightsFrontLayerTranslucency": false,
+            "bOverride_AmbientCubemapTint": false,
+            "bOverride_AmbientCubemapIntensity": false,
+            "bOverride_BloomMethod": false,
+            "bOverride_BloomIntensity": true,
+            "bOverride_BloomGaussianIntensity": false,
+            "bOverride_BloomThreshold": true,
+            "bOverride_Bloom1Tint": false,
+            "bOverride_Bloom1Size": false,
+            "bOverride_Bloom2Size": false,
+            "bOverride_Bloom2Tint": false,
+            "bOverride_Bloom3Tint": false,
+            "bOverride_Bloom3Size": false,
+            "bOverride_Bloom4Tint": false,
+            "bOverride_Bloom4Size": false,
+            "bOverride_Bloom5Tint": false,
+            "bOverride_Bloom5Size": false,
+            "bOverride_Bloom6Tint": false,
+            "bOverride_Bloom6Size": false,
+            "bOverride_BloomSizeScale": false,
+            "bOverride_BloomConvolutionIntensity": false,
+            "bOverride_BloomConvolutionTexture": false,
+            "bOverride_BloomConvolutionScatterDispersion": false,
+            "bOverride_BloomConvolutionSize": false,
+            "bOverride_BloomConvolutionCenterUV": false,
+            "bOverride_BloomConvolutionPreFilterMin": false,
+            "bOverride_BloomConvolutionPreFilterMax": false,
+            "bOverride_BloomConvolutionPreFilterMult": false,
+            "bOverride_BloomConvolutionBufferScale": false,
+            "bOverride_BloomDirtMaskIntensity": false,
+            "bOverride_BloomDirtMaskTint": false,
+            "bOverride_BloomDirtMask": false,
+            "bOverride_CameraShutterSpeed": false,
+            "bOverride_CameraISO": false,
+            "bOverride_AutoExposureMethod": false,
+            "bOverride_AutoExposureLowPercent": false,
+            "bOverride_AutoExposureHighPercent": false,
+            "bOverride_AutoExposureMinBrightness": true,
+            "bOverride_AutoExposureMaxBrightness": true,
+            "bOverride_AutoExposureSpeedUp": false,
+            "bOverride_AutoExposureSpeedDown": false,
+            "bOverride_AutoExposureBias": true,
+            "bOverride_AutoExposureBiasCurve": false,
+            "bOverride_AutoExposureMeterMask": false,
+            "bOverride_AutoExposureApplyPhysicalCameraExposure": false,
+            "bOverride_HistogramLogMin": false,
+            "bOverride_HistogramLogMax": false,
+            "bOverride_LocalExposureMethod": false,
+            "bOverride_LocalExposureHighlightContrastScale": false,
+            "bOverride_LocalExposureShadowContrastScale": false,
+            "bOverride_LocalExposureHighlightContrastCurve": false,
+            "bOverride_LocalExposureShadowContrastCurve": false,
+            "bOverride_LocalExposureHighlightThreshold": false,
+            "bOverride_LocalExposureShadowThreshold": false,
+            "bOverride_LocalExposureDetailStrength": false,
+            "bOverride_LocalExposureBlurredLuminanceBlend": false,
+            "bOverride_LocalExposureBlurredLuminanceKernelSizePercent": false,
+            "bOverride_LocalExposureHighlightThresholdStrength": false,
+            "bOverride_LocalExposureShadowThresholdStrength": false,
+            "bOverride_LocalExposureMiddleGreyBias": false,
+            "bOverride_LensFlareIntensity": false,
+            "bOverride_LensFlareTint": false,
+            "bOverride_LensFlareTints": false,
+            "bOverride_LensFlareBokehSize": false,
+            "bOverride_LensFlareBokehShape": false,
+            "bOverride_LensFlareThreshold": false,
+            "bOverride_VignetteIntensity": true,
+            "bOverride_VignetteType": false,
+            "bOverride_VignetteCenter": false,
+            "bOverride_VignetteColor": false,
+            "bOverride_VignetteSize": false,
+            "bOverride_VignetteSoftness": false,
+            "bOverride_VignetteTexture": false,
+            "bOverride_Sharpen": false,
+            "bOverride_FilmGrainIntensity": true,
+            "bOverride_FilmGrainIntensityShadows": false,
+            "bOverride_FilmGrainIntensityMidtones": false,
+            "bOverride_FilmGrainIntensityHighlights": false,
+            "bOverride_FilmGrainShadowsMax": false,
+            "bOverride_FilmGrainHighlightsMin": false,
+            "bOverride_FilmGrainHighlightsMax": false,
+            "bOverride_FilmGrainScale": false,
+            "bOverride_FilmGrainTexture": false,
+            "bOverride_AmbientOcclusionIntensity": false,
+            "bOverride_AmbientOcclusionStaticFraction": false,
+            "bOverride_AmbientOcclusionRadius": false,
+            "bOverride_AmbientOcclusionFadeDistance": false,
+            "bOverride_AmbientOcclusionFadeRadius": false,
+            "bOverride_AmbientOcclusionRadiusInWS": false,
+            "bOverride_AmbientOcclusionPower": false,
+            "bOverride_AmbientOcclusionBias": false,
+            "bOverride_AmbientOcclusionQuality": false,
+            "bOverride_AmbientOcclusionMipBlend": false,
+            "bOverride_AmbientOcclusionMipScale": false,
+            "bOverride_AmbientOcclusionMipThreshold": false,
+            "bOverride_AmbientOcclusionTemporalBlendWeight": false,
+            "bOverride_RayTracingAO": false,
+            "bOverride_RayTracingAOSamplesPerPixel": false,
+            "bOverride_RayTracingAOIntensity": false,
+            "bOverride_RayTracingAORadius": false,
+            "bOverride_IndirectLightingColor": false,
+            "bOverride_IndirectLightingIntensity": false,
+            "bOverride_ColorGradingIntensity": false,
+            "bOverride_ColorGradingLUT": false,
+            "bOverride_DepthOfFieldEnabled": false,
+            "bOverride_DepthOfFieldFocalDistance": false,
+            "bOverride_DepthOfFieldFstop": false,
+            "bOverride_DepthOfFieldMinFstop": false,
+            "bOverride_DepthOfFieldBladeCount": false,
+            "bOverride_DepthOfFieldSensorWidth": false,
+            "bOverride_DepthOfFieldSqueezeFactor": false,
+            "bOverride_DepthOfFieldDepthBlurRadius": false,
+            "bOverride_DepthOfFieldUseHairDepth": false,
+            "bOverride_DepthOfFieldPetzvalBokeh": false,
+            "bOverride_DepthOfFieldPetzvalBokehFalloff": false,
+            "bOverride_DepthOfFieldPetzvalExclusionBoxExtents": false,
+            "bOverride_DepthOfFieldPetzvalExclusionBoxRadius": false,
+            "bOverride_DepthOfFieldAspectRatioScalar": false,
+            "bOverride_DepthOfFieldMatteBoxFlags": false,
+            "bOverride_DepthOfFieldBarrelRadius": false,
+            "bOverride_DepthOfFieldBarrelLength": false,
+            "bOverride_DepthOfFieldDepthBlurAmount": false,
+            "bOverride_DepthOfFieldFocalRegion": false,
+            "bOverride_DepthOfFieldNearTransitionRegion": false,
+            "bOverride_DepthOfFieldFarTransitionRegion": false,
+            "bOverride_DepthOfFieldScale": false,
+            "bOverride_DepthOfFieldNearBlurSize": false,
+            "bOverride_DepthOfFieldFarBlurSize": false,
+            "bOverride_MobileHQGaussian": false,
+            "bOverride_DepthOfFieldOcclusion": false,
+            "bOverride_DepthOfFieldSkyFocusDistance": false,
+            "bOverride_DepthOfFieldVignetteSize": false,
+            "bOverride_MotionBlurAmount": false,
+            "bOverride_MotionBlurMax": false,
+            "bOverride_MotionBlurTargetFPS": false,
+            "bOverride_MotionBlurPerObjectSize": false,
+            "bOverride_ReflectionMethod": false,
+            "bOverride_LumenReflectionQuality": false,
+            "bOverride_ScreenSpaceReflectionIntensity": false,
+            "bOverride_ScreenSpaceReflectionQuality": false,
+            "bOverride_ScreenSpaceReflectionMaxRoughness": false,
+            "bOverride_ScreenSpaceReflectionRoughnessScale": false,
+            "bOverride_UserFlags": false,
+            "bOverride_RayTracingReflectionsMaxRoughness": false,
+            "bOverride_RayTracingReflectionsMaxBounces": false,
+            "bOverride_RayTracingReflectionsSamplesPerPixel": false,
+            "bOverride_RayTracingReflectionsShadows": false,
+            "bOverride_RayTracingReflectionsTranslucency": false,
+            "bOverride_TranslucencyType": false,
+            "bOverride_RayTracingTranslucencyMaxRoughness": false,
+            "bOverride_RayTracingTranslucencyRefractionRays": false,
+            "bOverride_RayTracingTranslucencySamplesPerPixel": false,
+            "bOverride_RayTracingTranslucencyShadows": false,
+            "bOverride_RayTracingTranslucencyRefraction": false,
+            "bOverride_RayTracingTranslucencyMaxPrimaryHitEvents": false,
+            "bOverride_RayTracingTranslucencyMaxSecondaryHitEvents": false,
+            "bOverride_RayTracingTranslucencyUseRayTracedRefraction": false,
+            "bOverride_DynamicGlobalIlluminationMethod": false,
+            "bOverride_LumenSceneLightingQuality": false,
+            "bOverride_LumenSceneDetail": false,
+            "bOverride_LumenSceneViewDistance": false,
+            "bOverride_LumenSceneLightingUpdateSpeed": false,
+            "bOverride_LumenFinalGatherQuality": false,
+            "bOverride_LumenFinalGatherLightingUpdateSpeed": false,
+            "bOverride_LumenFinalGatherScreenTraces": false,
+            "bOverride_LumenMaxTraceDistance": false,
+            "bOverride_LumenDiffuseColorBoost": false,
+            "bOverride_LumenAmbientOcclusionIntensity": false,
+            "bOverride_LumenSkylightLeaking": false,
+            "bOverride_LumenSkylightLeakingTint": false,
+            "bOverride_LumenFullSkylightLeakingDistance": false,
+            "bOverride_LumenRayLightingMode": false,
+            "bOverride_LumenReflectionsScreenTraces": false,
+            "bOverride_LumenFrontLayerTranslucencyReflections": false,
+            "bOverride_LumenMaxRoughnessToTraceReflections": false,
+            "bOverride_LumenMaxReflectionBounces": false,
+            "bOverride_LumenMaxRefractionBounces": false,
+            "bOverride_LumenSurfaceCacheResolution": false,
+            "bOverride_RayTracingGI": false,
+            "bOverride_RayTracingGIMaxBounces": false,
+            "bOverride_RayTracingGISamplesPerPixel": false,
+            "bOverride_PathTracingMaxBounces": false,
+            "bOverride_PathTracingSamplesPerPixel": false,
+            "bOverride_PathTracingMaxPathIntensity": false,
+            "bOverride_PathTracingEnableEmissiveMaterials": false,
+            "bOverride_PathTracingEnableReferenceDOF": false,
+            "bOverride_PathTracingEnableReferenceAtmosphere": false,
+            "bOverride_PathTracingEnableDenoiser": false,
+            "bOverride_PathTracingIncludeEmissive": false,
+            "bOverride_PathTracingIncludeDiffuse": false,
+            "bOverride_PathTracingIncludeIndirectDiffuse": false,
+            "bOverride_PathTracingIncludeSpecular": false,
+            "bOverride_PathTracingIncludeIndirectSpecular": false,
+            "bOverride_PathTracingIncludeVolume": false,
+            "bOverride_PathTracingIncludeIndirectVolume": false,
+            "bMobileHQGaussian": false,
+            "bloomMethod": "BM_SOG",
+            "autoExposureMethod": "AEM_Histogram",
+            "temperatureType": "TEMP_WhiteBalance",
+            "whiteTemp": 5400.0,
+            "whiteTint": 0,
+            "colorSaturation": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorContrast": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorGamma": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorGain": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorOffset": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 0
+            },
+            "colorSaturationShadows": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorContrastShadows": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorGammaShadows": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorGainShadows": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorOffsetShadows": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 0
+            },
+            "colorSaturationMidtones": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorContrastMidtones": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorGammaMidtones": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorGainMidtones": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorOffsetMidtones": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 0
+            },
+            "colorSaturationHighlights": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorContrastHighlights": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorGammaHighlights": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorGainHighlights": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "colorOffsetHighlights": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 0
+            },
+            "colorCorrectionHighlightsMin": 0.5,
+            "colorCorrectionHighlightsMax": 1,
+            "colorCorrectionShadowsMax": 0.09000000357627869,
+            "blueCorrection": 0.6000000238418579,
+            "expandGamut": 1,
+            "toneCurveAmount": 0.2,
+            "tonemappingMethod": "Filmic",
+            "filmSlope": 0.8799999952316284,
+            "filmToe": 0.550000011920929,
+            "filmShoulder": 0.25999999046325684,
+            "filmBlackClip": 0,
+            "filmWhiteClip": 0.03999999910593033,
+            "sceneColorTint": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            },
+            "sceneFringeIntensity": 1.6,
+            "chromaticAberrationStartOffset": 0,
+            "bloomIntensity": 0.9,
+            "bloomGaussianIntensity": 1,
+            "bloomThreshold": -0.2,
+            "bloomSizeScale": 4,
+            "bloom1Size": 0.30000001192092896,
+            "bloom2Size": 1,
+            "bloom3Size": 2,
+            "bloom4Size": 10,
+            "bloom5Size": 30,
+            "bloom6Size": 64,
+            "bloom1Tint": {
+              "r": 0.3465000092983246,
+              "g": 0.3465000092983246,
+              "b": 0.3465000092983246,
+              "a": 1
+            },
+            "bloom2Tint": {
+              "r": 0.1379999965429306,
+              "g": 0.1379999965429306,
+              "b": 0.1379999965429306,
+              "a": 1
+            },
+            "bloom3Tint": {
+              "r": 0.11760000139474869,
+              "g": 0.11760000139474869,
+              "b": 0.11760000139474869,
+              "a": 1
+            },
+            "bloom4Tint": {
+              "r": 0.06599999964237213,
+              "g": 0.06599999964237213,
+              "b": 0.06599999964237213,
+              "a": 1
+            },
+            "bloom5Tint": {
+              "r": 0.06599999964237213,
+              "g": 0.06599999964237213,
+              "b": 0.06599999964237213,
+              "a": 1
+            },
+            "bloom6Tint": {
+              "r": 0.061000000685453415,
+              "g": 0.061000000685453415,
+              "b": 0.061000000685453415,
+              "a": 1
+            },
+            "bloomConvolutionIntensity": 1,
+            "bloomConvolutionScatterDispersion": 1,
+            "bloomConvolutionSize": 1,
+            "bloomConvolutionTexture": "None",
+            "bloomConvolutionCenterUV": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "bloomConvolutionPreFilterMin": 7,
+            "bloomConvolutionPreFilterMax": 15000,
+            "bloomConvolutionPreFilterMult": 15,
+            "bloomConvolutionBufferScale": 0.13300000131130219,
+            "bloomDirtMask": "None",
+            "bloomDirtMaskIntensity": 0,
+            "bloomDirtMaskTint": {
+              "r": 0.5,
+              "g": 0.5,
+              "b": 0.5,
+              "a": 1
+            },
+            "dynamicGlobalIlluminationMethod": "Lumen",
+            "indirectLightingColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            },
+            "indirectLightingIntensity": 1,
+            "lumenRayLightingMode": "Default",
+            "lumenSceneLightingQuality": 1,
+            "lumenSceneDetail": 1,
+            "lumenSceneViewDistance": 20000,
+            "lumenSceneLightingUpdateSpeed": 1,
+            "lumenFinalGatherQuality": 1,
+            "lumenFinalGatherLightingUpdateSpeed": 1,
+            "lumenFinalGatherScreenTraces": true,
+            "lumenMaxTraceDistance": 20000,
+            "lumenDiffuseColorBoost": 1,
+            "lumenAmbientOcclusionIntensity": 1,
+            "lumenSkylightLeaking": 0,
+            "lumenSkylightLeakingTint": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            },
+            "lumenFullSkylightLeakingDistance": 1000,
+            "lumenSurfaceCacheResolution": 1,
+            "reflectionMethod": "Lumen",
+            "lumenReflectionQuality": 1,
+            "lumenReflectionsScreenTraces": true,
+            "lumenFrontLayerTranslucencyReflections": false,
+            "lumenMaxRoughnessToTraceReflections": 0.4000000059604645,
+            "lumenMaxReflectionBounces": 1,
+            "lumenMaxRefractionBounces": 0,
+            "screenSpaceReflectionIntensity": 100,
+            "screenSpaceReflectionQuality": 50,
+            "screenSpaceReflectionMaxRoughness": 0.6000000238418579,
+            "bMegaLights": true,
+            "megaLightsFrontLayerTranslucency": false,
+            "ambientCubemapTint": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            },
+            "ambientCubemapIntensity": 1,
+            "ambientCubemap": "None",
+            "cameraShutterSpeed": 60,
+            "cameraISO": 100,
+            "depthOfFieldFstop": 4,
+            "depthOfFieldMinFstop": 1.2000000476837158,
+            "depthOfFieldBladeCount": 5,
+            "autoExposureBias": 0.2,
+            "autoExposureBiasBackup": 0,
+            "bOverride_AutoExposureBiasBackup": false,
+            "autoExposureApplyPhysicalCameraExposure": true,
+            "autoExposureBiasCurve": "None",
+            "autoExposureMeterMask": "None",
+            "autoExposureLowPercent": 10,
+            "autoExposureHighPercent": 90,
+            "autoExposureMinBrightness": 0.3,
+            "autoExposureMaxBrightness": 2.0,
+            "autoExposureSpeedUp": 3,
+            "autoExposureSpeedDown": 1,
+            "histogramLogMin": -10,
+            "histogramLogMax": 20,
+            "localExposureMethod": "Bilateral",
+            "localExposureHighlightContrastScale": 1,
+            "localExposureShadowContrastScale": 1,
+            "localExposureHighlightContrastCurve": "None",
+            "localExposureShadowContrastCurve": "None",
+            "localExposureHighlightThreshold": 0,
+            "localExposureShadowThreshold": 0,
+            "localExposureDetailStrength": 1,
+            "localExposureBlurredLuminanceBlend": 0.6000000238418579,
+            "localExposureBlurredLuminanceKernelSizePercent": 50,
+            "localExposureHighlightThresholdStrength": 1,
+            "localExposureShadowThresholdStrength": 1,
+            "localExposureMiddleGreyBias": 0,
+            "lensFlareIntensity": 1,
+            "lensFlareTint": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            },
+            "lensFlareBokehSize": 3,
+            "lensFlareThreshold": 8,
+            "lensFlareBokehShape": "None",
+            "lensFlareTints": [
+              {
+                "r": 1,
+                "g": 0.800000011920929,
+                "b": 0.4000000059604645,
+                "a": 0.6000000238418579
+              },
+              {
+                "r": 1,
+                "g": 1,
+                "b": 0.6000000238418579,
+                "a": 0.5299999713897705
+              },
+              {
+                "r": 0.800000011920929,
+                "g": 0.800000011920929,
+                "b": 1,
+                "a": 0.46000000834465027
+              },
+              {
+                "r": 0.5,
+                "g": 1,
+                "b": 0.4000000059604645,
+                "a": 0.38999998569488525
+              },
+              {
+                "r": 0.5,
+                "g": 0.800000011920929,
+                "b": 1,
+                "a": 0.3100000023841858
+              },
+              {
+                "r": 0.8999999761581421,
+                "g": 1,
+                "b": 0.800000011920929,
+                "a": 0.27000001072883606
+              },
+              {
+                "r": 1,
+                "g": 0.800000011920929,
+                "b": 0.4000000059604645,
+                "a": 0.2199999988079071
+              },
+              {
+                "r": 0.8999999761581421,
+                "g": 0.699999988079071,
+                "b": 0.699999988079071,
+                "a": 0.15000000596046448
+              }
+            ],
+            "vignetteIntensity": 0.45,
+            "vignetteType": "CosineFourthLaw",
+            "vignetteCenter": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "vignetteColor": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 1
+            },
+            "vignetteSize": {
+              "x": 1,
+              "y": 1
+            },
+            "vignetteSoftness": 5,
+            "vignetteTexture": "None",
+            "sharpen": 0,
+            "filmGrainIntensity": 0.12,
+            "filmGrainIntensityShadows": 1,
+            "filmGrainIntensityMidtones": 1,
+            "filmGrainIntensityHighlights": 1,
+            "filmGrainShadowsMax": 0.09000000357627869,
+            "filmGrainHighlightsMin": 0.5,
+            "filmGrainHighlightsMax": 1,
+            "filmGrainScale": {
+              "x": 1,
+              "y": 1
+            },
+            "filmGrainTexture": "None",
+            "ambientOcclusionIntensity": 0.5,
+            "ambientOcclusionStaticFraction": 1,
+            "ambientOcclusionRadius": 200,
+            "ambientOcclusionRadiusInWS": false,
+            "ambientOcclusionFadeDistance": 8000,
+            "ambientOcclusionFadeRadius": 5000,
+            "ambientOcclusionPower": 2,
+            "ambientOcclusionBias": 3,
+            "ambientOcclusionQuality": 50,
+            "ambientOcclusionMipBlend": 0.6000000238418579,
+            "ambientOcclusionMipScale": 1.7000000476837158,
+            "ambientOcclusionMipThreshold": 0.009999999776482582,
+            "ambientOcclusionTemporalBlendWeight": 0.10000000149011612,
+            "rayTracingAO": false,
+            "rayTracingAOSamplesPerPixel": 1,
+            "rayTracingAOIntensity": 1,
+            "rayTracingAORadius": 200,
+            "colorGradingIntensity": 1,
+            "colorGradingLUT": "None",
+            "depthOfFieldEnabled": true,
+            "depthOfFieldSensorWidth": 24.576000213623047,
+            "depthOfFieldSqueezeFactor": 1,
+            "depthOfFieldFocalDistance": 0,
+            "depthOfFieldDepthBlurAmount": 1,
+            "depthOfFieldDepthBlurRadius": 0,
+            "depthOfFieldUseHairDepth": false,
+            "depthOfFieldPetzvalBokeh": 0,
+            "depthOfFieldPetzvalBokehFalloff": 1,
+            "depthOfFieldPetzvalExclusionBoxExtents": {
+              "x": 0,
+              "y": 0
+            },
+            "depthOfFieldPetzvalExclusionBoxRadius": 0,
+            "depthOfFieldAspectRatioScalar": 1,
+            "depthOfFieldBarrelRadius": 5,
+            "depthOfFieldBarrelLength": 0,
+            "depthOfFieldMatteBoxFlags": [
+              {
+                "pitch": 0,
+                "roll": 0,
+                "length": 0
+              },
+              {
+                "pitch": 0,
+                "roll": 0,
+                "length": 0
+              },
+              {
+                "pitch": 0,
+                "roll": 0,
+                "length": 0
+              }
+            ],
+            "depthOfFieldFocalRegion": 0,
+            "depthOfFieldNearTransitionRegion": 300,
+            "depthOfFieldFarTransitionRegion": 500,
+            "depthOfFieldScale": 0,
+            "depthOfFieldNearBlurSize": 15,
+            "depthOfFieldFarBlurSize": 15,
+            "depthOfFieldOcclusion": 0.4000000059604645,
+            "depthOfFieldSkyFocusDistance": 0,
+            "depthOfFieldVignetteSize": 200,
+            "motionBlurAmount": 0.5,
+            "motionBlurMax": 5,
+            "motionBlurTargetFPS": 30,
+            "motionBlurPerObjectSize": 0,
+            "translucencyType": "Raster",
+            "rayTracingTranslucencyMaxRoughness": 0.6000000238418579,
+            "rayTracingTranslucencyRefractionRays": 3,
+            "rayTracingTranslucencySamplesPerPixel": 1,
+            "rayTracingTranslucencyMaxPrimaryHitEvents": 4,
+            "rayTracingTranslucencyMaxSecondaryHitEvents": 2,
+            "rayTracingTranslucencyShadows": "Hard_shadows",
+            "rayTracingTranslucencyRefraction": true,
+            "rayTracingTranslucencyUseRayTracedRefraction": false,
+            "pathTracingMaxBounces": 32,
+            "pathTracingSamplesPerPixel": 2048,
+            "pathTracingMaxPathIntensity": 24,
+            "pathTracingEnableEmissiveMaterials": true,
+            "pathTracingEnableReferenceDOF": false,
+            "pathTracingEnableReferenceAtmosphere": false,
+            "pathTracingEnableDenoiser": true,
+            "pathTracingIncludeEmissive": true,
+            "pathTracingIncludeDiffuse": true,
+            "pathTracingIncludeIndirectDiffuse": true,
+            "pathTracingIncludeSpecular": true,
+            "pathTracingIncludeIndirectSpecular": true,
+            "pathTracingIncludeVolume": true,
+            "pathTracingIncludeIndirectVolume": true,
+            "userFlags": 0,
+            "weightedBlendables": {
+              "array": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-29T07:00:34.586563+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {}
+    },
+    {
+      "at": "2026-09-29T07:00:44.338627+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {
+        "post_process": {
+          "settings": {
+            "bloomIntensity": 0.95
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-29T07:00:52.152388+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {
+        "post_process": {
+          "settings": {
+            "bloomIntensity": 0.9
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-29T07:39:54.250117+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {}
+    },
+    {
+      "at": "2026-09-29T07:40:16.415129+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {
+        "local_fog": {
+          "fogAlbedo": {
+            "r": 0.9,
+            "g": 0.95,
+            "b": 1.0,
+            "a": 1.0
+          },
+          "heightFogExtinction": 0.02,
+          "heightFogFalloff": 0.2,
+          "radialFogExtinction": 0.01
+        }
+      }
+    },
+    {
+      "at": "2026-09-29T07:40:54.636821+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {}
+    },
+    {
+      "at": "2026-09-29T08:03:17.661508+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {}
+    },
+    {
+      "at": "2026-09-29T08:03:26.342543+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {}
+    },
+    {
+      "at": "2026-09-29T08:03:33.751973+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {
+        "local_fog": {
+          "heightFogExtinction": 0.03,
+          "radialFogExtinction": 0.02,
+          "_transform": {
+            "location": {
+              "z": 300.0
+            },
+            "scale": {
+              "x": 40.0,
+              "y": 20.0,
+              "z": 6.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-29T08:05:54.218174+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {
+        "cloud": {
+          "_material": {
+            "@Cloud_GlobalDensity": 0.014
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-29T08:05:59.366315+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {
+        "cloud": {
+          "_material": {
+            "@Cloud_GlobalDensity": 0.012
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-29T08:56:16.005318+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {}
+    },
+    {
+      "at": "2026-09-29T08:57:30.579011+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {
+        "cloud": {
+          "_material": {
+            "@Layout_GlobalCloudMask": {
+              "refPath": "/Engine/EngineSky/VolumetricClouds/T_CloudPattern.T_CloudPattern"
+            }
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-29T08:57:37.793474+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {
+        "cloud": {
+          "_material": {
+            "@Layout_GlobalCloudMask": {
+              "refPath": "/Engine/EngineSky/VolumetricClouds/T_CloudMask.T_CloudMask"
+            }
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-29T08:58:30.254145+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {
+        "sun": {
+          "intensity": 3.2,
+          "temperature": 3200.0,
+          "lightColor": {
+            "r": 1.0,
+            "g": 0.82,
+            "b": 0.62,
+            "a": 1.0
+          },
+          "volumetricScatteringIntensity": 1.4,
+          "_transform": {
+            "rotation": {
+              "pitch": -8.0,
+              "yaw": -22.0,
+              "roll": 0.0
+            }
+          }
+        },
+        "sky_atmosphere": {
+          "rayleighScatteringScale": 0.045,
+          "mieScatteringScale": 0.006,
+          "skyLuminanceFactor": {
+            "r": 1.0,
+            "g": 0.86,
+            "b": 0.72,
+            "a": 1.0
+          }
+        },
+        "sky_light": {
+          "intensity": 0.7,
+          "lightColor": {
+            "r": 1.0,
+            "g": 0.86,
+            "b": 0.72,
+            "a": 1.0
+          }
+        },
+        "fog": {
+          "fogDensity": 0.02,
+          "fogInscatteringLuminance": {
+            "r": 0.35,
+            "g": 0.22,
+            "b": 0.16,
+            "a": 1.0
+          },
+          "directionalInscatteringLuminance": {
+            "r": 0.9,
+            "g": 0.55,
+            "b": 0.3,
+            "a": 1.0
+          },
+          "bEnableVolumetricFog": true,
+          "volumetricFogAlbedo": {
+            "r": 1.0,
+            "g": 0.85,
+            "b": 0.75,
+            "a": 1.0
+          }
+        },
+        "local_fog": {
+          "heightFogExtinction": 0.03,
+          "heightFogFalloff": 0.2,
+          "radialFogExtinction": 0.02,
+          "fogAlbedo": {
+            "r": 0.9,
+            "g": 0.95,
+            "b": 1.0,
+            "a": 1.0
+          },
+          "_transform": {
+            "location": {
+              "z": 300.0
+            },
+            "scale": {
+              "x": 40.0,
+              "y": 20.0,
+              "z": 6.0
+            }
+          }
+        },
+        "post_process": {
+          "bUnbound": true,
+          "priority": 1,
+          "settings": {
+            "bOverride_AutoExposureMinBrightness": true,
+            "autoExposureMinBrightness": 0.3,
+            "bOverride_AutoExposureMaxBrightness": true,
+            "autoExposureMaxBrightness": 2.0,
+            "bOverride_AutoExposureBias": true,
+            "autoExposureBias": 0.2,
+            "bOverride_BloomIntensity": true,
+            "bloomIntensity": 0.9,
+            "bOverride_BloomThreshold": true,
+            "bloomThreshold": -0.2,
+            "bOverride_WhiteTemp": true,
+            "whiteTemp": 5400.0,
+            "bOverride_VignetteIntensity": true,
+            "vignetteIntensity": 0.45,
+            "bOverride_FilmGrainIntensity": true,
+            "filmGrainIntensity": 0.12,
+            "bOverride_SceneFringeIntensity": true,
+            "sceneFringeIntensity": 1.6,
+            "bOverride_ToneCurveAmount": true,
+            "toneCurveAmount": 0.2
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-29T09:45:54.815900+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {}
+    },
+    {
+      "at": "2026-09-29T13:28:48.901254+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "(回滚)",
+      "wrote": {
+        "sun": {
+          "intensity": 6,
+          "lightColor": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          },
+          "temperature": 6500,
+          "volumetricScatteringIntensity": 1,
+          "_transform": {
+            "rotation": {
+              "pitch": -49.51711035415601,
+              "yaw": -10.308600787602979,
+              "roll": 112.36067200001972
+            }
+          }
+        },
+        "sky_atmosphere": {
+          "mieScatteringScale": 0.003996000159531832,
+          "rayleighScatteringScale": 0.03310000151395798,
+          "skyLuminanceFactor": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          }
+        },
+        "sky_light": {
+          "intensity": 1,
+          "lightColor": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          }
+        },
+        "fog": {
+          "bEnableVolumetricFog": false,
+          "directionalInscatteringLuminance": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "fogDensity": 0.04360000044107437,
+          "fogInscatteringLuminance": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "volumetricFogAlbedo": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          }
+        },
+        "local_fog": {
+          "_deleted": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.LocalFogVolume_0"
+        },
+        "cloud": {
+          "layerBottomAltitude": 5,
+          "layerHeight": 10,
+          "tracingMaxDistance": 200
+        },
+        "post_process": {
+          "_deleted": "/Game/demo/Landscape/MCP.MCP:PersistentLevel.PostProcessVolume_0"
+        }
+      }
+    },
+    {
+      "at": "2026-09-29T13:29:04.538974+00:00",
+      "level": "/Game/demo/Landscape/MCP",
+      "preset": "sunset",
+      "wrote": {
+        "sun": {
+          "intensity": 3.2,
+          "temperature": 3200.0,
+          "lightColor": {
+            "r": 1.0,
+            "g": 0.82,
+            "b": 0.62,
+            "a": 1.0
+          },
+          "volumetricScatteringIntensity": 1.4,
+          "_transform": {
+            "rotation": {
+              "pitch": -8.0,
+              "yaw": -22.0,
+              "roll": 0.0
+            }
+          }
+        },
+        "sky_atmosphere": {
+          "rayleighScatteringScale": 0.045,
+          "mieScatteringScale": 0.006,
+          "skyLuminanceFactor": {
+            "r": 1.0,
+            "g": 0.86,
+            "b": 0.72,
+            "a": 1.0
+          }
+        },
+        "sky_light": {
+          "intensity": 0.7,
+          "lightColor": {
+            "r": 1.0,
+            "g": 0.86,
+            "b": 0.72,
+            "a": 1.0
+          }
+        },
+        "fog": {
+          "fogDensity": 0.02,
+          "fogInscatteringLuminance": {
+            "r": 0.35,
+            "g": 0.22,
+            "b": 0.16,
+            "a": 1.0
+          },
+          "directionalInscatteringLuminance": {
+            "r": 0.9,
+            "g": 0.55,
+            "b": 0.3,
+            "a": 1.0
+          },
+          "bEnableVolumetricFog": true,
+          "volumetricFogAlbedo": {
+            "r": 1.0,
+            "g": 0.85,
+            "b": 0.75,
+            "a": 1.0
+          }
+        },
+        "local_fog": {
+          "heightFogExtinction": 0.03,
+          "heightFogFalloff": 0.2,
+          "radialFogExtinction": 0.02,
+          "fogAlbedo": {
+            "r": 0.9,
+            "g": 0.95,
+            "b": 1.0,
+            "a": 1.0
+          },
+          "_transform": {
+            "location": {
+              "z": 300.0
+            },
+            "scale": {
+              "x": 40.0,
+              "y": 20.0,
+              "z": 6.0
+            }
+          }
+        },
+        "cloud": {
+          "layerBottomAltitude": 4.0,
+          "layerHeight": 8.0,
+          "tracingMaxDistance": 60.0
+        },
+        "post_process": {
+          "bUnbound": true,
+          "priority": 1,
+          "settings": {
+            "bOverride_AutoExposureMinBrightness": true,
+            "autoExposureMinBrightness": 0.3,
+            "bOverride_AutoExposureMaxBrightness": true,
+            "autoExposureMaxBrightness": 2.0,
+            "bOverride_AutoExposureBias": true,
+            "autoExposureBias": 0.2,
+            "bOverride_BloomIntensity": true,
+            "bloomIntensity": 0.9,
+            "bOverride_BloomThreshold": true,
+            "bloomThreshold": -0.2,
+            "bOverride_WhiteTemp": true,
+            "whiteTemp": 5400.0,
+            "bOverride_VignetteIntensity": true,
+            "vignetteIntensity": 0.45,
+            "bOverride_FilmGrainIntensity": true,
+            "filmGrainIntensity": 0.12,
+            "bOverride_SceneFringeIntensity": true,
+            "sceneFringeIntensity": 1.6,
+            "bOverride_ToneCurveAmount": true,
+            "toneCurveAmount": 0.2
+          }
+        }
+      }
+    }
+  ]
+}

@@ -19,9 +19,9 @@
 # 【坐标】UE 左手系 Z-up：X 前进、Y 右、Z 上；平面内**右法线 = (-dy, dx)**（唯一口径）
 #
 # 【怎么跑】纯离线，不碰 UE：
-#     $env:PYTHONPATH='F:\MCP_Server\src'
-#     & F:\MCP_Server\.venv\Scripts\python.exe -m mcp_server.planning.plan          # 算默认一版
-#     & F:\MCP_Server\.venv\Scripts\python.exe -m mcp_server.planning.plan --confirm "确认人"
+#     $env:PYTHONPATH='<仓库根>\src'
+#     & "<仓库根>\.venv\Scripts\python.exe" -m mcp_server.planning.plan          # 算默认一版
+#     & "<仓库根>\.venv\Scripts\python.exe" -m mcp_server.planning.plan --confirm "确认人"
 # =============================================================================
 
 # --- [完工-10] 阶段二几何 + 确认留痕 ---
@@ -81,6 +81,23 @@ ARCHIVE_DIR = VIEWS_DIR / "archive"
 FIGURE_GLOBS = ("plan_v1_overview*.svg", "plan_v1_overview*.png",
                 "plan_v1_overview*.jpg", "plan_v1_overview*.jpeg",
                 "plan_v1_overview*.webp", "plan_v1_overview*.gif")
+"""**平面图**（俯视）—— 前缀是代码找图的约定（图由 AI 手绘，代码不出图）。"""
+
+ELEVATION_GLOBS = ("plan_v1_elevation*.svg", "plan_v1_elevation*.png",
+                   "plan_v1_elevation*.jpg", "plan_v1_elevation*.jpeg",
+                   "plan_v1_elevation*.webp", "plan_v1_elevation*.gif")
+"""**立面图**（正视图 X 向 / 侧视图 Y 向）—— 2026-09-30 用户要求加。
+
+原话：「我要求的是改高度……但是这个图画的还是顶视图，我觉得得改一下，**当调整的是高度时
+生成的图得是正视图或者左右视图**」。实测场景：外部 agent 按流程改了 25 栋楼的高度、也回读、
+也出图，但那张图是**俯视图** —— 高度变化在俯视图上**完全看不见**，于是那张图作为
+"用户唯一能判断的依据"**等于没有**（他被要求对着一张看不出变化的图点头）。
+
+⚠ 为什么**单开一路前缀**、而不是并进 `FIGURE_GLOBS`：并进去的话**一张立面图就能顶掉平面图**，
+判据会从"两张都要"松成"有一张就行"。分开之后 `figure_check()` 按视图**逐项**判，缺哪张报哪张。
+⚠ 判据与平面图**完全一样**（当前指纹前 10 位 + 该覆盖的每一行 label）—— 同一份判据只写在
+`figure_verdicts()` 一处，用 `kind` 参数选前缀；**位图在两路里都不认账**（读不出文字）。
+"""
 
 ELEMENTS_PATH = REPO_ROOT / "catalog" / "elements.json"
 """阶段一的元素清单 —— 本阶段从这里读「地图大小」和「有哪些元素」。"""
@@ -433,7 +450,7 @@ def clean_numbers(obj):
 
     为什么非做不可（2026-09-23 实测踩过，写在 main.py 的 num() 注释里）：
       Python 把 -0.0 序列化成 "-0.0"，而 JS 的 JSON.stringify(-0) 得到 "0" —— **往返不无损**，
-      宿主会判定整条结果 "value is not lossless JSON" 并**整条拒绝**（不是丢一个字段，是整条不可用）。
+      Agent会判定整条结果 "value is not lossless JSON" 并**整条拒绝**（不是丢一个字段，是整条不可用）。
       本文件里 -0.0 的来源很具体：`right_normal((1,0)) = (-0.0, 1.0)`（对 0 取负），
       再顺着 `facing_vector` 之类的字段漏进 JSON。
 
@@ -563,6 +580,17 @@ def _norm_placement(raw: dict) -> dict:
         "rot_deg": float(raw.get("rot_deg") or 0.0),
         "note": str(raw.get("note") or ""),
     }
+    # `z_m`（可选，米）= 这一行的**中心绝对标高** —— 不给就按阶段三的竖直口径推
+    #   （`main.py` 的 `WHITEBOX_VERTICAL` / `GROUND_Z_M` / `ASSET_PIVOT_LIFT_CM`）。
+    # 为什么加它（2026-09-30 用户拍板 D 案）：白膜的竖直位置**原本只由代码口径算**
+    #   （`ground: ("top", GROUND_Z_M)`），于是"用户把世界地基手动挪低 10 cm"这件事
+    #   **在 plan 里表达不出来** —— 写不回 plan，下一轮增量还会按口径把它拉回去。
+    #   ⚠ 它是**几何**（进指纹、进逐行签名），不是说明文字。
+    if raw.get("z_m") is not None:
+        try:
+            item["z_m"] = float(raw["z_m"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{key!r} 的 z_m 不是数字：{raw.get('z_m')!r}") from exc
     if not (item["footprint_m"][0] > 0 and item["footprint_m"][1] > 0):
         raise ValueError(f"{key!r} 的 footprint_m 必须都是正数（米）")
     return item
@@ -584,6 +612,25 @@ def normalize_asset(raw: dict) -> dict:
         raise ValueError(f"{item['element_key']!r} 的 scale 必须为正")
     item["asset_path"] = path
     item["scale"] = float(scale)
+    # --- Z 方向倍率（`scale_z`，2026-09-30 加）------------------------------------
+    # 用户原话：「楼别一样高」而**占地不能跟着变** —— 改 `scale` 是整体缩放（占地同时变），
+    # 所以单开这一维。语义 = **相对 `scale` 的 Z 倍率**（1.0 = 三轴同倍率）；
+    # 到 UE 那层就是 `RelativeScale3D = [scale, scale, scale × scale_z]`。
+    # ⚠ `1.0`（含 1e-9 内的浮点噪声）**不写进数据**：与"没这个字段"同义 ——
+    #   免得只是显式写了个 1.0 就把几何指纹改掉、把上一次确认无谓作废。
+    zs = raw.get("scale_z")
+    if zs is not None and str(zs).strip() != "":
+        try:
+            z_val = float(zs)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{item['element_key']!r} 的 scale_z 不是数字：{zs!r}") from exc
+        if not math.isfinite(z_val) or z_val <= 0:
+            raise ValueError(
+                f"{item['element_key']!r} 的 scale_z 必须是**正的有限数**（现在是 {zs!r}）—— "
+                "它是 Z 方向的倍率，0 / 负数 / inf 都不是合法的高度"
+            )
+        if abs(z_val - 1.0) > 1e-9:
+            item["scale_z"] = z_val
     return item
 
 
@@ -610,20 +657,38 @@ def normalize_whitebox(raw: dict) -> dict:
         )
     item["shape"] = shape
     item["size_source"] = src
-    # --- 高度（Z）—— 选填，但给了就要校验（2026-09-24 收尾清单 #2）---
-    # 为什么必须补这个字段：阶段一的白膜本来就有三维（size_cm = [X, Y, Z]，例如消防栓
-    # [30, 30, 75]），可阶段二以前只记平面占地 —— **高度在阶段二被丢掉了**，只活在 note 里；
-    # 阶段六要拿它把 cube 实例化出来，那时只能靠人读中文备注。
-    # cube（有体积的）缺高度时，阶段六只能靠人读 note 里的中文 —— 必填。plane（覆盖面）不需要。
+    # --- 厚度（`height_m`）—— **必填，plane 也不例外**（2026-10-03 用户定案）---
+    # 为什么必须补：阶段三拿它把白膜实例化成 cube；缺了只能靠人读 note 里的中文。
+    # ⚠ **为什么 `plane` 也要厚度**（2026-10-03 实测事故）：UE 的图元工具只有
+    #   `add_cube` / `add_cone` / `add_cylinder` / `add_sphere` —— **没有 plane 工具**
+    #   （调官方 `PrimitiveTools` 工具集清单确认）。所以"面"落进 UE **只能是 cube**，
+    #   `plane` 只是"它是个覆盖面"的语义标签，**不减免厚度**。
+    #   事故经过：清单里 plane 那行 `size_cm[2] = 0`（覆盖面只登记长宽的**登记习惯**）
+    #   被阶段三当成厚度 → 0 厚的 cube → `add_cube` 拒收 `dimensions.z must be positive, got 0.0`
+    #   → **旧的被删掉了、新的没建出来**（人行道 / 沥青路面 / 水面三层消失）。
     h = raw.get("height_m")
-    if h is not None and str(h).strip() != "":
-        try:
-            height_m = float(h)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"{item['element_key']!r} 的 height_m 不是数字：{h!r}") from exc
-        if height_m <= 0:
-            raise ValueError(f"{item['element_key']!r} 的 height_m 必须为正（米）")
-        item["height_m"] = height_m
+    if h is None or str(h).strip() == "":
+        raise ValueError(
+            f"{item['element_key']!r} 的白膜**必须给 `height_m`（厚度，米，> 0）** —— "
+            "`plane` 也不例外：\n"
+            "· UE 的图元工具只有 `add_cube` / `add_cone` / `add_cylinder` / `add_sphere` —— "
+            "**没有 plane 工具**（实测官方工具集清单）。所以「面」在这个项目里**只能是 cube**，"
+            "`plane` 只是说「它是个覆盖面」，**不减免厚度**。\n"
+            "· 照抄写法：`{{\"shape\": \"plane\", \"height_m\": 0.15}}`（= 15 cm 厚）"
+            "或 `{{\"shape\": \"cube\", \"height_m\": 0.15}}` —— 两者落进 UE **一模一样**。\n"
+            "· 阶段一清单里 plane 那行的 `size_cm[2] = 0` 是**登记习惯**（覆盖面只登记长宽），"
+            "**不是厚度** —— 阶段三不看它。"
+        )
+    try:
+        height_m = float(h)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{item['element_key']!r} 的 height_m 不是数字：{h!r}") from exc
+    if height_m <= 0:
+        raise ValueError(
+            f"{item['element_key']!r} 的 height_m 必须为正（米），现在写的是 {height_m!r} —— "
+            "0 厚的 cube 官方会拒收（`dimensions.z must be positive`，实测），"
+            "要一个面就给它一个薄厚度（如 0.15 = 15 cm）。")
+    item["height_m"] = height_m
     return item
 
 
@@ -654,6 +719,22 @@ def build_plan(assets: list, whiteboxes: list, world: dict,
     """
     previous = previous or {"rows": [], "scene": {}}
     empty = not assets and not whiteboxes
+
+    # --- 出口再挡一次：白膜行**必须**有正厚度（2026-10-03 加）---
+    # 为什么在装配这儿也挡：`generate_plan` 走的是 `normalize_whitebox()`，但**别的调用方
+    #   （含 CLI / 以后的脚本）可能直接装配** —— 上面那道校验不该只有一条路经过。
+    # 判据只有一句：`height_m` 必须是正的有限数 —— 0 厚的 cube 官方直接拒收（实测）。
+    for _w in (whiteboxes or []):
+        _k = str((_w or {}).get("element_key") or "?")
+        _h = (_w or {}).get("height_m")
+        try:
+            _hv = float(_h)                                  # type: ignore[arg-type]
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{_k!r} 的白膜缺 `height_m`（厚度，米，> 0）—— UE **没有 plane 工具**，"
+                "「面」也只能落成 cube，所以厚度必须明写（如 `height_m: 0.15`）") from exc
+        if not math.isfinite(_hv) or _hv <= 0:
+            raise ValueError(f"{_k!r} 的 `height_m` 必须是正的有限数，现在是 {_h!r}")
 
     plan = {
         "stage": "阶段二 · 平面放置规划",
@@ -792,11 +873,166 @@ def row_signature(row: dict, kind: str) -> str:
     row = row if isinstance(row, dict) else {}
     if kind == "asset":
         fields = [row.get("element_key"), row.get("asset_path"), row.get("pos"),
-                  row.get("footprint_m"), row.get("rot_deg"), row.get("scale")]
+                  row.get("footprint_m"), row.get("rot_deg"), row.get("scale"), row.get("z_m")]
+        # ⚠ Z 倍率（`scale_z`）**只在真的不等于 1 时才追加到签名末尾**（2026-09-30 加）：
+        #   这样"旧数据（没这个字段）"与"显式写 1.0"的签名**逐字节相同** ——
+        #   历史基线（台账里的 `accepted_rows`）不会因为这次改动被误判成"每一行都变了"
+        #   （那会逼着全量重画）。而真的改了 Z 倍率时签名会变 →
+        #   **上一次确认自动作废**（那是必须的：高度变了，那张图就不是这一版了）。
+        zs = _scale_z_of(row)
+        if zs is not None and abs(zs - 1.0) > 1e-9:
+            fields.append(zs)
     else:
         fields = [row.get("element_key"), row.get("shape"), row.get("pos"),
-                  row.get("footprint_m"), row.get("rot_deg"), row.get("height_m")]
+                  row.get("footprint_m"), row.get("rot_deg"), row.get("height_m"), row.get("z_m")]
     return json.dumps(clean_numbers(fields), ensure_ascii=False)
+
+
+def _scale_z_of(row: dict) -> float | None:
+    """资产行的 **Z 方向倍率**（`scale_z`）—— 读不出来给 `None`（= 与 XY 同倍率）。
+
+    语义（2026-09-30 加，用户要求「加」）：**相对 `scale` 的 Z 倍率**，`1.0` = 三轴同倍率。
+    到 UE 那层就是 `RelativeScale3D = [scale, scale, scale × scale_z]` ⇒
+    **只拉高 / 压低，占地一个数都不动**（改 `scale` 是整体缩放，占地会跟着变 —— 那正是
+    "楼别一样高、但街道布局不动"这个诉求表达不了的地方）。
+    ⚠ `1.0` 与"没写"同义：`normalize_asset()` 不把它写进数据（免得白改指纹）。
+    """
+    row = row if isinstance(row, dict) else {}
+    try:
+        val = float(row.get("scale_z"))
+    except (TypeError, ValueError):
+        return None
+    return val if math.isfinite(val) else None
+
+
+ASPECT_FIELDS = {
+    "asset": {"plan": (0, 1, 2, 4), "size": (3, 5), "height": (6, 7)},
+    "whitebox": {"plan": (0, 1, 2, 4), "size": (3,), "height": (5, 6)},
+}
+"""**维度 → 逐行签名里的下标**（下标顺序的唯一出处是 `row_signature()`）。
+
+⚠ 2026-09-30 用户定的**最终口径**：「涉及**位移**的就顶视图，涉及**大小、高度**的就「原图视角」透视示意图」。
+按这条把字段分三组：
+  · `plan`（**位移 / 朝向**）→ 顶视图：`element_key` / `asset_path`|`shape` / `pos` / `rot_deg`；
+    ⚠ `rot_deg` **归顶视**是我加的判断（朝向从上面看得最清楚）—— 要它也出立面就说一声。
+  · `size`（**大小**）→ 立面：`footprint_m` / `scale`；
+  · `height`（**高度 / Z**）→ 立面：资产 `z_m` / `scale_z`、白膜 `height_m` / `z_m`。
+⚠ 资产行签名末位 `scale_z` **只在 ≠1 时才存在** ⇒ 下标越界一律当 `None`（= 没写），不是错误。
+"""
+
+REQUIRED_VIEWS = ("top", "elevation")
+"""**每一版都出这两张图**（2026-09-30 用户定案 —— 先做过"按维度决定出哪几张"，当天下午定为恒出两张）。
+
+用户原话：「算了直接生成「原图视角」透视示意图和顶视图算了，太麻烦了」。
+为什么恒出两张比"按维度决定"更好（我的判断，也是采纳的理由）：
+  · **少一类往返失败**：条件视图的失败模式是「判错维度 → 要的那张没画 → `confirm_plan` 拒收 → 再画一遍」；
+    恒出两张把这个失败模式整个消掉；
+  · **规则少一条**：常量不需要向 agent 解释，也少一处"口径写在文档里、代码里忘跟"的分叉点
+    （与 `BUILD_LAYERS` / `ENV_FACTOR_ORDER` 同一条纪律：**能变成常量的，别留成条件**）；
+  · 代价只有"多画一张 svg"（agent 本来就是拿 `get_plan().drawing` 写脚本渲染）。
+
+**两张各画什么**（写死，别让画图的人猜）：
+  · `top`（**顶视图**）= **X-Y 平面**（俯视、轴对齐）—— 看**摆在哪 / 占地多大 / 朝向**；
+  · `elevation`（**「原图视角」示意图**）= **透视**，不是轴对齐正投影（**2026-09-30 用户定案 B 案**）。
+
+⚠ **为什么第二张必须带透视**：本工程坐标系 `world.coordinate_system` 定的是 **X 前进**
+（承载参考图的纵深链）。按"沿 X 看 + 轴对齐投影"画，**X 会被整个压掉** ——
+41 行物体全投到同一张平面上，**近处的小卖部必然被远处的大楼盖住**（用户实测原话：
+「正视图我都看不清，被盖住了，远近关系没画好」）。而参考图本身就是**透视**（近大远小），
+所以"原图视角"这个名字**只有画成透视才对得上**。
+
+「原图视角」透视示意图的**硬要求**（画图前照这几条自查）：
+  ① **方向**：从参考图的拍摄侧看向场景纵深 = 本坐标系里**沿 +X 看**（X 小 = 近、X 大 = 远）；
+  ② **近大远小 —— 有公式，不许拿「淡化」糊过去**：`k = 30`（默认，可调）；
+     每行缩放 `s = k / (k + max(x_m, 0))`；**把 s 同时乘到该行矩形的宽和高上**
+     （画出来的宽 = `w_m × s`、高 = `h_m × s`，**同一物体宽高用同一个 s**）；
+     ⚠ **远（`x_m` 大）的物体，画出来的宽度必须比近的窄** ——
+     宽度画成一样 = **等于没做近大远小**（2026-10-03 实测被抓到一次：41 行矩形宽度全是 `68.0`）；
+     ⚠ 图注里写明你用的 `k`（例：`近大远小 k=30（示意图，非严格投影）`）—— 让人一眼能核；
+  ③ **每行必须标 `x_m`**（标签旁写 `x=…`，或按 X 分层 + 引线）—— 让"谁在前谁在后"**可读**；
+  ④ **被挡住的行也必须出图**（淡化 / 虚线 / 引出标注都行）—— **一行都不许省**
+     （与"图里要覆盖该覆盖的每一行 label"同一条纪律，别拿"被挡住了"当漏画的理由）；
+  ⑤ **纵向仍是 Z**（高度不因远近倾斜）；允许用矩形 / 简单体块简化，**不要求严格渲染**；
+  ⑥ 图上写一句「**示意图，非严格投影**」，并标出**视平线 / 地面线**（可选但有帮助）。
+  ⚠ 数据一律取自 `get_plan().drawing`（`x_m` / `y_m` / `z_base_m` / `z_top_m` / `w_m` / `d_m` / `h_m`）
+    —— **别自己推 Z**（推错就是两套口径）。
+"""
+
+DIM_CN = {"plan": "位移 / 朝向", "size": "大小（占地 / 缩放）",
+          "height": "高度 / Z 标高 / Z 倍率"}
+"""维度的中文名（话术一处写清，免得报文里几种说法）。
+
+⚠ 它现在**只用于说明**（"这一版动了哪一维" → 图里重点标哪几行）——
+  **不再决定出哪几张图**（那是 `REQUIRED_VIEWS` 的常事）。"""
+
+
+def _aspects_from_signature(sig: str, kind: str) -> dict[str, str]:
+    """把一份**逐行签名**按维度切成三组 → `{"plan": ..., "size": ..., "height": ...}`；切不开给 `{}`。
+
+    分组规则见 `ASPECT_FIELDS`（**签名里字段的顺序由 `row_signature()` 说了算**，这里只按下标取）。
+    ⚠ 长度对不上（老格式 / 手改坏了）→ `{}` = **不猜**，调用方按"每一维都变了"严判。
+
+    为什么要能**从签名反推**：台账里的 `accepted_rows` 是分维判据上线**之前**记下的历史数据。
+    不能反推的话，这些行会永远落进"判不出维度 → 两张图都要"的严判里（多一道无用功）；
+    能反推，旧基线也判得出"这次只动了位移"或"只动了高度"。
+    """
+    try:
+        fields = json.loads(sig)
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(fields, list):
+        return {}
+    kind = str(kind or "")
+    idx = ASPECT_FIELDS.get(kind)
+    if not idx:
+        return {}
+    if kind == "asset" and len(fields) not in (7, 8):
+        return {}
+    if kind == "whitebox" and len(fields) != 7:
+        return {}
+    out: dict[str, str] = {}
+    for dim, positions in idx.items():
+        vals = [fields[i] if i < len(fields) else None for i in positions]
+        out[dim] = json.dumps(clean_numbers(vals), ensure_ascii=False)
+    return out
+
+
+def row_aspects(row: dict, kind: str) -> dict[str, str]:
+    """一行的**按维度分组签名** → `{"plan": ..., "size": ..., "height": ...}`（2026-09-30 加）。
+
+    用途只有一个：回答「**这一版动的是位移 / 大小 / 高度里的哪几样**」——
+    因为它决定**要出哪几张图**（`VIEW_FOR_DIM`：位移 → 顶视图；大小 / 高度 → 立面）。
+
+    ⚠ 实现是"拿 `row_signature()` 的结果按下标切"（`_aspects_from_signature()`）——
+      **不另抄一份字段清单**，免得哪天签名里加了字段、这边忘了跟，两处口径悄悄分叉。
+    """
+    return _aspects_from_signature(row_signature(row, kind), kind)
+
+
+def plan_row_kinds(plan: dict) -> dict[str, str]:
+    """`{label: "asset" | "whitebox"}` —— 从签名反推维度时要知道这一行是哪种（键与签名表一致）。"""
+    out: dict[str, str] = {}
+    assets = list(plan.get("assets") or [])
+    for i, row in enumerate(assets, 1):
+        lab = str((row or {}).get("label") or "").strip() if isinstance(row, dict) else ""
+        out[lab or f"<第 {i} 行没写 label>"] = "asset"
+    for j, row in enumerate(list(plan.get("whiteboxes") or []), 1):
+        lab = str((row or {}).get("label") or "").strip() if isinstance(row, dict) else ""
+        out[lab or f"<第 {len(assets) + j} 行没写 label>"] = "whitebox"
+    return out
+
+
+def plan_row_aspects(plan: dict) -> dict:
+    """`{label: {"plan": 签名, "size": 签名, "height": 签名}}`（一物一行；与 `plan_row_signatures()` 同序同键）。"""
+    out: dict = {}
+    assets = list(plan.get("assets") or [])
+    for i, row in enumerate(assets, 1):
+        lab = str((row or {}).get("label") or "").strip() if isinstance(row, dict) else ""
+        out[lab or f"<第 {i} 行没写 label>"] = row_aspects(row, "asset")
+    for j, row in enumerate(list(plan.get("whiteboxes") or []), 1):
+        lab = str((row or {}).get("label") or "").strip() if isinstance(row, dict) else ""
+        out[lab or f"<第 {len(assets) + j} 行没写 label>"] = row_aspects(row, "whitebox")
+    return out
 
 
 def plan_row_signatures(plan: dict) -> dict:
@@ -831,8 +1067,11 @@ def latest_confirmed_plan() -> tuple[Path | None, dict | None]:
 def change_set(plan: dict) -> dict:
     """**这一版相对"上一次用户确认过的那一版"改了什么** → 局部确认的判据（只读、离线）。
 
-    输出：`{local, baseline, added, changed, removed, same, required_labels, note}`
+    输出：`{local, baseline, added, changed, removed, same, required_labels, changed_dims,`
+    `required_views, views_why, note}`
       · `required_labels` = 这一版**图里必须出现**的 label（新增 + 改动 + 删掉的行）；
+      · `required_views` = **恒为两张**（`["top", "elevation"]`，2026-09-30 用户定案）：
+        **顶视图**（X-Y）+ **「原图视角」透视示意图**（透视：近大远小）。依据与"为什么不做条件视图"见 `REQUIRED_VIEWS`；
       · `local=False` 表示**没有基线**（第一次搭）→ `required_labels` 是**每一行**（全量）。
 
     基线按优先级取：
@@ -845,6 +1084,7 @@ def change_set(plan: dict) -> dict:
     cur = plan_row_signatures(plan)
 
     base_rows: dict[str, str] = {}
+    base_aspects: dict = {}                 # 基线的**分维签名**（判"改的是平面还是竖直"用）
     base_where = ""
     try:
         acc = load_acceptance()
@@ -853,6 +1093,17 @@ def change_set(plan: dict) -> dict:
     acc_rows = acc.get("accepted_rows") if isinstance(acc, dict) else None
     if isinstance(acc_rows, dict) and acc_rows:
         base_rows = {str(k): str(v) for k, v in acc_rows.items()}
+        # 分维签名（判"改的是平面还是竖直"）：
+        #   ① 台账里有就用它（2026-09-30 起确认时会记）；
+        #   ② 老台账没有 → **从逐行签名反推**（字段顺序是代码定的，见 `_aspects_from_signature()`）；
+        #   ③ 连反推都失败（老格式 / 手改坏了）→ 那个 label 不在表里 → 下文按"两个维度都变"严判。
+        _aspec = acc.get("accepted_aspects") if isinstance(acc, dict) else None
+        if isinstance(_aspec, dict) and _aspec:
+            base_aspects = {str(k): v for k, v in _aspec.items() if isinstance(v, dict)}
+        else:
+            _kinds = plan_row_kinds(plan)
+            base_aspects = {lab: _aspects_from_signature(sig, _kinds.get(lab, ""))
+                            for lab, sig in base_rows.items()}
         # ⚠ 这里**不写轮次数字**：落盘时 `round` 已经加过 1，写出来会变成
         #   "第 23 轮确认过的那一版"，而基线其实是第 22 轮那版几何 ——
         #   2026-09-26 实测抓到的文案 bug（判据是对的，错的是这句话）。
@@ -863,14 +1114,22 @@ def change_set(plan: dict) -> dict:
         path, doc = latest_confirmed_plan()
         if doc is not None and path is not None:
             base_rows = plan_row_signatures(doc)
+            base_aspects = plan_row_aspects(doc)    # 归档里是整份数据 → 分维签名现算得出来
             base_where = f"归档 `views/archive/{path.name}`"
 
     if not base_rows:
         return {
             "local": False, "baseline": "", "added": [], "changed": [], "removed": [],
             "same": 0, "required_labels": labels,
+            # 没有基线 = **全量一轮**（第一次搭 / 换了图）：整表都是新摆的 ——
+            # 位移、大小、高度**三样都算动过**（维度只用于"重点标哪几行"；两张图本来就恒出）。
+            "changed_dims": ["plan", "size", "height"],
+            "required_views": list(REQUIRED_VIEWS),
+            "views_why": ("还没有『被确认过的基线』（第一次搭 / 换了图）⇒ **全量一轮**："
+                          "整张表都是新摆的，图里要出现每一行；**两张图照出**"
+                          "（顶视图 + 「原图视角」透视示意图 —— 每一版都出这两张）。"),
             "note": ("还没有『被确认过的基线』—— 这一版按**全量**判：图里要出现放置表"
-                     f"**每一行**的 label（共 {len(labels)} 行）。"),
+                     f"**每一行**的 label（共 {len(labels)} 行），且**平面图与立面图都要**。"),
         }
 
     added = [l for l in cur if l not in base_rows]
@@ -880,13 +1139,63 @@ def change_set(plan: dict) -> dict:
     changed_set, added_set = set(changed), set(added)
     req = [l for l in labels if l in changed_set or l in added_set]
     req += [l for l in removed if l not in req]        # 删掉的行也要点到（用户得看见"它没了"）
+
+    # --- 「变的是哪一维」→ 决定**要出哪几张图**（2026-09-30 加）------------------------
+    # 用户原话：「我要求的是改高度……但是这个图画的还是顶视图，我觉得得改一下，
+    #   **当调整的是高度时生成的图得是正视图或者左右视图**」。
+    # 根因就在这儿：变更集原先只回 label 列表，**平面改和高度改的输出一模一样** ——
+    # 于是 agent 一律按老习惯画俯视图，而高度变化在俯视图上完全看不见（那张图白给）。
+    # 判据：把"改动 + 新增"的行按**维度签名**再比一次（`row_aspects()`）。
+    cur_aspects = plan_row_aspects(plan)
+    dims: set[str] = set()
+    dims_blind: list[str] = []
+    for lab in list(changed) + list(added):
+        a = cur_aspects.get(lab) or {}
+        b = base_aspects.get(lab)
+        if not isinstance(b, dict):
+            # 基线里**没有维度签名**（这份台账是 `scale_z` / 分维判据上线**之前**确认的）。
+            # ⚠ 与"基线缺了就退回全量"同一条纪律：**绝不宽松放行** —— 判不出来就按"每一维都变了"算。
+            if lab in added_set:
+                dims.add("plan")            # 新增行：先让人看见它摆在哪（位移口径）
+            else:
+                dims_blind.append(lab)
+            continue
+        for dim in ("plan", "size", "height"):
+            if str(a.get(dim)) != str(b.get(dim)):
+                dims.add(dim)
+    if dims_blind:
+        dims.update({"plan", "size", "height"})
+    if removed:
+        dims.add("plan")                    # 删掉的行要在顶视图上点到"它没了"
+
+    # --- 视图要求 = **恒出两张**（2026-09-30 用户定案，见 `REQUIRED_VIEWS`）----------------
+    # 原先做过"按动的是哪一维决定出哪几张"，当天下午用户定为恒出两张：「太麻烦了」。
+    # 所以这里不再做映射 —— 维度只用来**说清这一版动了什么**（报文里给重点）。
+    required_views = list(REQUIRED_VIEWS)
+    if changed or added or removed:
+        views_why = ("**每一版都出两张**：顶视图（X-Y：摆在哪 / 占地多大）+ "
+                     "**「原图视角」透视示意图**（近大远小、每行标 `x_m`、被挡住的行也要出图）。"
+                     "这一版动到的维度"
+                     "（**只用来决定图里重点标哪几行**，不再决定出哪几张图）："
+                     + "、".join(DIM_CN[d] for d in ("plan", "size", "height") if d in dims)
+                     + "。")
+        if dims_blind:
+            views_why += (f"；⚠ 其中 {len(dims_blind)} 行在基线里**没有维度签名**"
+                          "（旧台账，判不出动的是哪一维）—— 两张图照出、照验。")
+    else:
+        views_why = ("**每一版都出两张**（顶视图 + 「原图视角」透视示意图）——这一版与基线逐行一致，"
+                     "两张照出、照验（「没有图不许让用户确认」这条闸不因变更集为空而失效）。")
     return {
         "local": True, "baseline": base_where,
         "added": added, "changed": changed, "removed": removed,
         "same": len(same), "required_labels": req,
+        "changed_dims": [d for d in ("plan", "size", "height") if d in dims],
+        "required_views": required_views,
+        "views_why": views_why,
         "note": (f"**局部一轮**（基线：{base_where}）：新增 {len(added)} / 改动 {len(changed)} / "
                  f"删除 {len(removed)}；图里只需出现这 **{len(req)} 行**的 label；"
-                 f"另外 {len(same)} 行**没动**、不必重画（它们早已确认过）。"),
+                 f"另外 {len(same)} 行**没动**、不必重画（它们早已确认过）。"
+                 f"视图要求：{views_why}"),
     }
 
 
@@ -941,8 +1250,15 @@ def figure_label_coverage(plan: dict, text: str, labels: list[str] | None = None
     }
 
 
-def figure_verdicts(plan: dict, plan_mtime: float | None = None) -> list[dict]:
+def figure_verdicts(plan: dict, plan_mtime: float | None = None,
+                    kind: str = "plan") -> list[dict]:
     """逐张判 `views/` 里的图**认不认这份数据** → `[{name, path, ok, why}]`（只读、离线）。
+
+    `kind` 选**哪一路图**（2026-09-30 加）：
+      · `"plan"`（默认）= **平面图**（俯视），文件名前缀 `plan_v1_overview*`；
+      · `"elevation"` = **立面图**（正视图 / 侧视图），文件名前缀 `plan_v1_elevation*`。
+    ⚠ 两路的判据**一字不差**（就是下面这份代码），只有文件名前缀不同 ——
+      判据只写一处，免得"平面图严、立面图松"这种两套口径。
 
     判据（两条**都要过**）：
       - **正文里要有当前几何指纹的前 10 位** —— 证明"这张图是拿这份数据画的"；
@@ -956,7 +1272,7 @@ def figure_verdicts(plan: dict, plan_mtime: float | None = None) -> list[dict]:
 
     ⚠ **位图（png / jpg / jpeg / webp / gif）一律不认账**：读不出文字，就核验不了"漏没漏"。
       原来的位图口径是"文件比 plan_v1.json 新就放行"—— 那条口子与本条要求**直接冲突**
-      （一张漏了 20 行的截图，只要比数据新就能过关），故一并撤掉。要交付就出 **svg**。
+      （一张漏了 20 行的截图，只要比数据新就能过关），故一并撤掉。要使用就出 **svg**。
 
     ⚠ `plan_mtime` 是**保留形参**：`clear_stale_figures()` 还在传它（签名不动、少改调用方）。
       位图不再按时间放行之后，它**不参与任何判定** —— 只用来在理由里写一句"这张比数据新/老"，
@@ -978,7 +1294,7 @@ def figure_verdicts(plan: dict, plan_mtime: float | None = None) -> list[dict]:
     scope = ("局部一轮" if cs.get("local") else "全量一轮")
 
     found: list[Path] = []
-    for pattern in FIGURE_GLOBS:
+    for pattern in (ELEVATION_GLOBS if kind == "elevation" else FIGURE_GLOBS):
         try:
             found += [p for p in VIEWS_DIR.glob(pattern) if p.is_file()]
         except OSError:
@@ -996,7 +1312,7 @@ def figure_verdicts(plan: dict, plan_mtime: float | None = None) -> list[dict]:
                 age = "取不到修改时间"
             out.append({"name": path.name, "path": path, "ok": False,
                         "why": (f"位图读不出文字，**核验不了有没有漏元素**（这张{age}）；"
-                                "要交付就出 svg —— 图内写当前指纹 + 该覆盖的那些行的 label")})
+                                "要使用就出 svg —— 图内写当前指纹 + 该覆盖的那些行的 label")})
             continue
         try:
             text = path.read_text(encoding="utf-8-sig", errors="replace")
@@ -1024,7 +1340,14 @@ def figure_verdicts(plan: dict, plan_mtime: float | None = None) -> list[dict]:
 
 
 def figure_check(plan: dict) -> dict:
-    """判「views/ 里还有没有一张**认这份数据**的图」→ `{ok, figures, note[, needs_labels]}`。
+    """判「views/ 里**该有的图**是不是都认这份数据」→
+    `{ok, figures, required_views, missing_views, required_labels, local, changed_dims, note[, needs_labels]}`。
+
+    **按视图逐项判**（2026-09-30 加）：`change_set()["required_views"]` 说这一版要出哪几张
+    （**位移 / 朝向 → 顶视图**；**大小 / 高度 → 「原图视角」透视示意图**；见 `VIEW_FOR_DIM`），这里逐项验：
+      · `top` → 平面图（俯视），前缀 `plan_v1_overview*`；
+      · `elevation` → 「原图视角」透视示意图，前缀 `plan_v1_elevation*`。
+    **缺哪一张就报哪一张**（`missing_views`），不合并成一句含糊的"图不认数据"。
 
     判据见 `figure_verdicts()`：**指纹对得上 + 该覆盖的每一行 `label` 都在图里**。
     ⚠ 「该覆盖的行」= `change_set()["required_labels"]`：**局部轮 = 本次改动的那几行**；
@@ -1033,51 +1356,84 @@ def figure_check(plan: dict) -> dict:
     为什么要有它（2026-09-24 收尾清单 #8）：AGENTS 的口径是 **图与数据必须一致 ——
     不一致 = 等于没确认**，但以前全靠人自觉（实测踩到过：图里还写着"本图未经用户确认"，
     而数据早已确认）。2026-09-25 又按用户要求加严：**光有指纹不算数，还得一行都不漏**。
+    2026-09-30 再加一层：**漏的是哪一维**也算"漏" —— 只改高度却只给俯视图，
+    用户根本看不出改了什么，那张图作为凭据等于没有（用户原话见 `ELEVATION_GLOBS`）。
 
     ⚠ 判不过时**不猜**：说清是哪张图、为什么不算数，让调用方（confirm_plan）拒收；
-      一张都不认账时，额外附 `needs_labels`（这一版**必须出现在图里**的 label ——
+      缺图时额外附 `needs_labels`（这一版**必须出现在图里**的 label ——
       局部轮就是那几行，**不用重画整张图**），让画图的人照着补，而不是来回猜"到底漏了哪个"。
     """
     cs = change_set(plan)
     needs = list(cs.get("required_labels") or [])
-    verdicts = figure_verdicts(plan)
-    if not verdicts:
-        # ⚠ 2026-09-26 改（客户反馈实测）：以前这里一律说「views/ 里没有图」—— 而客户那头的 agent
-        #   **图已经画好了**（名字不是 plan_v1_overview*），它读到的却是「没有图」，
-        #   于是**去把文件改了个名**再来确认。两个坏处：
-        #     ① 事实说错了（有图，只是没被命名约定命中）；
-        #     ② 既没说约定是什么、也没说正确出路 —— agent 只能靠撞墙学（AGENTS：不许靠人记得）。
-        #   现在分成两句说：**一张图都没有** / **有图，但没被约定命中**（并说明改名是允许的）。
-        stray: list[str] = []
+    views = [str(v) for v in (cs.get("required_views") or ["top"])]
+    view_cn = {"top": "平面图（俯视）", "elevation": "「原图视角」透视示意图"}
+    view_prefix = {"top": "plan_v1_overview*.svg", "elevation": "plan_v1_elevation*.svg"}
+
+    per_view: dict[str, list[dict]] = {}
+    for view in ("top", "elevation"):
         try:
-            stray = [p.name for p in VIEWS_DIR.glob("*.svg") if p.is_file()]
+            per_view[view] = figure_verdicts(
+                plan, kind=("elevation" if view == "elevation" else "plan"))
         except OSError:
-            stray = []
-        if stray:
-            note = (f"views/ 里有 {len(stray)} 张 svg，但**没有一张被命名约定命中**"
-                    f"（代码找图的模式：{' / '.join(FIGURE_GLOBS)}）："
-                    + "、".join(stray[:6]) + ("…" if len(stray) > 6 else "")
-                    + "。⚠ 命名只是**代码找图的约定**，真正的判据是**图的内容**"
-                      "（当前几何指纹前 10 位 + 该覆盖的每一行 label）—— 所以**把它改名成 "
-                      "`plan_v1_overview*.svg` 是允许的**；但内容不对的话，改名也过不了，那得重画。")
-        else:
-            note = (f"views/ 里**一张图都没有**（代码找图的模式：{' / '.join(FIGURE_GLOBS)}）—— "
-                    "图是交付的一部分，没有图就不许拿去让用户确认。"
-                    "⚠ 画完请**存成 `views/plan_v1_overview*.svg`**（前缀是代码找图的约定）。")
-        return {
-            "ok": False, "figures": [],
-            "needs_labels": needs,
-            "note": note + (f"（{cs['note']}）" if cs.get("note") else ""),
-        }
-    ok = any(v["ok"] for v in verdicts)
+            per_view[view] = []
+
+    figures = [str(v["name"]) for view in views for v in per_view.get(view, []) if v.get("ok")]
+    missing_views = [view for view in views
+                     if not any(v.get("ok") for v in per_view.get(view, []))]
+
+    # 逐路说清现状：哪张认账 / 认不了的话是为什么 / **一张都没有**（并给出命名约定）
+    parts: list[str] = []
+    stray_hint = ""
+    for view in views:
+        vs = per_view.get(view) or []
+        oks = [v for v in vs if v.get("ok")]
+        if oks:
+            parts.append(f"{view_cn[view]}：✅ " + "；".join(str(v["why"]) for v in oks))
+            continue
+        if vs:
+            parts.append(f"{view_cn[view]}：❌ "
+                         + "；".join(f"{v['name']}：{v['why']}" for v in vs))
+            continue
+        parts.append(f"{view_cn[view]}：❌ views/ 里**没有** `{view_prefix[view]}` 这张")
+        if not stray_hint:
+            # ⚠ 2026-09-26 改（客户反馈实测）：以前这里一律说「views/ 里没有图」—— 而客户那头的 agent
+            #   **图已经画好了**（名字不是 plan_v1_overview*），它读到的却是「没有图」，
+            #   于是**去把文件改了个名**再来确认。两个坏处：
+            #     ① 事实说错了（有图，只是没被命名约定命中）；
+            #     ② 既没说约定是什么、也没说正确出路 —— agent 只能靠撞墙学（AGENTS：不许靠人记得）。
+            #   现在分成两句说：**一张图都没有** / **有图，但没被约定命中**（并说明改名是允许的）。
+            try:
+                stray = [p.name for p in VIEWS_DIR.glob("*.svg") if p.is_file()]
+            except OSError:
+                stray = []
+            if stray:
+                stray_hint = ("（views/ 里有 " + str(len(stray)) + " 张 svg 没被任何一路前缀命中："
+                              + "、".join(stray[:6]) + ("…" if len(stray) > 6 else "")
+                              + "。⚠ 命名只是**代码找图的约定**，真正的判据是**图的内容**"
+                                "（当前几何指纹前 10 位 + 该覆盖的每一行 label）—— "
+                                "所以**把它改名成上面那个前缀是允许的**；"
+                                "但内容不对的话，改名也过不了，那得重画。）")
+            else:
+                stray_hint = ("⚠ 画完请**按上面那两种前缀命名**"
+                              "（平面图 `plan_v1_overview*.svg` / 立面图 `plan_v1_elevation*.svg`）"
+                              "—— 那是代码找图的约定；**必须是 svg**，位图核验不了有没有漏。")
+    note = "；".join(parts)
+    if missing_views:
+        note += "。视图要求（为什么会缺）：" + str(cs.get("views_why") or "")
+    if stray_hint:
+        note += stray_hint
     out = {
-        "ok": ok,
-        "figures": [v["name"] for v in verdicts],
-        "note": "；".join(f"{v['name']}：{v['why']}" for v in verdicts),
+        "ok": not missing_views,
+        "figures": figures,
+        "required_views": views,
+        "missing_views": missing_views,
+        "view_labels": [view_cn[v] for v in views],
+        "changed_dims": list(cs.get("changed_dims") or []),
         "local": bool(cs.get("local")),
         "required_labels": needs,
+        "note": note + (f"（{cs['note']}）" if cs.get("note") else ""),
     }
-    if not ok:
+    if missing_views:
         out["needs_labels"] = needs
     return out
 
@@ -1095,22 +1451,24 @@ def clear_stale_figures(plan: dict, plan_mtime: float | None = None) -> tuple[li
     """
     removed: list[str] = []
     kept: list[str] = []
-    for verdict in figure_verdicts(plan, plan_mtime):
-        if verdict["ok"]:
-            kept.append(verdict["name"])
-            continue
-        path: Path = verdict["path"]
-        try:
-            ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-            target = ARCHIVE_DIR / path.name
-            n = 1
-            while target.exists():
-                target = ARCHIVE_DIR / f"{path.stem}_{n}{path.suffix}"
-                n += 1
-            path.replace(target)                 # 同盘移动，原子
-            removed.append(f"{verdict['name']}（{verdict['why']}）")
-        except OSError as exc:
-            kept.append(f"{verdict['name']}（清不掉：{exc}）")
+    # 两路图**都要清**（2026-09-30 加：平面图 + 立面图）—— 判据仍只有 `figure_verdicts()` 一份。
+    for kind in ("plan", "elevation"):
+        for verdict in figure_verdicts(plan, plan_mtime, kind=kind):
+            if verdict["ok"]:
+                kept.append(verdict["name"])
+                continue
+            path: Path = verdict["path"]
+            try:
+                ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+                target = ARCHIVE_DIR / path.name
+                n = 1
+                while target.exists():
+                    target = ARCHIVE_DIR / f"{path.stem}_{n}{path.suffix}"
+                    n += 1
+                path.replace(target)                 # 同盘移动，原子
+                removed.append(f"{verdict['name']}（{verdict['why']}）")
+            except OSError as exc:
+                kept.append(f"{verdict['name']}（清不掉：{exc}）")
     return removed, kept
 
 
@@ -1122,7 +1480,7 @@ def clear_stale_figures(plan: dict, plan_mtime: float | None = None) -> tuple[li
 #   也没人记得改过什么。现在改成：
 #       **生图 = 阶段二结束 → 进「阶段二验收」**
 #       用户在图上看过说"行" → 闸门开，进第三阶段
-#       说"要改" → 改参数 → 重落盘 → 重画图 → 再交付，**循环到点头为止**
+#       说"要改" → 改参数 → 重落盘 → 重画图 → 再使用，**循环到点头为止**
 #
 # 【台账为什么独立成 views/acceptance.json，不写进 plan_v1.json】
 #   ① `plan_geometry_hash()` 算的是 plan_v1.json 里**除 confirmation 外**的全部内容 ——
@@ -1144,7 +1502,7 @@ STAGE_ACCEPTANCE = "阶段二验收"
 ACCEPTANCE_STATES: dict[str, str] = {
     "not_started": "还没开始：放置表是空的，没有坐标可看",
     "awaiting_figure": "等出图：数据已落盘，但 views/ 里没有认这份数据的图",
-    "awaiting_user": "等待用户看图确认：图与数据一致，可以交付给用户了",
+    "awaiting_user": "等待用户看图确认：图与数据一致，可以使用给用户了",
     "changes_requested": "用户提了要改的地方：等改参数 → 重落盘 → 重画图",
     "accepted": "验收通过：闸门已开，可以进第三阶段",
 }
@@ -1250,17 +1608,22 @@ def save_acceptance(acc: dict) -> None:
 
 
 def accepted_figures(plan: dict) -> list[str]:
-    """**认这份数据**的图（图名）—— 也就是"该交付给用户看的那几张"。
+    """**认这份数据**的图（图名）—— 也就是"该使用给用户看的那几张"。
 
     判据只有 `figure_verdicts()` 一份（svg 看当前指纹前 10 位 **+ 该覆盖的行都在图里**
     —— 局部轮是本次改动的那几行，没有基线才是全部行；位图一律不认），不另立标准。
+    ⚠ **两路都算**（2026-09-30 加）：平面图 `plan_v1_overview*` + 立面图 `plan_v1_elevation*`
+      —— 该给用户看的可能就是**两张卡**（改了高度时平面图看不出高低）。
     ⚠ 认账的图**一张都没有**时这里返回空表 ——
     验收状态就会停在 `awaiting_figure`，逼着出图，而不是"嘴上说图有了"。
     """
+    out: list[str] = []
     try:
-        return [v["name"] for v in figure_verdicts(plan) if v.get("ok")]
+        for kind in ("plan", "elevation"):
+            out += [v["name"] for v in figure_verdicts(plan, kind=kind) if v.get("ok")]
     except OSError:
         return []
+    return out
 
 
 def _round_events(acc: dict, plan_hash: str) -> list[dict]:
@@ -1278,8 +1641,15 @@ def acceptance_state(plan: dict, acc: dict | None = None,
       ② `confirmation.confirmed` → `accepted`（闸门已开）
       ③ 这一版几何上**最后一条事件**是"要改" → `changes_requested`
          （用户提了改动、还没落到数据里；下次落盘换了指纹，这条自然失效 = 进入新一轮）
-      ④ 有认账的图 → `awaiting_user`（可以交付给用户了）
-      ⑤ 否则 → `awaiting_figure`（等出图）
+      ④ **该出的每一路图都认账**（`figure_check().ok`，路数见 `REQUIRED_VIEWS`）→
+         `awaiting_user`（可以使用给用户了）
+      ⑤ 否则 → `awaiting_figure`（等出图 / 等补上缺的那一路）
+
+    ⚠ **2026-09-30 修**：判据原先只是"**有没有**认账的图"，于是**只画了顶视图（缺 `elevation`）**
+      也会报 `awaiting_user` —— 而 `confirm_plan` 会**按视图拒收** ⇒ **状态与闸门打架、会骗人**：
+      一个不细看的 agent 会拿着一张图给用户、用户点头、然后确认被拒（白跑一轮，
+      更坏的是它可能以为"已经确认过了"）。现在判据统一到 `figure_check()`
+      —— 那个函数本来就是按 `REQUIRED_VIEWS` **逐视图**判的，一处置口径。
     """
     if not (plan.get("assets") or plan.get("whiteboxes")):
         return "not_started"
@@ -1295,7 +1665,14 @@ def acceptance_state(plan: dict, acc: dict | None = None,
             return "changes_requested"
         if last.get("kind") == "accepted":
             return "accepted"
-    return "awaiting_user" if figs else "awaiting_figure"
+    # ⚠ 判据统一到 `figure_check()`：**每一条要求的视图都认账**才算"可以给用户看了"。
+    #   （旧判据只看"有没有认账的图" → 只画一张也会说"可以给用户看了"，而确认时会按视图拒收。）
+    #   判不动（异常）就按"还没齐"处理 —— 严的那一侧：宁可让 agent 再画一张，也不能骗它去确认。
+    try:
+        views_ok = bool(figure_check(plan).get("ok"))
+    except Exception:                       # noqa: BLE001
+        views_ok = False
+    return "awaiting_user" if (figs and views_ok) else "awaiting_figure"
 
 
 def pending_changes(plan: dict, acc: dict | None = None) -> list[str]:
@@ -1383,11 +1760,12 @@ def record_acceptance(plan: dict, by: str, user_quote: str = "", figure: str = "
       「局部确认」的**基线** —— 没有它，下一轮就无从知道"改了哪几行"，只能退回全量重画。
       签名只装几何字段（不含 `note`），所以改说明文字不会触发重画（见 `row_signature()`）。
     ⚠ 同时记下**证据链**（`user_quote` 用户原话 / `figure` 认账的那张图 / `figure_age_s` 图龄）：
-      图是 agent 画的、确认是 agent 调的 —— 只有"用户说了什么 + 图交付了多久"能事后被人审计。
+      图是 agent 画的、确认是 agent 调的 —— 只有"用户说了什么 + 图使用了多久"能事后被人审计。
     """
     acc = load_acceptance()
     h = plan_geometry_hash(plan)
     rows = plan_row_signatures(plan)
+    aspects = plan_row_aspects(plan)        # 分维签名（判"改的是平面还是竖直" → 要出哪几张图）
     ev = {
         "at": _now(), "round": int(acc.get("round") or 0), "kind": "accepted",
         "by": by, "plan_hash": h,
@@ -1402,10 +1780,12 @@ def record_acceptance(plan: dict, by: str, user_quote: str = "", figure: str = "
     acc["plan_hash"] = h
     acc["figures"] = accepted_figures(plan)
     acc["accepted_rows"] = rows
+    acc["accepted_aspects"] = aspects
     acc["accepted_user_quote"] = str(user_quote or "")
     # 基线现在来自**这一次真实确认**，不再是"从归档回填来的" —— 把回填来源标掉，
     # 免得 change_set() 里那句话一直指着旧归档文件（会说错"基线是哪一版"）。
     acc.pop("accepted_rows_from", None)
+    acc.pop("accepted_aspects_from", None)
     # ⚠ 用户点头 = 这一轮结束 → **关掉「改动窗口」**（与 `record_change_request()` 配对）。
     #   下一次要改几何，必须重新留下"改什么 / 谁要的"的记录 —— 见 `main.py`
     #   `_change_request_guard()`。用户提的就记他的原话；自查修正就 `by="agent 自查"`。
@@ -1502,12 +1882,18 @@ def write_plan(plan: dict) -> dict:
             # 那就等于这次改造白做。**不许靠人记得手动补。**
             if was_confirmed:
                 try:
-                    if not (load_acceptance().get("accepted_rows") or {}):
-                        acc0 = load_acceptance()
-                        acc0["accepted_rows"] = plan_row_signatures(json.loads(old))
-                        acc0["accepted_rows_from"] = target.name
-                        acc0["updated_at"] = _now()
-                        save_acceptance(acc0)
+                    _acc0 = load_acceptance()
+                    _old_doc = json.loads(old)
+                    if not (_acc0.get("accepted_rows") or {}):
+                        _acc0["accepted_rows"] = plan_row_signatures(_old_doc)
+                        _acc0["accepted_rows_from"] = target.name
+                    # 分维签名一起回填（同一份旧数据现算得出来）—— 少回填它的话，
+                    # 下一轮局部改会落进"判不出维度 → 两张图都要"的严判。
+                    if not (_acc0.get("accepted_aspects") or {}):
+                        _acc0["accepted_aspects"] = plan_row_aspects(_old_doc)
+                        _acc0["accepted_aspects_from"] = target.name
+                    _acc0["updated_at"] = _now()
+                    save_acceptance(_acc0)
                 except (ValueError, TypeError, OSError):
                     pass          # 回填失败不该把落盘带崩：届时 change_set() 会退回全量（严的那一侧）
     OUT_JSON.write_text(body, encoding="utf-8")
@@ -1578,6 +1964,9 @@ def confirm_plan(who: str) -> int:
     fig = figure_check(plan)
     if not fig["ok"]:
         print("拒绝确认：图不认这份数据 —— " + fig["note"])
+        if fig.get("missing_views"):
+            print("  **缺的视图**："
+                  + "、".join(str(x) for x in (fig.get("view_labels") or fig["missing_views"])))
         if fig.get("local"):
             print("  这是**局部一轮**：拿 views/plan_v1.json 重画一张 —— 图内写明当前几何指纹，"
                   "**且把本次改动的那几行都画进去**"
@@ -1673,8 +2062,19 @@ def figure_checklist_cli() -> int:
     for i, lab in enumerate(req, 1):
         mark = "（本版**删掉**的行：画上并标明『已删』）" if lab in removed else ""
         print(f"  {i:>3}. {lab}{mark}    pos={pos_by_label.get(lab)}")
-    print("画完存成 views/plan_v1_overview*.svg（**必须是 svg**：位图核验不了有没有漏），"
-          "再调 confirm_plan。")
+    views = [str(v) for v in (cs.get("required_views") or ["top"])]
+    print("**要出哪几张图**（按『这一版改的是哪一维』定）：")
+    if cs.get("views_why"):
+        print(f"  依据：{cs['views_why']}")
+    for v in views:
+        if v == "top":
+            print("  · **平面图**（俯视）→ 存成 views/plan_v1_overview*.svg")
+        else:
+            print("  · **立面图**（正视图 X 向 或 侧视图 Y 向；两张都出也行）"
+                  "→ 存成 views/plan_v1_elevation*.svg")
+        print("      （图里要写当前指纹前 10 位 + 上面那几行的 label）")
+    print("⚠ 每张图都**必须是 svg** —— 位图读不出文字，核验不了有没有漏；"
+          "改高度的图只给俯视图 = **看不出改了什么**，确认时会被拒。")
     return 0
 
 
@@ -1709,6 +2109,10 @@ def main() -> int:
              f"另外 {cs['same']} 行没动、不必重画）"
              if cs.get("local") else
              f"（图里必须出现全部 {len(cs['required_labels'])} 行的 label，一行都不能漏）"))
+    print("  要出的图: " + "、".join(
+        ("平面图 plan_v1_overview*.svg" if str(v) == "top"
+         else "立面图 plan_v1_elevation*.svg")
+        for v in (cs.get("required_views") or ["top"])))
     if acc["pending_changes"]:
         print("  用户要改: " + "；".join(acc["pending_changes"]))
     print(f"  验收台账: {acc['ledger_path']}")

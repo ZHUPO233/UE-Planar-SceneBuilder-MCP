@@ -1,0 +1,175 @@
+{
+  "stage": "阶段二 · 平面放置规划",
+  "unit": "m",
+  "world": {
+    "center": [
+      0.0,
+      0.0
+    ],
+    "size": [
+      120.0,
+      80.0
+    ],
+    "size_source": "阶段一 elements.json 的『地图大小』场景项",
+    "bounds": {
+      "min": [
+        -60.0,
+        -40.0
+      ],
+      "max": [
+        60.0,
+        40.0
+      ]
+    },
+    "coordinate_system": {
+      "handedness": "left",
+      "height_axis": "Z",
+      "forward_axis": "X",
+      "right_axis": "Y",
+      "right_normal_rule": "right_normal(d) = (-dy, dx)"
+    }
+  },
+  "assets": [
+    {
+      "element_key": "house",
+      "label": "住宅 #1（house1）",
+      "pos": [
+        -20.0,
+        -18.0
+      ],
+      "footprint_m": [
+        11.13,
+        14.25
+      ],
+      "rot_deg": 270.0,
+      "note": "五元素里的 House。⚠ 就是等下要「故意摆错」的那一栋",
+      "asset_path": "/Game/demo/Item/ItemMesh/House/house1",
+      "scale": 16.0
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #1",
+      "pos": [
+        12.0,
+        -12.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "五元素里的 Tree（一物一行，共 3 棵）",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #2",
+      "pos": [
+        20.0,
+        -12.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    },
+    {
+      "element_key": "tree",
+      "label": "行道树 #3",
+      "pos": [
+        28.0,
+        -12.0
+      ],
+      "footprint_m": [
+        4.45,
+        3.63
+      ],
+      "rot_deg": 0.0,
+      "note": "",
+      "asset_path": "/Game/Fab/Tree/realistic_tree/StaticMeshes/realistic_tree",
+      "scale": 0.31
+    }
+  ],
+  "whiteboxes": [
+    {
+      "element_key": "ground",
+      "label": "世界地基（整块底板，铺满世界）",
+      "pos": [
+        0.0,
+        0.0
+      ],
+      "footprint_m": [
+        120.0,
+        80.0
+      ],
+      "rot_deg": 0.0,
+      "note": "第①层世界地基（BUILD_LAYERS 要求它在最前）。尺寸沿用 r24",
+      "shape": "cube",
+      "size_source": "预估（沿用已确认版本 r24 的尺寸）",
+      "height_m": 0.2
+    },
+    {
+      "element_key": "road",
+      "label": "沥青车行道",
+      "pos": [
+        0.0,
+        0.0
+      ],
+      "footprint_m": [
+        120.0,
+        8.0
+      ],
+      "rot_deg": 0.0,
+      "note": "五元素里的 Road。尺寸沿用 r24（沿街 120 m × 车行道 8 m）",
+      "shape": "plane",
+      "size_source": "预估（沿用已确认版本 r24 的尺寸）"
+    },
+    {
+      "element_key": "shrub",
+      "label": "灌木带（顶 GPT 说的 Prop）",
+      "pos": [
+        -20.0,
+        8.0
+      ],
+      "footprint_m": [
+        12.0,
+        1.2
+      ],
+      "rot_deg": 0.0,
+      "note": "⚠ 元素表里没有 Prop 这一类，用 shrub 顶；放在公路对面 y=+8，与房子 y=-18 不重叠",
+      "shape": "cube",
+      "size_source": "预估（沿用已确认版本 r24 的尺寸）",
+      "height_m": 0.8
+    }
+  ],
+  "params": {
+    "依据": "用户 2026-09-30 看过第 25 轮图后的两条改动：「房子正门得朝公路」「三棵树间距小点儿」",
+    "住宅 #1 朝向": "⚠ **推断，不是实测** —— rot 90 → 270。依据：`docs/阶段三-资产布局生成.md` 第 39 行明写「资产 rot 0 时朝哪边未测」；今天上午三张实景图分辨率不足以认出正门/门廊。落完立刻出一张正对房子的预览图让用户判；不对就是一个 patch 翻 180°",
+    "三棵树": "间距 14 m → 8 m（x = 12 / 20 / 28，第一棵不动，整排收紧）",
+    "世界大小": "120×80 m 不变",
+    "元素映射": "仍沿用：GPT 说的 Prop 用 shrub（灌木带）顶"
+  },
+  "previous_elements": {
+    "path": "catalog/elements.json",
+    "confirmed_at": "2026-09-26T04:37:04.524978+00:00",
+    "scene": {
+      "size_m": "120×80 m（阶段一记录）",
+      "time_of_day": "sunset"
+    }
+  },
+  "note": "一个物体一行、自带 pos（平面中心坐标，米）。**没有 count 字段** —— 摆几个就写几行，不许用一条记录代表多个不同位置的物体（那样谁也看不见它们）。已有资产先放（大小是阶段一实测的）、白膜后放（大小要等资产占完位再估）。本数据不依赖任何图片；要图就由 AI 拿这份数据自己画（代码不出图）。",
+  "confirmation": {
+    "required": true,
+    "confirmed": true,
+    "confirmed_by": "用户",
+    "confirmed_at": "2026-09-30T05:04:32.838639+00:00",
+    "note": "已确认。几何一变，指纹就对不上，本次确认自动作废。",
+    "plan_hash": "57af976290538cd8442145866586f6a3a6e585a3d074f0dca175ca3f4587dd60",
+    "user_quote": "行了"
+  }
+}

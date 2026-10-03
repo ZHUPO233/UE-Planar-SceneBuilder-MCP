@@ -1,11 +1,8 @@
 [project]
 name = "mcp-server"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.8.5"
+description = "UEMCP · 参考图驱动的 UE 场景搭建编排层（MCP server）"
 readme = "README.md"
-authors = [
-    { name = "caszhuhun", email = "caszhuhun@gmail.com" }
-]
 requires-python = ">=3.11"
 dependencies = [
     "mcp[cli]>=2.2.0",

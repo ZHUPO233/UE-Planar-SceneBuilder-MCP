@@ -1,17 +1,17 @@
 # =============================================================================
 # 把同一个 MCP server 以 **Streamable HTTP** 起起来 —— 给"只认 HTTP + URL"的客户端用
 #
-# 【为什么需要它】有些客户端（例如**豆包 PC** 的「技能·连接器·伙伴 → 新建自定义连接器」）
+# 【为什么需要它】有些客户端（例如**某些 AI 客户端的 PC 版**：「技能 / 连接器 → 新建自定义连接器」那种）
 #   只让你填 **传输类型 + 服务器 URL**，**没有 command/args 可填** —— 也就是说它**起不了
 #   本机的 stdio 进程**。而 `src/mcp_server/main.py` 末尾是 `mcp.run()`（**stdio**，给 DSH
-#   这类"宿主直接拉起进程"的用法）。两边对不上，所以另开一个启动方式：
+#   这类"Agent直接拉起进程"的用法）。两边对不上，所以另开一个启动方式：
 #   **import main.py 已经建好的那个 `mcp` 对象，换一种 transport 起** —— 工具定义一份都不重复，
 #   `main.py` **一个字都不改**。
 #
 # 【怎么跑】
-#   & F:\MCP_Server\.venv\Scripts\python.exe F:\MCP_Server\serve_http.py
-#   & ...\serve_http.py --port 9000            # 换端口
-#   客户端（豆包 PC）里填：
+#   & "<仓库根>\.venv\Scripts\python.exe" "<仓库根>\serve_http.py"
+#   & "<仓库根>\.venv\Scripts\python.exe" "<仓库根>\serve_http.py" --port 9000   # 换端口
+#   那些客户端里填：
 #       服务器名称 = scene-stage       传输类型 = HTTP      服务器 URL = http://127.0.0.1:8770/mcp
 #
 # ⚠ **端口不要用 8000**：那是**官方 Unreal MCP** 的端口（`main.py` 的 `OFFICIAL_URL`）。

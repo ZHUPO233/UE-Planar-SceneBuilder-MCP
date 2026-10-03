@@ -11,7 +11,7 @@
 #     所以 main() 先把整个 catalog/ 快照到临时目录，跑完**原样还原**。
 #     2026-09-23 实测踩过：跑一次就把用户确认过的 14 元素 elements.json 覆盖成了测试用的 5 元素。
 #
-# 用法： & F:\MCP_Server\.venv\Scripts\python.exe tests\check_tools.py
+# 用法： & "<仓库根>\.venv\Scripts\python.exe" "<仓库根>\tests\check_tools.py"
 # （不要用 uv run —— 实测在沙箱里会因缓存目录权限失败）
 # =============================================================================
 
@@ -85,30 +85,44 @@ async def test_pure() -> None:
     # ⚠ 2026-09-26：阶段三加 check_build_target + generate_build_orders + execute_build
     #   → **13 个**（与 tests/preflight.py 的 EXPECTED_TOOLS 必须一致）。
     # ⚠ 2026-09-27：阶段四 `generate_layout` 加了又**当天整块回退**（阶段一资产表 + 阶段二位置表
-    #   已是全局权威，那份只是派生件）→ 仍是 **13 个**。
+    #   已是全局权威，那份只是派生件）。
+    # ⚠ 2026-09-27（晚）：阶段五第 1 步 `apply_surfaces`（给白膜贴表面材质）→ **14 个**
+    # ⚠ 2026-09-27（晚二）：第四阶段**不跳了**，实现成导出/交换 → `export_layout` + `check_exchange`
+    #   → **16 个**（与 tests/preflight.py 的 EXPECTED_TOOLS 必须一致）。
+    # ⚠ 2026-09-29：阶段六扩范围（不只有灯光：天空/大气/天光/雾/云/后处理/时段）→
+    #   `setup_environment` + `capture_preview` → **18 个**（与 tests/preflight.py 的
+    #   EXPECTED_TOOLS 必须一致）。⚠ 阶段六最终定名「环境搭建」，出图归**阶段七** ——
+    #   `capture_preview` 仍在工具面里（代码保留、归阶段七用），所以那一批是 18 个。
+    # ⚠ 2026-09-30：阶段七只加「评估」这一个工具 —— `evaluate_layout`（落位对账：
+    #   plan ↔ 搭建台账 ↔ 关卡现状，只读、不碰关卡、不改 plan）→ **19 个**
+    #   （与 tests/preflight.py 的 EXPECTED_TOOLS 必须一致）。闭环**不新造工具**。
     result = M.mcp.list_tools()
     if asyncio.iscoroutine(result):
         result = await result
     tools = getattr(result, "tools", result)
     names = sorted(t.name for t in tools)
     check(
-        "只注册了 13 个工具（阶段一 4 + 取清单 1 + 阶段二 4 + 阶段三 3 + 自检 1）",
-        names == ["check_build_target", "confirm_assets", "confirm_elements", "confirm_plan",
-                  "execute_build", "generate_build_orders", "generate_plan",
+        "只注册了 19 个工具（阶段一 4 + 取清单 1 + 阶段二 4 + 阶段三 3 + 阶段四 2 + 阶段五 1 + "
+        "阶段六 1（`setup_environment`）+ 阶段七 2（`capture_preview`，原挂在阶段六；"
+        "`evaluate_layout`）+ 自检 1）",
+        names == ["apply_surfaces", "capture_preview",
+                  "check_build_target", "check_exchange", "confirm_assets", "confirm_elements",
+                  "confirm_plan", "evaluate_layout", "execute_build", "export_layout",
+                  "generate_build_orders", "generate_plan",
                   "get_asset_list", "get_plan",
                   "official_status", "plan_assets", "rename_assets",
-                  "request_plan_change"],
+                  "request_plan_change", "setup_environment"],
         f"实际={names}",
     )
 
     # --- 要求必须写在【工具描述】里 ---
-    # ⚠ 2026-09-23 改：原先这两条断言 `M.mcp.instructions`，但实测本宿主（DSH 的 dsh-mcp-client）
+    # ⚠ 2026-09-23 改：原先这两条断言 `M.mcp.instructions`，但实测本Agent（DSH 的 dsh-mcp-client）
     #   **不读** MCP 的 instructions —— `connect()` 的返回值（InitializeResult，instructions 在里面）
     #   连赋值都没有，全包搜 "instructions" 是 0 次命中。那段文字发出去也没人接，已删。
     #   真正到模型眼前的是 **tools/list**（工具名 + 描述 + schema），所以改成断言**描述**。
     #   这样以后谁把某条要求从描述里删掉，这里会立刻失败。
     # ⚠ 匹配前先把 markdown 加粗标记 `**` 剔除 —— 否则断言串一旦跨过 `**` 就会**假红**。
-    #   实测踩过：描述里写的是「宿主**不许**用上下文里记得的旧表」，
+    #   实测踩过：描述里写的是「Agent**不许**用上下文里记得的旧表」，
     #   而断言找的是「不许用上下文里记得的旧表」，中间隔着一对 `**`，匹配不上。
     descs = {t.name: (getattr(t, "description", "") or "").replace("**", "") for t in tools}
     for tool_name, must_have in [
@@ -145,7 +159,7 @@ async def test_pure() -> None:
     bad = [(k, t, e, M.token_match(k, t)) for k, t, e in cases if M.token_match(k, t) != e]
     check("token_match 词边界匹配全对", not bad, f"错例={bad}")
 
-    # --- num：负零/非有限值归一（这是实测踩出来的宿主拒收 bug）---
+    # --- num：负零/非有限值归一（这是实测踩出来的Agent拒收 bug）---
     nums = [
         (-0.0, "负零必须归一成 0.0"),
         (0.0, "正常零"),
@@ -163,13 +177,13 @@ async def test_pure() -> None:
             num_bad.append((v, "仍非有限"))
     check("num() 负零/非有限值全部归一", not num_bad, f"错例={num_bad}")
 
-    # 关键：归一后的结果必须能过 allow_nan=False（宿主就是这么拒收的）
+    # 关键：归一后的结果必须能过 allow_nan=False（Agent就是这么拒收的）
     try:
         import json as _json
         _json.dumps([M.num(v) for v, _ in nums], allow_nan=False)
-        check("num() 输出能通过 allow_nan=False（宿主不拒收）", True)
+        check("num() 输出能通过 allow_nan=False（Agent不拒收）", True)
     except ValueError as exc:
-        check("num() 输出能通过 allow_nan=False（宿主不拒收）", False, str(exc))
+        check("num() 输出能通过 allow_nan=False（Agent不拒收）", False, str(exc))
 
     # --- size_from_box ---
     box = {"isValid": True, "min": {"x": 0, "y": 0, "z": 0}, "max": {"x": 100, "y": 50, "z": 25}}
@@ -194,7 +208,7 @@ async def test_pure() -> None:
 
     # --- 白膜占位四道校验（2026-09-24 用户要求：先给预估尺寸、登记白膜，再让用户确认）---
     # ⚠ 这是**纯逻辑**：不碰 UE，必须全过。四道校验一条都不能松 ——
-    #   松一条，交付物里就会出现"看着像资产、其实是估的"的行（硬规则 6）。
+    #   松一条，使用物里就会出现"看着像资产、其实是估的"的行（硬规则 6）。
     def _ph(**over):
         """造一行白膜占位；over 覆盖默认值（默认值是**合格**的一行）。"""
         base = {
@@ -210,7 +224,7 @@ async def test_pure() -> None:
     check("白膜：带 asset_path 被拒（白膜就是没有资产）",
           any("asset_path" in e for e in M.placeholder_errors(
               _ph(asset_path="/Game/demo/Item/ItemMesh/House/house1"))))
-    check("白膜：没写形状被拒（阶段六没法实例化）",
+    check("白膜：没写形状被拒（阶段三没法实例化）",
           any("placeholder_shape" in e for e in M.placeholder_errors(_ph(placeholder_shape=""))))
     check("白膜：形状写错也被拒",
           any("placeholder_shape" in e for e in M.placeholder_errors(_ph(placeholder_shape="sphere"))))
@@ -229,13 +243,13 @@ async def test_pure() -> None:
           M.placeholder_errors(_ph(size_source="")) == [])
 
 
-# --- catalog/ 快照与还原（第二组会写交付物）-----------------------------------
+# --- catalog/ 快照与还原（第二组会写使用物）-----------------------------------
 
 def snapshot_catalog() -> Path:
     """把整个 catalog/ 拷进一个临时目录。**必须在第二组之前调。**
 
     为什么需要：第二组会真的调 confirm_elements / confirm_assets，它们都落盘到 catalog/。
-    没有快照的话，跑一次测试就等于用测试数据覆盖用户签过字的交付物（2026-09-23 实测踩过）。
+    没有快照的话，跑一次测试就等于用测试数据覆盖用户签过字的使用物（2026-09-23 实测踩过）。
     """
     snap = Path(tempfile.mkdtemp(prefix="check_tools_catalog_"))
     if M.STATE_DIR.exists():
@@ -407,7 +421,7 @@ async def test_live() -> None:
 
         # --- confirm_assets：**白膜契约**（2026-09-24 整改后的新规矩）---
         # ⚠ 契约变了（这次整改的核心）：
-        #   ① 路径验不过的行**不再**当"invalid_paths"交付出去 —— 直接**整表拒收**，
+        #   ① 路径验不过的行**不再**当"invalid_paths"使用出去 —— 直接**整表拒收**，
         #      并告诉调用方二选一：给对路径 / 登记成白膜占位；
         #   ② 白膜行必须把 asset_path / placeholder_shape / size_cm / size_source 四样填齐；
         #   ③ **只有材质实例顶着**的行要点名（摆不出实体）—— 但只点名，不替用户改。
@@ -420,7 +434,7 @@ async def test_live() -> None:
                        "asset_path": "/Game/This/Path/Does/Not/Exist",
                        "asset_type": "mesh"}],
         })
-        check("confirm_assets 拒收路径验证不过的行（不再当 invalid_paths 交付）",
+        check("confirm_assets 拒收路径验证不过的行（不再当 invalid_paths 使用）",
               rejected, f"rejected={rejected} 原文={err[:200]!r}")
 
         # 填错的白膜行（没写形状）也要被拒 —— 光有尺寸不算数
@@ -456,7 +470,7 @@ async def test_live() -> None:
         check("confirm_assets 里 invalid_paths 恒为空（验不过的进不来）",
               d4.get("invalid_paths") == [], f"实际={d4.get('invalid_paths')}")
         check("confirm_assets 生成了给人看的清单正文",
-              "资产清单（阶段一交付）" in (d4.get("deliverable") or ""),
+              "资产清单（阶段一使用）" in (d4.get("deliverable") or ""),
               "deliverable 里没有清单标题")
         # ⚠ 这两条是本轮整改的**验收点**：材质行必须在**清单里**就看得出来，不能只在脑子里
         check("清单里点明了『只有材质实例，摆不出实体』",
