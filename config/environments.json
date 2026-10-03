@@ -53,7 +53,7 @@
     "",
     "── 材质段：presets.<档>.<因素>.material（云量/云密度走这条）────────────────",
     "   asset    我们自己的 MI 路径（/Game/...）；不存在时若 create:true + parent 就**新建**",
-    "   create   是否允许新建（**会新建 UE 资产** —— 要你自己存盘才持久，本工具绝不存盘）",
+    "   create   是否允许新建（**会新建 UE 资产** —— 要你自己存盘才持久；本阶段真跑会**自动存盘**）",
     "   parent   新建时的父级（云用 /Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst）",
     "   name/folder  新建时的资产名 / Content 目录（默认 /Game/UEMCP/env）",
     "   params   {\"参数名\": 值} —— **按值的形状分派四种**：数字 = scalar；{r,g,b,a} 或 [r,g,b] = vector；",
@@ -75,7 +75,7 @@
     "    }",
     "  }",
     "  ⚠ 2026-09-29 实测：这一段**先用 dry_run 验过**（报文如实报「真做时会新建一个」，且不建资产）。",
-    "    一旦开真跑，就会**新建一个 MI 资产**并把云指过去 —— 要你自己在 UE 里存盘才持久。",
+    "    一旦开真跑，就会**新建一个 MI 资产**并把云指过去 —— 本阶段真跑会自动存盘，存不存由你。",
     "",
     "── 可直接粘贴的样例：给局部体积雾摆位置（`local_fog` 已在上面 factors 里）────────",
     "  放到 presets.sunset 底下即可（`transform` 支持整份变换；`location_m` 是**米**）：",
@@ -92,7 +92,31 @@
     "── 点名改哪一个 Actor（setup_environment 的 actors 参数）──────────────────",
     "   默认**按类只改第一个**（会在报文里说明）；要改别的那个就传 actors，例如",
     "   {\"fog\": \"局部雾\"}（label 片段）或 {\"fog\": \"/Game/...:PersistentLevel.ExponentialHeightFog_2\"}。",
-    "   点名后**命中多个会跳过并列出来**（不猜是哪一个）。"
+    "   点名后**命中多个会跳过并列出来**（不猜是哪一个）。",
+    "",
+    "── 环境灯具（lights 段）2026-10-03 加 ──────────────────────────────────────",
+    "`lights` 是一串**环境里的灯**（点光 / 聚光 / 面光 / 矩形光…），**任意多盏**；与 `presets` 平级。",
+    "为什么单独一段：`factors` 是「关卡里那几类**唯一**载体」、跟执行顺序绑死；灯是任意多盏的物件。",
+    "每盏灯的字段：",
+    "   name      —— 这盏灯叫什么（工具按它认「这是不是我们建的那一盏」，也是台账里的行名）。",
+    "   class     —— 官方类路径。2026-10-03 用 `search_subclasses(/Script/Engine.Light)` 实测到：",
+    "                /Script/Engine.PointLight（点光）· /Script/Engine.SpotLight（聚光）·",
+    "                /Script/Engine.RectLight（矩形光）· /Script/Engine.GeneratedMeshAreaLight（网格面光）·",
+    "                /Script/Engine.DirectionalLight（方向光 = 现成的 sun 因素，一般不用在这段写）。",
+    "                ⚠ 类路径写在配置里 ⇒ **要用一种新灯不用改代码**。",
+    "   component —— 属性写在哪个组件上（点/聚光实测是 `LightComponent0` ⇒ 这里写 `LightComponent` 即可，",
+    "                工具按对象名前缀匹配）。留空 = 属性直接写在 Actor 上。",
+    "   folder    —— 留在 `UEMCP_env`（本工具自己建的东西都放这儿；阶段三全量清场不碰它）。",
+    "   transform —— 摆哪儿（`location_m` 是**米**；`rotation` / `scale` 同上面 factors 的口径）。",
+    "   props     —— 「属性 → 值」。⚠ 属性名要实测过再用：点光实测默认 `intensity=8` / `lightColor=白` /",
+    "                `attenuationRadius=1000` / `mobility=Stationary`；⚠ **`useTemperature` 不存在**",
+    "                （读都读不到 —— 别照搬方向光的属性名）。",
+    "   material  —— 可选，形状同 factors 的 `material` 段（新建我们的 MI 再调参数）。",
+    "⚠ 灯走的是**同一套闸门**：找 / 建（`spawn`）→ 先读现值 → 幂等 → 整份写 → 读回核对 → 台账；",
+    "   `restore=true` 时**我们建的灯会被删掉**（动手前它不存在）。真跑成功按本阶段规则**自动存盘**。",
+    "⚠ 例：`[{\"name\":\"小店门口点光\",\"class\":\"/Script/Engine.PointLight\",",
+    "     \"transform\":{\"location_m\":[-15,0,6]},\"props\":{\"intensity\":4000,",
+    "     \"lightColor\":[1.0,0.78,0.55],\"attenuationRadius\":900}}]`"
   ],
   "factors": {
     "local_fog": {
@@ -103,6 +127,7 @@
       "folder": "UEMCP_env"
     }
   },
+  "lights": [],
   "presets": {
     "sunset": {
       "_note": "黄昏（参考图就是这个时段；阶段一 catalog/elements.json 记的 scene_time_of_day = sunset）",

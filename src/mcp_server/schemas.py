@@ -77,7 +77,9 @@ class BuildOrderRow(BaseModel):
       **一个字都不许在这里改**。plan 里没有的只有两样，都在这里补上：
       ① **Z**（竖直标高，规则见 `WHITEBOX_VERTICAL` / `ASSET_PIVOT_LIFT_CM`）；
       ② 白膜的**图元**（`primitive`）与**尺寸**（`size_cm`）—— 官方 PrimitiveTools
-         没有 `add_plane`，所以 `plane` 一律压成极薄的 cube（口径见 docs/阶段三 §5）。
+         只有 `add_cube` / `add_cone` / `add_cylinder` / `add_sphere`（**没有 `add_plane`**，
+          2026-10-03 调官方工具集清单确认），所以 `plane` 也只能落成 cube ——
+          它的**厚度必须在 plan 里明写 `height_m`**（口径见 docs/阶段三 §5）。
     """
 
     index: int = Field(description="序号（1 起，**按五层搭建顺序重新编号**，见 `layer`）")
@@ -95,7 +97,7 @@ class BuildOrderRow(BaseModel):
     kind: str = Field(description="`asset`（用资产摆）/ `whitebox`（用图元搭）")
     element_key: str = Field(default="", description="元素关键词（与阶段一/二一致）")
     asset_path: str = Field(default="", description="资产包路径；**白膜行为空**")
-    primitive: str = Field(default="", description="白膜用哪个图元：`cube`（plane 也压成 cube）")
+    primitive: str = Field(default="", description="白膜用哪个图元：恒为 `cube`（没有 plane 工具）")
     loc_cm: list[float] = Field(default_factory=list, description="UE 世界坐标 [X, Y, Z]（厘米）")
     rot: dict = Field(default_factory=dict, description="UE 旋转 {pitch, yaw, roll}（度）")
     scale: list[float] = Field(default_factory=list, description="UE 缩放（资产行取 plan.scale；白膜恒 [1,1,1]）")

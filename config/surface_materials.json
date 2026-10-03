@@ -1,22 +1,26 @@
 {
-    "_doc":  [
-                 "白膜要贴的表面材质：`element_key` → 材质/材质实例的包路径。",
-                 "",
-                 "⚠ **这个包里故意是空的** —— 规则照旧，但 `materials` 里没填任何路径：",
-                 "  材质路径属于**你自己的 UE 工程**；我填的示例路径你那边不存在（工具每次都会逐个 exists() 验，",
-                 "  有一条不过就整批拒收）—— 所以留空 = **阶段五一个元素都不贴**（工具会明说，不假装贴了）。",
-                 "",
-                 "怎么填（把你自己工程里的材质包路径填进来，改完**立刻生效、不用重启**——这些工具每次调用都重读这张表）：",
-                 "  {\"materials\": {\"road\": \"/Game/你的目录/MI_Asphalt\", \"ground\": \"/Game/你的目录/MI_Lawn\"}}",
-                 "",
-                 "规则：",
-                 "  · 只做**键级覆盖** —— 写了哪个元素就覆盖哪个，没写的仍用代码里的内置默认（内置默认**故意是空的**）；",
-                 "  · 路径写**包路径**（如 /Game/A/B/MI_X），不要写 .MI_X 那种对象路径，工具会自己转；",
-                 "  · 只对**白膜行**有意义（资产行自带材质，工具不碰）；",
-                 "  · ⚠ 路径**必须先存在** —— apply_surfaces 每次跑都会逐个 exists() 验，有一条不过就整批拒收；",
-                 "  · 想停用某个元素就把它从 materials 里删掉；不在表里 = 不处理。"
-             ],
-    "materials":  {
-
-                  }
+  "_doc": [
+    "白膜要贴的表面材质：`element_key` → 材质/材质实例的包路径。",
+    "",
+    "为什么是一个文件、而不是写在代码里（2026-09-29 用户要求）：这张表是**用户会反复改的内容**",
+    "（2026-09-27 改了 ground、2026-09-29 加了 shrub）—— 写死在 main.py 里意味着每换一次材质",
+    "都要改代码 + 跑预检 + 重启。搬到这里之后：**改完立刻生效，不用重启**（apply_surfaces /",
+    "generate_build_orders / execute_build / export_layout 每次调用都会重新读它）。",
+    "",
+    "规则：",
+    "  · 只做**键级覆盖** —— 这里写了哪个元素就覆盖哪个，没写的仍用代码里的内置默认；",
+    "  · 路径写**包路径**（如 /Game/A/B/MI_X），不要写 .MI_X 那种对象路径，工具会自己转；",
+    "  · 只对**白膜行**有意义（资产行自带材质，工具不碰）；",
+    "  · ⚠ 路径**必须先存在** —— apply_surfaces 每次跑都会逐个 exists() 验，有一条不过就整批拒收；",
+    "  · 想临时停用某个元素就把它从 materials 里删掉（退回内置默认），想彻底不贴就把它删掉——",
+    "    没有素材的元素本来就不会被贴（不在表里 = 不处理）。"
+  ],
+  "materials": {
+    "ground": "/Game/demo/Landscape/mcp_mats/MI_Lawn",
+    "road": "/Game/demo/Landscape/mcp_mats/MI_Asphalt",
+    "sidewalk": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+    "path": "/Game/demo/Landscape/mcp_mats/MI_Concrete",
+    "grass": "/Game/demo/Landscape/mcp_mats/MI_Lawn",
+    "shrub": "/Game/Fab/Materials/Standard/M_MS_Foliage"
+  }
 }
