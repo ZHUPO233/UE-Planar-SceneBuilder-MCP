@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server"
-version = "0.7.0"
+version = "0.8.0"
 description = "UEMCP · 参考图驱动的 UE 场景搭建编排层（MCP server）"
 readme = "README.md"
 requires-python = ">=3.11"
