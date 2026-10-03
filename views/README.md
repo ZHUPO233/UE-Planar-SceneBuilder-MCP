@@ -8,12 +8,27 @@
 | `build_orders_v1.json` | `generate_build_orders` | 翻给 UE 的搭建指令表（**厘米**，补好 Z；白膜的 plane 会被压成薄 cube） |
 | `build_state_v1.json` | `execute_build` | **搭建台账**：关卡里现在到底摆了什么（含 Actor 引用与白膜**实测**尺寸） |
 | `acceptance.json` | `confirm_plan` / `request_plan_change` | 验收台账：谁 / 何时 / 哪一版几何确认过 / 你提过哪些要改的 |
+| `build_target_v1.json` | `check_build_target` | **「搭哪张图」的答复台账**：问的时候 UE 开着哪张图 + 用户怎么答的（`execute_build` 落关卡前拿它核对） |
+| `user_edits_v1.json` | `execute_build` | **「人工痕迹」问答台账**：覆盖你手改的东西之前问过哪几行 + 你的原话（两步闸；上一批用掉后进 `history`） |
 | `environment_state_v1.json` | `setup_environment` | **环境台账**：配环境**动手前**那几个环境 Actor 的现值（`restore=true` 照它退回原样） |
 | `evaluate_v1.json` | `evaluate_layout` | **落位对账报告**：`plan` ↔ 搭建台账 ↔ 关卡现状 三方逐行对比（**只读工具**写的） |
 | `exchange/` | `export_layout` | 阶段四导出的**交换文件**（`scene_v1.json` + `.csv`，给 Blender 等用的场景描述） |
 | `preview/` | `capture_preview`（**归阶段七**） | **预览图**（PNG；机位基于世界坐标，出图**不动你的视口相机**） |
-| `plan_v1_overview*.svg` | **AI 手绘**（代码不出图） | 给你看的确认图 —— 图里必须写着当前几何指纹、并覆盖"这一轮该改的那几行" |
+| `plan_v1_overview*.svg` | **AI 手绘**（代码不出图） | **顶视图**（确认图）—— 图里必须写着当前几何指纹、并覆盖"这一轮该改的那几行" |
+| `plan_v1_elevation*.svg` | **AI 手绘**（代码不出图） | **正视图 / 左右视图**（立面确认图）—— 同一套判据 |
 | `archive/` | 工具 | 每一版数据与旧图的留档（只增不减） |
+
+## 要出哪两张图（2026-09-30 用户定案）
+
+**每一版都出两张**（先试过"按动的是哪一维决定"，当天定为恒出两张 —— 用户原话「太麻烦了」）：
+
+| 图 | 画哪个平面 | 看什么 |
+|---|---|---|
+| **顶视图** → `plan_v1_overview*.svg` | **X-Y**（俯视） | 摆在哪 / 占地多大（含朝向） |
+| **原图视角正视图** → `plan_v1_elevation*.svg` | **Y-Z**（横轴 Y、纵轴 Z） | 多高 / 多大（体量） |
+
+⚠ **"原图视角" = 沿 X 看**（本工程坐标系是 X 前进 = 参考图的纵深方向）。
+⚠ 正视图是**立面展开图**（X 被压掉），是给核对体量与高度用的**示意图，不是严格投影**。
 
 ## 请守三条
 
