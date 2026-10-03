@@ -6579,6 +6579,71 @@ def _stage2_next_step(plan: dict, acc: PlanAcceptance, empty: bool = False) -> s
     )
 
 
+# --- 阶段二 · **G15「改数据之前必须先看过现场」**（2026-10-03 加，用户要求：「必须把这个改为硬闸」）--  【模块：state】
+# 触发它的实例（用户原话：「这是目前我遇到最严重的问题」）：他在 UE 里**先把两台售卖机拽走了 10 多米**，
+#   才来提「三间隔只有 10 厘米」。agent 那一轮**只读 `plan_v1.json` 的纸面旧值**就自己推算改动，
+#   还白纸黑字断言「售卖机 #1 贴着小店墙角不动」—— 把两行**按过期前提**写进了**已确认的 plan**，
+#   直到用户点破才去 `evaluate_layout()`（一跑就把差异点名了）。
+#   ⇒ 缺的不是能力，是**没人逼它读现场**：阶段三有"人工痕迹闸"（因为要动关卡），阶段二**改数据这条链上没有闸**。
+# 判据（三条都要过；任何一条不过 → **拒收，一个字节都不写**）：
+#   ① 台账里**有东西**（说明搭过）—— 纯纸面阶段 / 第一次规划**不拦**；
+#   ② 这一版**真在改内容**（与盘上那一版**逐行签名**不同）—— 原样重算**不拦**；
+#   ③ 有一份**当版**的现场对账 `views/evaluate_v1.json`：`plan_hash` == **盘上这一版**的指纹，
+#      且 `level_checked=true`（真查过关卡那一维；UE 连不上时那份**不算**"看过现场"）。
+# ⚠ **局限（照实说）**：它只保证"**读过现场**"，**保证不了"读懂、并据此决定改不改"**
+#   —— 与回读闸同一条局限（纪律闸，不是正确性闸）。
+def _live_state_guard(planning, new_plan: dict) -> str:
+    """改放置表**之前**过这道闸：不过就抛 `ToolError`；过了返回一句**提醒**（调用方放进 warnings）。"""
+    ledger = load_json(BUILD_STATE_PATH) or {}
+    if not (ledger.get("rows") or []):
+        return ""                                   # 还没搭过：纯纸面阶段，不拦
+    old: dict = {}
+    if planning.OUT_JSON.exists():
+        try:
+            old = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            old = {}
+    try:
+        if old and (planning.plan_row_signatures(old)
+                    == planning.plan_row_signatures(new_plan)):
+            return ""                               # 一行没动（原样重算）：不拦
+    except Exception:                               # noqa: BLE001 —— 比不出来就按"在改"处理（严的那一侧）
+        pass
+    how = ("先 `official_status()`（确认链路）→ 再 `evaluate_layout()`（**读关卡真实现状**）"
+           "→ 看清哪些行与台账 / plan 不符 → **再**按现状改数据")
+    why = ("⚠ 为什么拦：**你手上的 plan 是纸面值，不是现场**。用户完全可能在你动手之前已经在 UE 里挪过了 ——"
+           "按纸面值推算，等于拿**过期前提**改数据（2026-10-03 实测最严重的一次：他先把两台售卖机拽走 10 多米，"
+           "才来提「间距只有 10 厘米」，agent 照旧值推算、还断言「贴着小店墙角不动」，"
+           "把两行按错前提写进了已确认的 plan）。")
+    rep = load_json(EVALUATE_PATH) or {}
+    if not rep:
+        raise ToolError(
+            "拒收：**这一版要改内容，但你还没看过关卡现状**（没有现场对账报告）—— 一个字节都没写。\n"
+            f"· 正确顺序：{how}\n· {why}")
+    if not old or str(rep.get("plan_hash") or "") != str(planning.plan_geometry_hash(old)):
+        raise ToolError(
+            f"拒收：**手上那份现场对账不是这一版的**（`{EVALUATE_PATH.name}` 是拿**别的版本**的 plan 做的）"
+            "—— 一个字节都没写。\n"
+            f"· 正确顺序：{how}\n· {why}")
+    if not rep.get("level_checked"):
+        raise ToolError(
+            "拒收：**那份对账没查关卡那一维**（UE 当时连不上，`level_checked=false`）—— "
+            "它证明不了你看过现场 —— 一个字节都没写。\n"
+            f"· 正确顺序：{how}（先把 UE 打开、`official_status()` 报过连上，再跑对账）\n· {why}")
+    # 过闸了：把报告里**非一致**的行摆出来，提醒"你要改的是不是这几行"
+    rows = [r for r in (rep.get("rows") or []) if isinstance(r, dict)]
+    bad = [r for r in rows
+           if str(r.get("status") or "") not in ("ok", "same", "")]
+    if not bad:
+        return "✅ 现场对账是本版的、且查过关卡 —— 闸放行（报告里没有非一致的行）。"
+    show = "；".join(f"「{r.get('label')}」{r.get('status')}" for r in bad[:8])
+    more = f"（还有 {len(bad) - 8} 行）" if len(bad) > 8 else ""
+    return ("⚠ 现场对账**不是全绿**（这是放行时的提醒，不是拦）："
+            f"{len(bad)} 行与台账 / plan 不一致：{show}{more}。"
+            "**请先确认：你要改的是不是这几行？现实里的需求还存在吗？**"
+            "（如果用户已经在 UE 里把问题改掉了，那这一版就不该按旧前提动它。）")
+
+
 def _write_plan(plan: dict) -> dict:
     """落盘计划数据 —— 交给 `planning.write_plan()`（**全工程唯一写入点**）。
 
@@ -7006,6 +7071,13 @@ async def generate_plan(
                 "这一版与上一次确认的**不是同一版**：上次确认**已作废**，"
                 "必须重新拿给用户/客户确认。"
             )
+
+    # ⚠ **G15：改数据之前必须先看过现场**（2026-10-03 加，用户要求「必须把这个改为硬闸」）——
+    #   搭过东西 + 这一版真在改 ⇒ 必须有一份"当版"的 `evaluate_layout()` 报告；
+    #   没有 / 不是当版 / 没查关卡那一维 → **拒收（一个字节都不写）**；过了则返回一句提醒。
+    _live_note = _live_state_guard(planning, plan)
+    if _live_note:
+        warnings.append(_live_note)
 
     planning.VIEWS_DIR.mkdir(parents=True, exist_ok=True)
     written = _write_plan(plan)
