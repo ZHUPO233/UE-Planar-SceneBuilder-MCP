@@ -2726,13 +2726,19 @@ def _drawing_geometry(plan: dict) -> dict:
             "（左手系 Z-up，X 前进 / Y 右 / Z 上，单位米）；`z_base_m` / `z_top_m` 是"
             "**绝对标高**（按阶段三**同一套** Z 口径算出来的），`w_m` / `d_m` / `h_m` 是"
             "**占位包围盒**（资产 = 阶段一实测包围盒 × 缩放）。"
-            "⚠ **每一版都出两张图**（2026-09-30 用户定案）：**顶视图 = X-Y 平面**（俯视）、"
-            "**原图视角正视图 = Y-Z 平面**（横轴 Y、纵轴 Z —— 因为本工程坐标系是 **X 前进**，"
-            "`world.coordinate_system` 里写着，所以「原图视角」= 沿 X 看）。"
-            "顶视图画 `x_m` / `y_m` + `w_m`×`d_m`（可画矩形 + 朝向）；"
-            "正视图画 `y_m`（横）× `z_base_m` / `z_top_m`（纵）。"
-            "⚠ 正视图是**立面展开图**（X 被压掉，不同 X 上的东西会叠在一起）："
-            "给用户核对体量与高度的**示意图，不是严格投影**；`rot_deg` 的影响按轴对齐近似。"
+            "⚠ **每一版都出两张图**（2026-09-30 用户定案）：**顶视图 = X-Y 平面**（俯视、轴对齐）、"
+            "**「原图视角」示意图 = 透视**（不是轴对齐正投影）。"
+            "⚠ **为什么第二张必须带透视**：本工程坐标系是 **X 前进**（承载参考图的纵深链）——"
+            "按轴对齐投影画，**X 会被整个压掉**，近处的东西必然被远处的盖住"
+            "（用户实测原话：「正视图我都看不清，被盖住了，远近关系没画好」）；"
+            "而参考图本身就是**透视**（近大远小），所以「原图视角」只有画成透视才对得上。"
+            "**硬要求（画前自查）**：① 方向 = 从参考图拍摄侧沿 **+X** 看（X 小 = 近、X 大 = 远）；"
+            "② **近大远小**（`scale = k / (k + x_m)` 这类简单换算即可，别追求严格投影）；"
+            "③ **每行必须标 `x_m`**（标签旁写 `x=…`，或按 X 分层 + 引线）—— 让谁在前谁在后**可读**；"
+            "④ **被挡住的行也必须出图**（淡化 / 虚线 / 引出标注都行）—— **一行都不许省**；"
+            "⑤ 纵向仍是 Z（高度不因远近倾斜），可用矩形 / 体块简化；"
+            "⑥ 图上写一句「示意图，非严格投影」，并标视平线 / 地面线（可选）。"
+            "顶视图画 `x_m` / `y_m` + `w_m`×`d_m`（可画矩形 + 朝向）。"
             "本版图里要点名的行 = `required_labels`（其中 `changed=true` 的是本次动过的）。"
             "⚠ **两张图**里都要写**当前几何指纹前 10 位**，否则 `confirm_plan` 拒收。"),
     }
@@ -6512,7 +6518,7 @@ def _stage2_next_step(plan: dict, acc: PlanAcceptance, empty: bool = False) -> s
             "⚠ **只改动的行才要重画**：改完调 `get_plan()` 看 `acceptance.change_set.required_labels` —— "
             "那就是这一轮图里**只需**出现的那几行（用户要求：局部改就全局部，不要全部重做）。"
             "⚠ **要出哪几张图也看那里**（`required_views`）：**位移 / 朝向 → 顶视图；"
-            "大小 / 高度 → 正视图或左右视图**（`views/plan_v1_elevation*.svg`）；两样都动 → 两张都要。"
+            "大小 / 高度 → 「原图视角」透视示意图**（`views/plan_v1_elevation*.svg`）；两样都动 → 两张都要。"
             "⚠ 只动高度时**顶视图看不出高低** —— 那一版就只要立面。"
         )
     if acc.state == "awaiting_user":
@@ -6542,7 +6548,7 @@ def _stage2_next_step(plan: dict, acc: PlanAcceptance, empty: bool = False) -> s
         # ⚠ **每一版都出两张图**（2026-09-30 用户定案）⇒ 这里不再按维度挑图，只报"要出哪两张"
         _views = [str(x) for x in (cs.get("required_views") or ["top", "elevation"])]
         _names = " + ".join("**顶视图（X-Y，俯视）**" if v == "top"
-                            else "**原图视角正视图（Y-Z）**" for v in _views)
+                            else "**「原图视角」透视示意图**" for v in _views)
         scope += ("⚠ 这一版**要出的图**：" + _names
                   + (f"；{cs.get('views_why')}" if cs.get("views_why") else "") + "。")
         _have = "、".join(str(x) for x in (acc.figures or [])) or "（一张都没有）"
@@ -6555,7 +6561,7 @@ def _stage2_next_step(plan: dict, acc: PlanAcceptance, empty: bool = False) -> s
             "不调它，下一次 `generate_plan` / `execute_build` 都会被拒收），"
             "② 再拿 `drawing` 段（`get_plan()` 里那份**每行带 `z_base_m` / `z_top_m`** 的几何）"
             "**自己画两张图**（每一版都出这两张）—— "
-            "**顶视图**存 `views/plan_v1_overview*.svg`、**原图视角正视图**存 "
+            "**顶视图**存 `views/plan_v1_overview*.svg`、**「原图视角」透视示意图**存 "
             "`views/plan_v1_elevation*.svg`"
             "（前缀是代码找图的约定；存成别的名字，确认时会报「views/ 里没有**那一路**的图」）—— "
             f"**每一张**图内都必须写明当前几何指纹 `{acc.plan_hash[:10]}…`"
@@ -6788,8 +6794,8 @@ async def generate_plan(
     ⚠ **图有两种，可能要出两张**（2026-09-30 用户定的最终口径；前缀是**代码找图的约定**，
       换成别的名字确认时会报"views/ 里没有**那一路**的图"）：
         · **顶视图**（平面图，俯视）→ `views/plan_v1_overview*.svg`；
-        · **正视图或左右视图**（立面图）→ `views/plan_v1_elevation*.svg`。
-      **口径：位移 / 朝向 → 顶视图；大小 / 高度（含 Z 标高 / Z 倍率）→ 正视图或左右视图**；
+        · **「原图视角」透视示意图**（立面图）→ `views/plan_v1_elevation*.svg`。
+      **口径：位移 / 朝向 → 顶视图；大小 / 高度（含 Z 标高 / Z 倍率）→ 「原图视角」透视示意图**；
       两样都动 → 两张都要；**只动高度时顶视图看不出高低，那就只要立面**。
       要出哪几张：`get_plan().acceptance.change_set.required_views`；画图**直接用**
       `get_plan().drawing` 里的 `x_m` / `y_m` / `z_base_m` / `z_top_m`（**别自己推 Z**）。
@@ -7116,8 +7122,8 @@ async def get_plan(
       **照实说明，别拿「改参数」糊弄**（「错落」没有任何参数能表达）。
 
     ⚠ **图有两种，可能要出两张**（2026-09-30 用户定的最终口径）：**顶视图**（平面图，俯视，前缀
-      `views/plan_v1_overview*.svg`）+ **正视图或左右视图**（立面图，前缀 `views/plan_v1_elevation*.svg`）。
-      **口径：位移 / 朝向 → 顶视图；大小 / 高度（含 Z 标高 / Z 倍率）→ 正视图或左右视图**；
+      `views/plan_v1_overview*.svg`）+ **「原图视角」透视示意图**（立面图，前缀 `views/plan_v1_elevation*.svg`）。
+      **口径：位移 / 朝向 → 顶视图；大小 / 高度（含 Z 标高 / Z 倍率）→ 「原图视角」透视示意图**；
       两样都动 → 两张都要；**只动高度时顶视图看不出高低，那就只要立面**。
       要出哪几张看图：`acceptance.change_set.required_views`；**画图直接读本工具返回的 `drawing` 段**
       （每行带 `x_m` / `y_m` / `z_base_m` / `z_top_m` / `w_m` / `d_m` / `h_m`，Z 口径与阶段三**同源**）
@@ -7263,11 +7269,11 @@ async def get_plan(
         _need = [str(v) for v in (drawing.get("required_views") or [])]
         _need_cn = "、".join(
             ("顶视图（平面图，存成 `views/plan_v1_overview*.svg`）" if v == "top"
-             else "正视图或左右视图（立面图，存成 `views/plan_v1_elevation*.svg`）")
+             else "「原图视角」透视示意图（立面图，存成 `views/plan_v1_elevation*.svg`）")
             for v in _need)
         warnings.append(
             "⚠ **这一版要出的图**：" + _need_cn
-            + "。口径（用户定的）：**位移 / 朝向 → 顶视图；大小 / 高度 → 正视图或左右视图**。依据："
+            + "。口径（用户定的）：**位移 / 朝向 → 顶视图；大小 / 高度 → 「原图视角」透视示意图**。依据："
             + str(drawing.get("views_why") or "")
             + " ⚠ 要几张就给几张**卡片**使用给用户，然后停下等他打字。"
         )
