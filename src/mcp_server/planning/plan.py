@@ -657,20 +657,38 @@ def normalize_whitebox(raw: dict) -> dict:
         )
     item["shape"] = shape
     item["size_source"] = src
-    # --- 高度（Z）—— 选填，但给了就要校验（2026-09-24 收尾清单 #2）---
-    # 为什么必须补这个字段：阶段一的白膜本来就有三维（size_cm = [X, Y, Z]，例如消防栓
-    # [30, 30, 75]），可阶段二以前只记平面占地 —— **高度在阶段二被丢掉了**，只活在 note 里；
-    # 阶段三要拿它把 cube 实例化出来，那时只能靠人读中文备注。
-    # cube（有体积的）缺高度时，阶段三只能靠人读 note 里的中文 —— 必填。plane（覆盖面）不需要。
+    # --- 厚度（`height_m`）—— **必填，plane 也不例外**（2026-10-03 用户定案）---
+    # 为什么必须补：阶段三拿它把白膜实例化成 cube；缺了只能靠人读 note 里的中文。
+    # ⚠ **为什么 `plane` 也要厚度**（2026-10-03 实测事故）：UE 的图元工具只有
+    #   `add_cube` / `add_cone` / `add_cylinder` / `add_sphere` —— **没有 plane 工具**
+    #   （调官方 `PrimitiveTools` 工具集清单确认）。所以"面"落进 UE **只能是 cube**，
+    #   `plane` 只是"它是个覆盖面"的语义标签，**不减免厚度**。
+    #   事故经过：清单里 plane 那行 `size_cm[2] = 0`（覆盖面只登记长宽的**登记习惯**）
+    #   被阶段三当成厚度 → 0 厚的 cube → `add_cube` 拒收 `dimensions.z must be positive, got 0.0`
+    #   → **旧的被删掉了、新的没建出来**（人行道 / 沥青路面 / 水面三层消失）。
     h = raw.get("height_m")
-    if h is not None and str(h).strip() != "":
-        try:
-            height_m = float(h)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"{item['element_key']!r} 的 height_m 不是数字：{h!r}") from exc
-        if height_m <= 0:
-            raise ValueError(f"{item['element_key']!r} 的 height_m 必须为正（米）")
-        item["height_m"] = height_m
+    if h is None or str(h).strip() == "":
+        raise ValueError(
+            f"{item['element_key']!r} 的白膜**必须给 `height_m`（厚度，米，> 0）** —— "
+            "`plane` 也不例外：\n"
+            "· UE 的图元工具只有 `add_cube` / `add_cone` / `add_cylinder` / `add_sphere` —— "
+            "**没有 plane 工具**（实测官方工具集清单）。所以「面」在这个项目里**只能是 cube**，"
+            "`plane` 只是说「它是个覆盖面」，**不减免厚度**。\n"
+            "· 照抄写法：`{{\"shape\": \"plane\", \"height_m\": 0.15}}`（= 15 cm 厚）"
+            "或 `{{\"shape\": \"cube\", \"height_m\": 0.15}}` —— 两者落进 UE **一模一样**。\n"
+            "· 阶段一清单里 plane 那行的 `size_cm[2] = 0` 是**登记习惯**（覆盖面只登记长宽），"
+            "**不是厚度** —— 阶段三不看它。"
+        )
+    try:
+        height_m = float(h)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{item['element_key']!r} 的 height_m 不是数字：{h!r}") from exc
+    if height_m <= 0:
+        raise ValueError(
+            f"{item['element_key']!r} 的 height_m 必须为正（米），现在写的是 {height_m!r} —— "
+            "0 厚的 cube 官方会拒收（`dimensions.z must be positive`，实测），"
+            "要一个面就给它一个薄厚度（如 0.15 = 15 cm）。")
+    item["height_m"] = height_m
     return item
 
 
@@ -701,6 +719,22 @@ def build_plan(assets: list, whiteboxes: list, world: dict,
     """
     previous = previous or {"rows": [], "scene": {}}
     empty = not assets and not whiteboxes
+
+    # --- 出口再挡一次：白膜行**必须**有正厚度（2026-10-03 加）---
+    # 为什么在装配这儿也挡：`generate_plan` 走的是 `normalize_whitebox()`，但**别的调用方
+    #   （含 CLI / 以后的脚本）可能直接装配** —— 上面那道校验不该只有一条路经过。
+    # 判据只有一句：`height_m` 必须是正的有限数 —— 0 厚的 cube 官方直接拒收（实测）。
+    for _w in (whiteboxes or []):
+        _k = str((_w or {}).get("element_key") or "?")
+        _h = (_w or {}).get("height_m")
+        try:
+            _hv = float(_h)                                  # type: ignore[arg-type]
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{_k!r} 的白膜缺 `height_m`（厚度，米，> 0）—— UE **没有 plane 工具**，"
+                "「面」也只能落成 cube，所以厚度必须明写（如 `height_m: 0.15`）") from exc
+        if not math.isfinite(_hv) or _hv <= 0:
+            raise ValueError(f"{_k!r} 的 `height_m` 必须是正的有限数，现在是 {_h!r}")
 
     plan = {
         "stage": "阶段二 · 平面放置规划",

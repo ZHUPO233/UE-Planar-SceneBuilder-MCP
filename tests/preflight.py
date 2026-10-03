@@ -138,6 +138,7 @@ def main() -> int:
                       "asset_path": "/Game/Fake", "pos": [0.0, 0.0],
                       "footprint_m": [10.0, 8.0], "rot_deg": 0.0, "scale": 1.0, "note": ""}]
         ok_boxes = [{"element_key": "road_fake", "label": "假路", "shape": "plane",
+                     "height_m": 0.15,
                      "pos": [0.0, -15.0], "footprint_m": [90.0, 6.0], "rot_deg": 0.0,
                      "size_source": "预估（预检）", "note": ""}]
         plan = planning.build_plan(ok_assets, ok_boxes, world)

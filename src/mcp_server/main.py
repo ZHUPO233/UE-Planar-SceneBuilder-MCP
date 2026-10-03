@@ -443,7 +443,8 @@ ENV_MATERIAL_FOLDER = "/Game/UEMCP/env"
 """**我们自己的材质实例**（`material.create` 建的那种，比如"云量"用的 MI）默认放这个 **Content 目录**。
 
 ⚠ 这是**内容浏览器里的资产路径**（`/Game/...`），与上面 Actor 的 outliner 分组（`UEMCP_env`）不是一回事。
-⚠ 建出来的 MI **要用户自己存盘**才持久（本工具**绝不存盘**）；不存盘 = 关掉重开就没了。
+⚠ 建出来的 MI **在内存里**；阶段六真跑成功会**自动存盘**（本阶段允许存盘），
+  但单独调别的工具（或 `save=false`）时它不会自己落盘 —— 那种情况不存就没了。
 ⚠ 目录不存在时 `create` 会失败 —— 那条路会把官方报错**原文**带回来（不掩饰）。"""
 
 TS_MATINST = "editor_toolset.toolsets.material_instance.MaterialInstanceTools"
@@ -500,13 +501,14 @@ ENV_PRESET_DEFAULT: dict[str, dict] = {
   自己退回了兜底（见 `_env_config()`），不静默。"""
 
 
-def _env_config() -> tuple[dict[str, dict], dict[str, dict], str]:
-    """读**环境配置**：`config/environments.json` 的 `factors`（按键覆盖兜底）与 `presets`。
+def _env_config() -> tuple[dict[str, dict], dict[str, dict], str, list[dict]]:
+    """读**环境配置**：`config/environments.json` 的 `factors`（按键覆盖兜底）/ `presets` / `lights`。
 
-    返回 `(因素表, 预设表, 提示)`：提示为空 = 一切正常；非空 = **必须带进 warnings 的原因**
+    返回 `(因素表, 预设表, 提示, 灯具表)`：提示为空 = 一切正常；非空 = **必须带进 warnings 的原因**
     （文件没了 / 读不动 / 形状不对）—— "用户改了配置却还在用旧值"必须当面说，**不静默**。
+    `lights` = **环境灯具**（点光 / 聚光 / 面光 / 矩形光…，任意多盏；类路径写在配置里）。
 
-    为什么**每次调用都读文件**：这两张表都是用户会反复改的内容（时段 / 雾色 / 曝光 / 加新因素），
+    为什么**每次调用都读文件**：这几张表都是用户会反复改的内容（时段 / 雾色 / 曝光 / 加新因素 / 加灯），
     写死在 `.py` 里意味着每次微调都要"改代码 + 预检 + 重启"。**数据归数据。**
 
     ⚠ 因素表是**按键覆盖**：配置里写了哪个因素就覆盖哪个字段，没写的仍用内置兜底
@@ -559,7 +561,18 @@ def _env_config() -> tuple[dict[str, dict], dict[str, dict], str]:
         notes.append(
             f"⚠ `{ENV_CONFIG_PATH}` 里没有可用的 `presets` 段 —— 预设用**内置兜底**顶上了"
             "（正确形状：`{\"presets\": {\"sunset\": {\"sun\": {\"props\": {...}}}}}`）。")
-    return factors, presets, ("；".join(notes) if notes else "")
+
+    # ③ **灯具段**（2026-10-03 加）：`lights` = 一串"环境里的灯"（点光 / 聚光 / 面光 / 矩形光…），
+    #   与 `presets` 平级。为什么单独一段而不是塞进 `factors`：因素表是"关卡里那几类**唯一**载体"、
+    #   跟 `ENV_FACTOR_ORDER` 的执行顺序绑死；灯是**任意多盏**的物件，塞进去会打乱那张表与顺序。
+    #   ⚠ 光源类写在配置里 ⇒ **要加一种新灯（或别的环境 Actor）不用改代码**（与 `factors` 同一条纪律）。
+    lights: list[dict] = []
+    conf_lights = doc.get("lights")
+    if isinstance(conf_lights, list):
+        lights = [x for x in conf_lights if isinstance(x, dict)]
+    elif conf_lights is not None:
+        notes.append("⚠ 配置里的 `lights` 段不是数组 —— **忽略它**（正确形状：`\"lights\": [ {...}, ... ]`）。")
+    return factors, presets, ("；".join(notes) if notes else ""), lights
 
 
 ASSET_PIVOT_LIFT_CM: dict[str, float] = {
@@ -1838,6 +1851,15 @@ async def check_build_target(
 #     根里 89 个报成 178）改成**只数根一次**；
 #   · 上面两条 [完工-14] 的实测记录针对的是**全量**路径 —— 全量逻辑本身没改
 #     （只是落完之后多写一次台账、并且现在按标签认领而不是靠行号）。
+# ⚠ 2026-10-03 增补（用户要求 · **尚未实测** —— 等用户跑 `tests/preflight.py` 与下一次真跑补证据）：
+#   · **G16「落关卡之前必须先看过现场」**：真跑（非演练、非 `adopt`）且台账有行时，必须有一份
+#     **当版**的 `views/evaluate_v1.json`（`plan_hash` == 盘上这一版、`level_checked=true`），
+#     否则**拒收、一个 Actor 都不动**。由来（实测）：那一轮增量**只比两份我们自己写的文件**
+#     （指令表 vs 台账）就报出「这次要动 0 行」—— 纸面自洽被当成了现场证据。
+#   · `force_full=true` 配上别的 mode（auto / incremental）→ **拒收**（以前被**静默忽略**，
+#     人从报文里看不出来；见 `_resolve_build_mode()`）。
+#   · 报文话术：真跑增量**一行都不动**（= 没读关卡现状）时，「没读到人工痕迹」一律补一句
+#     **这不是"关卡没问题"的证据**（`warnings` + `next_step` 两处都说了）。
 
 
 # --- 阶段三 · 增量搭建的对账件（2026-09-26；用户要求：局部改动只重建改动处）-------  【模块：state】
@@ -2048,6 +2070,17 @@ def _build_target_guard(level: str) -> None:
 #   ② 拿到用户答复后再调 → 核对「问过的那批 == 现在这批」+ 有他本人的原话 + 距提问够久 → 才放行。
 # ⚠ **边界说清**：这**拦不住"存心等够时间再编一句话"**（代码验不了真话）。它做到的是
 #   **不能悄悄干**，且台账里留下「问过哪几行 + 那句话原文」，事后可以当场对质。
+# ⚠ **2026-10-03 补的一个洞（实测踩到，客户 agent 报的）**：第 ① 步原先**在一种常见情形下做不成** ——
+#   "用户手拖过几行、但 plan 与台账一致"（要删的 0 行）时，真跑增量的 `traces` 是**空的**
+#   ⇒ 不拒收、不留痕；而 `dry_run` 又被 `if traces and not dry_run` 排除 ⇒ 也不留痕。
+#   于是**默认那条路上根本没有"第 ① 步"这个动作** —— 客户 agent 连撞 4 次都没找着门。
+#   ⚠ 更正一处**假约束**（我自己一度也照着说，源码实测把它推翻了）：
+#     `mode="full"` 的**演练**从来就没被 G8 挡过（`_resolve_build_mode` 与"不许悄悄全量清场"
+#     那两处判据**都带 `not dry_run`**）—— "只有 `full + force_full` 才做得成"是**错的**。
+#   现在：**`dry_run=true` 留痕**（它本来就扫全表、列清单；只写我们自己的 JSON，不碰关卡）——
+#   记的是 `traces`（**这一轮真跑时会被删 / 重摆的那些行**，与第 ② 步**同一个算法**，
+#   见 `_manual_traces_in_play()`）；点名（`only_labels`）时范围还会收窄到点名那几行。
+#   ⚠ 第 ② 步的判据**一条都没放松**（原话 + 距提问 ≥ `MIN_USER_EDITS_ANSWER_DELAY_S` 秒）。
 
 def _load_user_edits() -> dict:
     """读「人工痕迹」问答台账；没有 / 格式不对都返回 `{}`（当"还没问过"处理）。"""
@@ -2534,17 +2567,19 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
         note = str(w.get("note") or "")
         shape = str(w.get("shape") or "").strip().lower()
 
-        # 高度：plan 的 `height_m`（cube 行）优先；plane 行没有，取阶段一登记的薄板厚度。
+        # 高度：**以 plan 的 `height_m` 为准**（阶段二必填，2026-10-03 起）。
+        # ⚠ 兜底只对"绕过阶段二校验写进来的旧 plan"生效 —— 而且**要在报文里点名**：
+        #   实测事故就是"清单里 plane 的 size_cm[2]=0 被当成厚度 → 0 厚 cube → 官方拒收
+        #   → 旧的删了、新的没建出来"。所以这条兜底不许静默。
         if w.get("height_m") is not None:
             height_m = float(w["height_m"])
-            how = "plan 的 height_m"
         else:
             thick = thickness_cm.get(key, DEFAULT_SLAB_THICKNESS_CM)
             height_m = thick / 100.0
-            how = (f"阶段一清单 {key} 的 size_cm[2] = {thick:g} cm"
-                   if key in thickness_cm else f"兜底 {DEFAULT_SLAB_THICKNESS_CM:g} cm（清单里没登记）")
-            if key not in thickness_cm:
-                warnings.append(f"白膜「{label}」：清单里没有 {key} 的 size_cm[2]，厚度用了兜底值。")
+            warnings.append(
+                f"⚠ 白膜「{label}」：**plan 里缺 `height_m`**（阶段二现在必填）—— "
+                f"厚度用了{'阶段一清单登记值' if key in thickness_cm else '兜底值'} "
+                f"{thick:g} cm。这一版 plan 是绕过阶段二校验写进来的，建议补齐后再落。")
 
         # Z：贴顶还是贴底 —— 官方 add_cube 的方块**以 Actor 原点为中心**，所以这里算的是中心点。
         anchor, anchor_z = WHITEBOX_VERTICAL.get(key, ("bottom", GROUND_Z_M))
@@ -2559,8 +2594,9 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
                      f"（**覆盖**『{anchor}』口径）")
 
         if shape == "plane":
-            note += (f" ｜ 阶段三：官方 PrimitiveTools **没有 add_plane**，按口径压成极薄 cube"
-                     f"（厚 {height_m * 100:g} cm，取自{how}）")
+            note += (f" ｜ 阶段三：官方 PrimitiveTools **没有 add_plane**（只有 cube / cone / cylinder / "
+                     f"sphere），所以 `plane` 也是 cube —— 厚 {height_m * 100:g} cm（**来自 plan 的 "
+                     f"height_m**；plan 缺厚度会在阶段二就被拒收）")
         elif shape != "cube":
             warnings.append(f"白膜「{label}」：plan 里的 shape 是 `{shape or '空'}`，"
                             "只认 cube / plane —— 按 cube 处理。")
@@ -2787,7 +2823,8 @@ async def generate_build_orders() -> BuildOrdersResult:
       ② 旋转：`rot_deg` 直接当 UE `yaw`，**不反号**（2026-09-26 实测同向）；
       ③ **补 Z**：plan 没有竖直信息 —— 路面 z=0、两侧地面顶面 z=15 cm；白膜 cube 贴顶或贴底
          （`add_cube` 的方块以 Actor 原点为中心，实测）；原点不在底面的资产（树）要抬一段；
-      ④ 白膜图元：官方 `PrimitiveTools` **没有 `add_plane`** → `plane` 一律压成极薄 cube；
+      ④ 白膜图元：官方 `PrimitiveTools` 只有 cube / cone / cylinder / sphere —— **没有 plane**，
+         所以 `plane` 也落成 cube，厚度一律取 **plan 的 `height_m`**（阶段二必填）；
       ⑤ 材质**一律不贴**，只把阶段一记的材质实例当 `surface_material_hint` 带出去（留给阶段五）。
 
     ⚠ 本工具**不拦没确认的 plan**（那是 `execute_build` 的闸）：它只翻译。
@@ -3107,7 +3144,22 @@ def _resolve_build_mode(
       → 现在：有对得上的台账 = 增量；没有（第一次搭 / 换关卡）= 全量；显式 `full` 真跑要二次确认。
 
     返回 `(mode, mode_why)`；显式全量 + 有台账 + 没给 `force_full` → **拒收**一次，并把话说清。
+
+    ⚠ **2026-10-03 加**：`force_full=true` 配上**别的 mode**（`auto` / `incremental`）→ **直接拒收**。
+      由来（2026-10-03 实测，客户 agent 报的）：那一轮它只报出「这次要动 0 行」，而它传的
+      `force_full=true` **被静默忽略**、照样走了增量 —— 参数被无声吞掉时，agent 以为自己
+      多给了一次确认、实际什么都没发生，**人从报文里看不出来**。宁可当场拒收，也不许悄悄吞参数。
     """
+    if force_full and mode != "full":
+        raise ToolError(
+            f"拒收：`force_full=true` **只在 `mode=\"full\"` 时有意义**，而这次 `mode=\"{mode}\"` —— "
+            "**一个 Actor 都没动**。\n"
+            "· 只改几行 → **别传 `force_full`**（默认 `mode=\"auto\"` 会走增量，只动差异那几行）。\n"
+            "· 确实要推倒重来 → 显式写 `mode=\"full\", force_full=true`"
+            "（有台账时还要 `accept_user_edits=true` + 用户本人的原话）。\n"
+            "（为什么拒收：以前这个参数在别的 mode 下**被静默忽略** —— 你以为给了一次额外确认，"
+            "实际什么都没发生，而人从报文里看不出来。）"
+        )
     mode_why = ""
     if mode == "auto":
         if adopt:
@@ -3132,6 +3184,8 @@ def _resolve_build_mode(
             f"{len(live_refs)} 个 Actor **全部删掉再摆一遍**。而这一版相对台账大约只动了 "
             f"**{n_changed} 行**，增量就够（默认 `mode=\"auto\"` 会自动走增量）。\n"
             "· 只想改几行 → 去掉 `mode`（或写 `mode=\"incremental\"`）。\n"
+            "· **只想把某几行挪回 plan 的位置**（plan 与台账一致、关卡里被手拖偏了）→ "
+            "点名那条路：`execute_build(only_labels=[\"那几行的 label\"], dry_run=true)`。\n"
             "· 确实要推倒重来（关卡被搞乱了 / 想整批重摆）→ 再显式传 `force_full=true`。"
         )
     return mode, mode_why
@@ -3231,15 +3285,22 @@ def _incremental_diff(
     targets: list[dict], same: list[dict], gone: list[dict],
     changed: list[tuple[dict, dict, list[str]]], orders: dict, reclaim_actor: dict,
     drifted: list[tuple[dict, dict]], manual: list[dict], ledger_note: str | None = None,
+    named: set[str] | None = None,
 ) -> dict:
     """增量差异摘要 —— 演练与真跑**共用同一份**，免得两处说法不一致。
 
     `ledger_note` 给值时在最前面加一条 `"台账"`（演练要用它点名台账在不在）；
     **键的顺序照原样** —— 这份摘要是给人看的，顺序也算输出。
+    `named` 非空（= 这一轮传了 `only_labels`）时在最前面加一条 `"点名的"` ——
+    让**报文与台账**都能一眼看出「这次只动这几行」，不用去猜为什么 `要摆` 这么短。
     """
     out: dict = {}
     if ledger_note is not None:
         out["台账"] = ledger_note
+    if named:
+        out["点名的"] = [str(r.get("label") or "") for r in targets
+                         if str(r.get("uid") or "") in named] or sorted(
+                             str(orders[u].get("label") or "") for u in named if u in orders)
     out["要删"] = [old.get("label") for old in gone] + [r["label"] for r, _o, _w in changed]
     out["要摆"] = [r["label"] for r in targets]
     out["没动"] = len(same)
@@ -3247,6 +3308,52 @@ def _incremental_diff(
     out["台账说在、关卡里却没了"] = [r["label"] for r, _ in drifted]
     out["改动明细"] = {r["label"]: w for r, _o, w in changed}
     out["人工改过（现状与台账不符）"] = {m["label"]: m["why"] for m in manual}
+    return out
+
+
+def _manual_traces_in_play(
+    manual: list[dict], mode: str, unknown_refs: list[str],
+    *, delete_uids: set[str], named: set[str],
+) -> list[dict]:
+    """这一轮**会被消费掉的人工痕迹** —— 演练留痕与真跑都用它算，**只此一份**（2026-10-03 加）。
+
+    为什么要单独抽出来（实测踩到的结构性缺陷）：以前两处**各算一遍** ——
+      · 演练（`dry_run`）留痕记的是 `manual` 的**全部**行；
+      · 真跑算的是 `manual ∩ will_delete_uids`。
+    差别就在一类行上：**台账里有、plan 里已经删掉的行**（`orders.get(uid)` 是 None ⇒
+    晋升循环直接跳过 ⇒ 它**永远进不了** `will_delete_uids`）。于是第 1 步把它写进了 `asked_rows`、
+    第 2 步它不在 `now` 里 ⇒ 两步闸要求两批**逐行相等**（`_user_edits_gate`）⇒
+    **拿着用户正确的答复照样被拒**。用同一个函数算，这种"自己跟自己打架"就没了。
+
+    ⚠ 一句话说清它算的是什么：**这一轮真跑时会被删掉 / 重摆的那些人工痕迹**。
+      · 增量：`manual` 中 uid 属于「台账有、plan 已删」（`gone`）或「要改动」（`changed`）的那些；
+      · 全量：`manual` 全部 + 台账解释不了的活 Actor（全量会把 `UEMCP/` 整个清掉，它们都在风险里）。
+      · **点名（`named`）那几行里"现状与台账不符"的，一律算进来**（2026-10-03 第二处修正）——
+        ⚠ 这一条**不挂 `delete_uids`**：点名重摆时 plan 与台账一致 ⇒ `delete_uids` 是**空**的，
+        可"现场被拖走"的差异**只存在于 `manual` 这一维** —— 挂在 `delete_uids` 上就会
+        **判"没有人工痕迹会被消费" ⇒ 不留痕 ⇒ 第 2 步永远被拒**（2026-10-03 实测死路：
+        agent 连试 3 次、人都重启了一遍还卡在这儿）。点名的语义就是"这几行按 plan 摆回"，
+        所以它天然就是"会被消费的人工痕迹"。
+    ⚠ **它是"更严"那一侧**：算出来的每一行**都真的会被动**，不让用户为不会被删的行签字。
+    ⚠ 增量的判据是**调用方算好的那个集合**（`delete_uids`）—— 不许在函数里**另算一遍**：
+      点名重摆时 `targets` 会被收窄（本来就对的行跳过），"哪些行真会被删"必须**只有一个算法**
+      （见 `execute_build` 里 `will_delete_uids` 那段注释）。
+    """
+    if mode == "incremental":
+        out = [m for m in manual if str(m.get("uid") or "") in delete_uids]
+    else:
+        # 全量会把 UEMCP/ 下**全部**清掉：台账能认但现状被改过的是人工痕迹，
+        # 台账**根本解释不了**的活 Actor 也是（有人手动摆在了我们的文件夹里）。
+        out = list(manual) + [
+            {"label": ref, "why": ["台账里没有它 —— 可能是你手动摆的，也可能是上一版没登记"]}
+            for ref in unknown_refs]
+    if named:
+        # 点名时再夹一次：只有点名那几行可能在真跑里被消费（`targets` / `remove_refs` 也按它过滤）；
+        # 并且把"点名 ∩ manual"**并进来**（不挂 delete_uids，理由见 docstring 那一段）。
+        out = [t for t in out if str(t.get("uid") or "") in named]
+        _have = {str(t.get("uid") or "") for t in out}
+        out += [m for m in manual
+                if str(m.get("uid") or "") in named and str(m.get("uid") or "") not in _have]
     return out
 
 
@@ -3533,7 +3640,9 @@ async def execute_build(
     force_full: Annotated[bool, Field(
         description=(
             "**只有 `mode=\"full\"` 真跑时才需要**：确认你**确实要**把 `UEMCP/` 下的 Actor 全删了重摆。"
-            "台账存在时不给它 → `full` 会被拒收，并告诉你这次其实只变了几行（该走增量）"
+            "台账存在时不给它 → `full` 会被拒收，并告诉你这次其实只变了几行（该走增量）。"
+            "⚠ **配上别的 mode（`auto` / `incremental`）会被直接拒收** —— 它在那儿没有任何意义，"
+            "以前是**静默忽略**（你以为多给了一次确认，实际什么都没发生）"
         ))] = False,
     adopt: Annotated[bool, Field(
         description=(
@@ -3542,7 +3651,14 @@ async def execute_build(
             "省掉一次白重摆。跑完它再调 `mode=\"incremental\"` 才是真正落差异"
         ))] = False,
     dry_run: Annotated[bool, Field(
-        description="true = 只校验 + 对账，**一个 Actor 都不落**（先看一遍再动手用这个）")] = False,
+        description=("true = 只校验 + 对账，**一个 Actor 都不落**（先看一遍再动手用这个）。"
+                     "⚠ 它**有两处副作用**（都不碰关卡）：① 报告里会列出人工痕迹清单；"
+                     "② **若发现「关卡现状与台账不符」的行，会顺带写一份『问过哪几行』的留痕**"
+                     f"（`{USER_EDITS_PATH.name}`，我们自己的 JSON）—— 那是「按 plan 覆盖」"
+                     "两步闸**第 1 步的零副作用入口**（2026-10-03 加：默认那条路上原先根本没有"
+                     "『第 1 步』这个动作 —— 真跑增量在 `plan == 台账` 时一行都不扫。"
+                     "⚠ 顺带更正一处**假约束**：`mode=\"full\"` 的**演练**从来没被 G8 挡过，"
+                     "那两处闸都带 `not dry_run`）"))] = False,
     verify: Annotated[bool | str, Field(
         description=("读回对账的档位（默认 `true` = `full`）："
                      "`true`/`'full'` = 逐个 `get_actor_transform` 对账 **+ 白膜再读一遍组件尺寸"
@@ -3572,6 +3688,22 @@ async def execute_build(
             "⚠ 还要求：**距你用默认参数拿到那份清单至少 15 秒**（问完立刻自己答复 = 没人看过）。"
             "⚠ **不许自己编** —— 拿不出原话，就说明你还没问他"
         ))] = "",
+    only_labels: Annotated[list[str], Field(
+        description=(
+            "**点名：这一轮只把这几行挪回 plan 的位置**（`plan_v1.json` 里的 `label`，一物一行、"
+            "必须唯一命中）。用在「plan 与台账一致、但关卡里那几行被人手拖偏了」的时候 —— "
+            "那是唯一能只动这几行、又不动其余行的路（全量重摆会把 `UEMCP/` 下全部删了重来）。"
+            "⚠ **闸一点都不绕**：它本质就是「按 plan 覆盖手改」⇒ 真跑**必须**同时给 "
+            "`accept_user_edits=true` + `user_quote`（不给 → 拒收）。"
+            "正确两步：① `execute_build(only_labels=[…], dry_run=true)` —— 只读这几行的现状、"
+            "只列这几行、**留痕**（`asked_rows` 正好这几行）→ ② **把清单原样交给用户、停下等他打字** → "
+            "③ 隔 ≥15 秒，带他的原话真跑。"
+            "⚠ 与 `mode=\"full\"` / `adopt=true` **互斥**（同时给 → 拒收，不许静默忽略）；"
+            "⚠ 点名的行**本来就在 plan 位置上**时会**跳过**（报文里记「本来就对」），不白删一遍；"
+            "⚠ 报文里**一定会回显这次收到的 `only_labels`**（收到几行、叫什么）—— 它要是丢了参数，"
+            "你从报文就能看出来，不会静默退回全表。"
+            "⚠ 不传它 / 传空列表 = 行为与以前**逐字相同**（走 `plan↔台账` 差异那条增量路）"
+        ))] = [],
 ) -> BuildReport:
     """阶段三第 2 步（后半）：**把放置表落进关卡 —— 默认只动改过的行（增量），不推倒重来**。
 
@@ -3580,6 +3712,14 @@ async def execute_build(
          且与当前关卡对得上（选开新图而他还没换图 / 指定了别的图 / 中途换了图 → 拒收）。
          ⚠ 演练（`dry_run=true`）与 `adopt=true` 不拦（它们不碰关卡），但演练会在报告里点名
          "答复还没记"。
+      **G16「先看过现场」**（2026-10-03 加；排在 ⓪ 之后、① 之前 —— 它只读文件、不花官方调用）：
+         **真跑**（非 `dry_run`、非 `adopt`）+ 台账里有行 ⇒ 必须有一份**当版**的现场对账
+         `views/evaluate_v1.json`（`plan_hash` == 盘上这一版、`level_checked=true`），
+         否则**拒收**（一个 Actor 都不动）；台账为空（第一次搭 / 换过图）不拦，只说一句。
+         它与 G15 **共用同一份报告**：正常那条链「`evaluate_layout()` → `generate_plan(patch)` →
+         `execute_build()`」里，**改完 plan 之后要重新对账一次**（plan 指纹变了），此后落关卡直接用。
+         由来：2026-10-03 实测那次增量**只比两份我们自己写的文件**就报「这次要动 0 行」——
+         纸面自洽被当成了现场证据。
       ① **整批校验**：阶段二闸门 `confirmed` + 几何指纹 + 验收状态 `accepted` + 用户原话；
          资产路径逐个官方 `exists()`；白膜行不许带路径、必须有图元与三维尺寸；
          行数 == plan 的 `assets + whiteboxes` —— **任何一条不过 → 一个 Actor 都不落**
@@ -3604,6 +3744,8 @@ async def execute_build(
            · **纯增量真跑（默认那条）→ 只扫「本次会被删 / 重摆的那些行」**。
          所以范围之外的人工痕迹**既不拦、也不报**（**静默保留**：东西不丢，但没人告诉你）。
          要"搭建前统一看清有人改过什么"，用 `evaluate_layout()`（它扫全表）。
+         ⚠ **2026-10-03 加**：真跑增量**一行都不动**时扫描范围是**空的** ⇒ 我们**一次都没读关卡** ——
+           那种报文里必须明说「**没读到人工痕迹 ≠ 关卡没问题**」（`warnings` 与 `next_step` 里都说了）。
          ⚠ 为什么要它：客户原话「用户手动改的东西不该删 —— 我 full 重摆给删了」；
            以前 `full` 无条件清空 `UEMCP/`，增量则**从不读现状**，手改的东西既没人保护也没人报。
       ③ **幂等清场**：只清 outliner 里 `UEMCP/` 下的 Actor（那才是**我们的**）；
@@ -3641,13 +3783,57 @@ async def execute_build(
     # 参数不对当场抛错 —— **一个 Actor 都还没落**（放在最前面就是为了这个）。
     verify_mode = _verify_level(verify)
 
+    # ---------- `only_labels`（点名重摆）的组合闸：**拒收，不许静默吞**（2026-10-03 加）----------
+    # 为什么放在最前面（在花任何官方调用之前）：这是纯参数校验，错了就没必要去读关卡。
+    # 口径与 `force_full` 那条同源（`_resolve_build_mode`）——**发现某个参数在某种组合下无声无息，
+    # 就当场拒收**，不许"忽略它继续跑"。
+    if only_labels and not isinstance(only_labels, list):
+        raise ToolError(
+            "拒收：`only_labels` 必须是**字符串列表**（如 `[\"世界地基\",\"水面\"]`）—— "
+            "一个 Actor 都没动。")
+    _only_given = [str(x).strip() for x in (only_labels or []) if str(x).strip()]
+    if only_labels and not _only_given:
+        raise ToolError(
+            "拒收：`only_labels` 传了但**里面没有有效的 label**（空串 / 全是空白）—— "
+            "一个 Actor 都没动。要么别传它（走默认增量），要么给要挪回 plan 那几行的 `label`。")
+    if _only_given:
+        if mode == "full":
+            raise ToolError(
+                "拒收：`only_labels`（点名重摆**几行**）与 `mode=\"full\"`（**推倒全部重摆**）"
+                "是两件相反的事 —— 同时给说明你没读参数说明 —— **一个 Actor 都没动**。\n"
+                "· 只想动那几行 → 去掉 `mode`（默认 `auto` 走增量）再传 `only_labels`。\n"
+                "· 确实要推倒重来 → 去掉 `only_labels`，写 `mode=\"full\", force_full=true`。")
+        if adopt:
+            raise ToolError(
+                "拒收：`only_labels`（点名重摆）与 `adopt=true`（**只读**地把现状登记成台账，"
+                "**一个 Actor 都不动**）是两件相反的事 —— **一个 Actor 都没动**。去掉一个再调。")
+        # ⚠ 真跑必须配 `accept_user_edits=true` + `user_quote`：点名重摆本质就是"按 plan 覆盖手改"，
+        #   不给这个开关就变成一条**裸点名覆盖**的通道（那正是人工痕迹两道闸要防的事）。
+        #   宁可当场拒收，也不许"看起来只是点名、实际上默默抹掉用户手拖的位置"。
+        if not dry_run and not accept_user_edits:
+            raise ToolError(
+                "拒收：**点名真跑必须同时给 `accept_user_edits=true`**（外加 `user_quote`）—— "
+                "一个 Actor 都没动。\n"
+                "· 为什么：点名重摆 = 把用户手拖偏的那几行**按 plan 改回去**，那就是「覆盖手改」，"
+                "必须走人工痕迹那两步闸 —— 先问过他、有他的原话，才准动。\n"
+                "· 正确两步：① `execute_build(only_labels=[…], dry_run=true)`（只读这几行的现状 + "
+                "**留痕**）→ ② **把清单原样交给用户、停下等他打字** → "
+                "③ 隔 ≥15 秒再调 `execute_build(only_labels=[…], accept_user_edits=true, "
+                "user_quote=\"他的原话\")`。")
+
     # ⚠ 碰 UE 之前先过**回读闸**（2026-09-26 用户要求把软约束变硬）：这一版没回读过，就不许落关卡。
     _readback_guard()
+
+    # ⚠ 落关卡之前再过 **G16「真跑必须先看过现场」**（2026-10-03 加）—— 与 G15 共用同一份报告。
+    #   放在整批校验**之前**：它只读文件、不花官方调用，要拒就在花调用之前拒。
+    _seen_note = _level_seen_guard(planning, dry_run, adopt)
 
     # ---------- ① 整批校验（不过就一个 Actor 都不落）----------
     pre = await _precheck_build(ctx, planning)
     calls += pre.used
     plan, rows, warns, gate = pre.plan, pre.rows, pre.warns, pre.gate
+    if _seen_note:
+        warns.append(_seen_note)
 
     # ---------- 指令表（留痕件）是不是这一版的（2026-09-27 补 · B 项 · **尚未实测**）----------
     # ⚠ 先说清一件事（2026-09-27 读源码核对出来的）：`execute_build` 在**上面**已经用
@@ -3717,6 +3903,10 @@ async def execute_build(
         return report
 
     # ---------- 差异：这次到底要动哪几行（增量全靠它）----------
+    # `named` = 这一轮**被点名**的那些行的 uid（`only_labels` 用；没点名就是空集）。
+    # ⚠ 先把它算出来：上面的"洗干净撞名"那道闸要按**点名/不点名**分两种话来拒。
+    named: set[str] = set()
+    named_uids: set[str] = set()
     orders: dict[str, dict] = {}
     dup: list[str] = []
     for r in rows:
@@ -3733,6 +3923,12 @@ async def execute_build(
     for r in rows:
         name_owner.setdefault(r["name"], []).append(r["label"])
     clash = {n: ls for n, ls in name_owner.items() if len(ls) > 1}
+    if clash and mode == "incremental" and _only_given:
+        raise ToolError(
+            "拒收：这些 label 洗干净之后**撞成同一个 Actor 名**了，点名重摆认不出谁是谁 —— "
+            "**一个 Actor 都没动**：\n· "
+            + "\n· ".join(f"`{n}` ← " + "、".join(ls) for n, ls in clash.items())
+            + "\n请先把这几个 label 改得互不相同（阶段二允许同类多行，但每行要有区别）。")
     if clash and mode == "incremental":
         raise ToolError(
             "这些 label 洗干净之后**撞成同一个 Actor 名**了 —— 增量靠 label 认领，撞名就认不出来：\n· "
@@ -3752,6 +3948,90 @@ async def execute_build(
             f"台账记的关卡是 `{ledger.get('level')}`，当前关卡是 `{level}` —— **换图了**，"
             "台账里的 Actor 引用在这儿没有意义 —— **一个 Actor 都没动**。要么切回那张图，"
             "要么在**这张图上**用 `adopt=true` 重新登记，要么 `mode=\"full\"` 重摆。")
+
+    # --- [完工-22] `only_labels` 点名重摆 · ✅ 实测 2026-10-03T14:32:12Z（D 盘真跑，用户原话「可以」）---
+    # 实测证据（逐条对得上，来自 D:\UEMCP-v0.8.0\views\ 与官方读回）：
+    #   · 两步闸走通：`user_edits_v1.json` 的 `history` 多一条
+    #     `asked_rows=[世界地基, 水面]`、`quote="可以"`（14:31:45Z）→ 真跑 14:32:12Z（**隔了 27 秒**）；
+    #   · **只动 2 行**：台账 71 行**一行没少**、`how=incremental`（**不是 full**）；
+    #     `世界地基 → Actor_284`、`水面 → Actor_285`（新建），`人行道` 仍是 `Actor_93`（**没被碰**）；
+    #   · 读回全对上：`[12500,0,5]` / `[7000,0,-50]`，两行 `verified=true`、用户报文 `mismatches=[]`；
+    #   · 我另经官方直读复核：`Actor_285` = `7000,0,-50`（与 plan 一致）。
+    # 修的是什么（这一轮真正治好的三处，**别改回去**）：
+    #   ① `to_move` 的判据**必须含"现场"那一维**（`_manual_uids`）：只比 `plan↔台账` 时，
+    #      "两边一致、但关卡里被人拖走"这个**唯一要治的场景**根本看不见 ⇒ 报"本来就对"，退回全量；
+    #   ② `_manual_traces_in_play` 里**点名那几行的现场差异不许挂在 `delete_uids` 上**：
+    #      `plan==台账` ⇒ 删除集是空 ⇒ `traces` 空 ⇒ 演练"不留痕" ⇒ 第 2 步永远被拒（死循环）；
+    #   ③ `only_labels` 的参数类型**不许用可空联合**（`list[str] | None`）：实测客户端会把它**静默丢掉**，
+    #      工具于是悄悄退回全表；现在用 `list[str] = []`，并在报文里**回显收到的 label** 自证。
+    # ⚠ 已知缺口（不是这次的范围）：`_live_vs_ledger` 对"台账引用不在 live_set"的行**静默跳过** ——
+    #   "没查到"会长得像"没问题"，值得以后单独治。
+    # ----------------------------------------------------------------------------------------------
+    # ---------- `only_labels`：**点名把这几行挪回 plan**（2026-10-03 加）------------------------
+    # 由来（用户报的，D 盘现场实测）：`plan == 台账`、但关卡里那两行被人手拖走了 ——
+    #   默认增量算出的差异是**空的**（`plan↔台账` 一致）⇒ 工具什么都不动；而 `evaluate_layout()`
+    #   报出来的两行**又没有任何入口能让工具"只动它们"** —— 唯一走得通的路是**全量重摆**
+    #   （先删 41 行再摆 41 行），那两行只是被"顺带"摆回 plan 位置。用户原话：
+    #   「挪了是因为这个」= 靠全量，不是靠工具能挪那几行。
+    # 现在给它一个一等公民的动作：**点名 → 读这几行的现状 → 与 plan 比 → 不一样的按 plan 重摆**。
+    # ⚠ 闸一点都不绕：它本质就是"按 plan 覆盖手改" ⇒ 真跑必须配 `accept_user_edits=true` + `user_quote`
+    #   （上面那条组合闸已经拦过）；这一步只做"点名解析 + 与 plan 比 + 这一轮只处理这几行"。
+    if _only_given:
+        by_label: dict[str, list[dict]] = {}
+        for r in rows:
+            by_label.setdefault(str(r.get("label") or ""), []).append(r)
+        asked: list[str] = []
+        seen_ask: set[str] = set()
+        for lab in _only_given:                     # 复用上面**已经去空去重**的那份（不再各算一遍）
+            if lab in seen_ask:
+                continue
+            seen_ask.add(lab)
+            asked.append(lab)
+        missing_in_plan = [lab for lab in asked if lab not in by_label]
+        ambiguous = [lab for lab in asked if len(by_label.get(lab) or []) > 1]
+        if ambiguous:
+            raise ToolError(
+                "拒收：这些 label 在当前 plan 里**命中多行**（分不出是哪一行）—— **一个 Actor 都没动**："
+                + "、".join(f"`{lab}`" for lab in ambiguous)
+                + "\n（点名只能认**唯一命中**的 label，与 `generate_plan(patch=…)` 同一条纪律。"
+                  "请先把这几行改名改得互不相同，或改用不重名的 label。）")
+        if missing_in_plan:
+            raise ToolError(
+                "拒收：这些 label **不在当前 plan 里** —— **一个 Actor 都没动**："
+                + "、".join(f"`{lab}`" for lab in missing_in_plan)
+                + "\n· label 必须与 `plan_v1.json` 里的**一字不差**（点名只认 `label`）。"
+                  "先 `get_plan()` 看这一版到底有哪些 label（`drawing` 段里每行都带 `label`）。")
+        picked = [by_label[lab][0] for lab in asked]
+        named_uids = {str(r["uid"]) for r in picked}
+        no_ledger = [r["label"] for r in picked if str(r["uid"]) not in ledger_by_uid]
+        if no_ledger:
+            raise ToolError(
+                "拒收：这些行**在台账里没有**（= 这一行还没搭过 / 台账被重建过）—— 点名重摆只能处理"
+                "**已经搭好的行** —— **一个 Actor 都没动**："
+                + "、".join(f"`{lab}`" for lab in no_ledger)
+                + "\n· 想看现场到底什么样 → `evaluate_layout()`（只读，会点名『从没搭过』的行）；\n"
+                  "· 台账整个不可用（换了图 / 被删）→ 先 `execute_build(mode=\"incremental\", "
+                  "adopt=true)` 认领现状（**一个 Actor 都不动**），再点名。")
+        drifted_named = [r["label"] for r in picked
+                         if str((ledger_by_uid.get(str(r["uid"])) or {}).get("actor") or "")
+                         not in live_set]
+        if drifted_named:
+            raise ToolError(
+                "拒收：这些行**台账说在、关卡里却找不到**（上次没落成 / 被手删了）—— 点名重摆按"
+                "『删旧的、按 plan 摆新的』做，找不到旧的就无从下手 —— **一个 Actor 都没动**："
+                + "、".join(f"`{lab}`" for lab in drifted_named)
+                + "\n· 先 `evaluate_layout()` 看这几行到底什么状态（它会给 `drifted`）；\n"
+                  "· 或者不点名、直接 `execute_build()`（增量会把『台账说在却没了』的行当**要重摆**）。")
+        named = set(named_uids)
+        # ⚠ **回显这一轮收到的点名**（2026-10-03 加，实测踩过）：客户端那一侧如果把这个参数
+        #   静默丢掉（类型是联合类型时最容易发生），工具就会**悄悄退回全表** ——
+        #   而报文里只看得到"这版没有人工痕迹会被消费"，人根本不知道参数没到。
+        #   所以：**收到什么、命中什么、uid 是什么，一律写进 warnings**。
+        warns.append(
+            f"点名（`only_labels`）收到 {len(_only_given)} 个 label："
+            + "、".join(f"「{x}」" for x in _only_given) +
+            "；在 plan 里命中 "
+            + "、".join(f"「{r['label']}」→ `{r['uid']}`" for r in picked) + "。")
 
     # ---------- 关卡现状 vs 台账：**用户手改过的东西不许被静默删掉**（2026-09-26 加）----------
     # 这一步要**读关卡**（每个待查行 1 次 `get_actor_transform`，白膜行再 +2 次读组件尺寸），
@@ -3847,7 +4127,16 @@ async def execute_build(
     #   · `dry_run` —— 它是"看清楚"的那一步（用户问「我手改的东西还在不在」就靠它）；
     #   · `accept_user_edits=true` —— 要按 plan 覆盖人工改动，得先知道**哪些**被改过；
     #   · 全量 —— 本来就要把 `UEMCP/` 下全部清掉，每一行都在风险里。
-    if dry_run or accept_user_edits or mode == "full":
+    # ⚠ **点名（`only_labels`）优先，且演练/真跑一视同仁**（2026-10-03 加）：只扫**点名的那几行**。
+    #   两个理由：① 省调用（41 行场景挪 2 行：扫 2 行而不是 41 行）；
+    #   ② **第 1 步问过的清单只能是这几行** —— 真跑时 `traces` 也只可能含这几行，
+    #      两步闸的「问过的那批 == 现在这批」才对得起来（不点名时那个集合是"这一版要动的所有行"，
+    #      agent 解释不了、用户也签不了）。
+    if named:
+        scan_rows = [x for x in ledger_rows_all if str(x.get("uid") or "") in named]
+        scan_why = (f"只扫**点名的那 {len(scan_rows)} 行**（`only_labels`；其余 {len(rows)} 行"
+                    "一个 Actor 都不碰、也不读）")
+    elif dry_run or accept_user_edits or mode == "full":
         scan_rows = ledger_rows_all
         scan_why = "全表（演练 / 要按 plan 覆盖人工改动 / 全量重摆）"
     else:
@@ -3855,11 +4144,28 @@ async def execute_build(
         scan_why = "只扫这次会被删掉的行（真跑增量）"
     manual, used = await _live_vs_ledger(ctx, scan_rows, live_set)
     calls += used
+    # 点名时把 `manual` 再夹一次：`_live_vs_ledger` 是通用的，别让它把范围外的行带进来
+    #   （范围外的行**不拦也不报**是刻意的 —— 它们这一轮一个都不会动，见下面 `targets` 的过滤）。
+    if named:
+        manual = [m for m in manual if str(m.get("uid") or "") in named]
     if manual:
         warns.append(
             f"⚠ 有 {len(manual)} 行**现状与台账不符**（人工改过 / 官方没照做；扫描范围：{scan_why}）："
             + "；".join(f"「{m['label']}」{'；'.join(m['why'])}" for m in manual[:6])
             + ("…" if len(manual) > 6 else ""))
+    # ⚠ **"没读到人工痕迹" ≠ "关卡没问题"**（2026-10-03 加，实测事故）：真跑增量**只扫"会被删 / 重摆的行"**
+    #   （为了省调用），而这一版**一行都不动** ⇒ 扫描范围是空的 ⇒ 我们**一次都没读关卡**。
+    #   客户 agent 就是这么报出「这次要动 0 行」的：**纸面自洽被当成了现场证据**。
+    #   （闸那一侧由 G16 兜底，但**报文里也必须说实话** —— 人只看报文。）
+    if not scan_rows and ledger_rows_all:
+        warns.append(
+            "⚠ 本次**一行关卡现状都没读**（真跑增量只扫『会被删 / 重摆』的行，而这一版一行都不动）—— "
+            "所以「没报人工痕迹」**不是**「关卡没问题」的证据，最多只说明**指令表与台账逐行一致**。"
+            "⚠ 而「关卡里那几行被手拖偏了、想挪回 plan」这件事**正是**这种情况（plan 与台账一致 ⇒ "
+            "差异是空的 ⇒ 默认增量什么都不动）—— 那条路是**点名**："
+            "`execute_build(only_labels=[\"那几行的 label\"], dry_run=true)`（它只扫点名的行、"
+            "列出清单并留痕），不是 `evaluate_layout()`（后者只出报告、**不写留痕**，"
+            "在人工痕迹两步闸里帮不上忙）。")
     # ⚠ `unknown_refs` 只在**全量**时报/拦：增量那边有更细的处置（读 label 认领，认不出就拒收），
     #   在这里重复一遍会把"能认领回来的新行"误报成人工痕迹。
     if unknown_refs and mode == "full":
@@ -3902,22 +4208,85 @@ async def execute_build(
         str(old.get("actor") or "") for old in (gone + [o for _r, o, _w in changed])
         if str(old.get("actor") or "") in live_set]
 
+    # ---------- 点名（`only_labels`）的**白名单过滤**：这一轮只动这几行（2026-10-03 加）--------
+    # 位置很要紧：放在上面那个三元组与 `remove_refs` **之后**、清场循环**之前**。
+    # ⚠ 它只可能**变窄**，不会放宽任何东西 —— 点名之外的行，这一轮连删都不删：
+    #   而第 2 步真跑时 `traces` / `_user_edits_gate` 认的就是这几行，两边天然是同一批。
+    # ⚠ `same` 也按点名重算：报文里「没动 N 行」应当是**真的没动**的行数（点名的那几行会被删了重摆，
+    #   不能算"没动"—— 否则人会以为 41 行都没动、而实际上动了 2 行）。
+    if named:
+        # ⚠ **只动"真的与 plan 不一致"的那几行**（2026-10-03 加，参数说明里承诺过）：
+        #   点名的行如果**本来就在 plan 位置上**，删了重建毫无收益（白花 3~4 次官方调用 + 材质要重贴），
+        #   所以那一行**跳过**，并在报文里如实记「本来就对」。
+        #   `to_move` 的判据**三个维度缺一不可**（2026-10-03 修正）：
+        #     ① `_row_changes`（**plan vs 台账**）→ `changed` / `gone`；
+        #     ② 台账说在、关卡里却没了 → `drifted`；
+        #     ③ **`_live_vs_ledger`（关卡现状 vs 台账）→ `manual`** —— ⚠ **这一维是必须的**：
+        #        "plan 与台账一致、但**关卡里被人手拖走了**"正是 `only_labels` 要治的那个场景，
+        #        而它在①②两维里**完全看不见**。2026-10-03 实测事故：用户把「世界地基」拖到
+        #        −34.75 m、「水面」拖到 −6.8 m，plan 与台账都还是 +5 / −50 ⇒ 单看①②就报
+        #        「本来就对、跳过」，于是**又退回全量重摆**（删 71 摆 71）—— 等于这个功能没做。
+        #        ⚠ 所以这里读的是**现场**（`manual` 来自 `_live_vs_ledger`），不是纸面。
+        _delete_uids = {str(o.get("uid") or "") for o in gone} | {
+            str(o.get("uid") or "") for _r, o, _w in changed}
+        _drifted_uids = {str(r["uid"]) for r, _o in drifted}
+        _manual_uids = {str(m.get("uid") or "") for m in manual}
+        to_move = named & (_delete_uids | _drifted_uids | _manual_uids)
+        already_ok = named - to_move
+        targets = [r for r in targets if str(r["uid"]) in to_move]
+        remove_refs = [str(o.get("actor") or "") for o in (gone + [o for _r, o, _w in changed])
+                       if str(o.get("uid") or "") in to_move
+                       and str(o.get("actor") or "") in live_set]
+        # ⚠ **现场与台账不符的那几行**还要单独补进删除名单：它们的 uid 可能既不在 `gone`、
+        #   也不在 `changed`（plan 与台账一致时就是如此）—— 但旧 Actor 必须删掉才能重摆。
+        #   这不花额外调用：点名时扫描范围已经**只扫点名那几行**，`manual` 就是那几行的现状比对结果。
+        _ref_by_uid = {str(m.get("uid") or ""): str(m.get("actor") or "") for m in manual}
+        for _u in (to_move & _manual_uids):
+            _ref = _ref_by_uid.get(_u, "")
+            if _ref and _ref in live_set and _ref not in remove_refs:
+                remove_refs.append(_ref)
+        same = [r for r in same if str(r["uid"]) not in named]
+        if named:
+            _live_labels = [r["label"] for r in rows if str(r["uid"]) in (to_move & _manual_uids)]
+            warns.append(
+                f"点名（`only_labels`）**三个维度都查了**（plan↔台账 / 台账↔关卡现状 / 台账引用）："
+                f"共 {len(named)} 行 → **{len(to_move)} 行要挪**"
+                + (f"、{len(already_ok)} 行**本来就对**（跳过）" if already_ok else "")
+                + "。"
+                + (f"其中**关卡现状被手改过**的有 {len(_live_labels)} 行（按 plan 摆回）："
+                   + "、".join(f"「{x}」" for x in _live_labels[:8])
+                   + ("…" if len(_live_labels) > 8 else "") + "。"
+                   if _live_labels else
+                   "（没有一行是「现状与台账不符」—— 现场那几行与台账一致。）"))
+    # ⚠ **"这一轮哪些行真会被删 / 重摆"只有这一个算法**（2026-10-03 加）：
+    #   真跑的人工痕迹判据与演练的留痕内容都取它 —— 以前两处各算一遍，
+    #   只要 `manual` 里有一行是"台账有、plan 已删"（它永远进不了删除集），
+    #   第 1 步把它写进 `asked_rows`、第 2 步它不在 `now` 里 ⇒ 两步闸要求两批**逐行相等** ⇒
+    #   **拿着用户正确的答复照样被拒**。点名时删除集还会被 `to_move` 收窄，所以更不能各算一遍。
+    will_delete_uids: set[str] = ({str(o.get("uid") or "") for o in gone}
+                                  | {str(o.get("uid") or "") for _r, o, _w in changed})
+    if named:
+        will_delete_uids &= to_move
+
     # ---------- 人工痕迹的处置：**默认拒收，不静默删**（2026-09-26 加）------------------
     # 这一步在**清场之前**：清场一旦开始，用户手改的东西就没了（客户原话：
     # 「用户手动改的东西不该删 —— 我 full 重摆给删了」）。
-    if mode == "incremental":
-        will_delete_uids = ({str(o.get("uid") or "") for o in gone}
-                            | {str(o.get("uid") or "") for _r, o, _w in changed})
-        traces = [m for m in manual if m["uid"] in will_delete_uids]
-    else:
-        # 全量会把 UEMCP/ 下**全部**清掉：台账能认但现状被改过的是人工痕迹，
-        # 台账**根本解释不了**的活 Actor 也是（有人手动摆在了我们的文件夹里）。
-        traces = list(manual) + [
-            {"label": ref, "why": ["台账里没有它 —— 可能是你手动摆的，也可能是上一版没登记"]}
-            for ref in unknown_refs]
+    # ⚠ **`traces` 只算一遍**（2026-10-03 加）：算它的函数在下面，演练留痕与真跑**都调它** ——
+    #   以前两处各算一遍（演练记 `manual` 全量、真跑记 `manual ∩ 将被删的行`），
+    #   只要 `manual` 里有一行是"台账有、plan 已删"，两批就永远对不上 ⇒
+    #   **第 2 步拿着用户正确的答复照样被拒**（`_user_edits_gate` 要求两批逐行相等）。
+    traces = _manual_traces_in_play(
+        manual, mode, unknown_refs, delete_uids=will_delete_uids, named=named)
+    # 第 2 步过了闸拿到的**用户原话**：先记在这儿，等**真跑落完之后**再销账
+    #   （2026-10-03 改 —— 以前一过闸就销账，删到一半失败就把用户的同意吃掉了）。
+    _quote_ok = ""
     if traces and not dry_run:
         head = "\n".join(f"· 「{t['label']}」{'；'.join(t['why'])}" for t in traces[:12])
         more = f"\n（还有 {len(traces) - 12} 处没列全）" if len(traces) > 12 else ""
+        # 点名真跑时，`traces` 就是"点名那几行里真被动过的"—— 措辞与拒收里的对照要一致。
+        _scope = (f"你点名的 {len(named)} 行里，有 {len(traces)} 行的现状与 plan 不一致"
+                  if named else
+                  f"`{OUR_FOLDER_ROOT}/` 下有 {len(traces)} 处人工痕迹会被这次操作删掉")
         if not accept_user_edits:
             # **第 1 步**：先留痕「我问了哪几行」（不碰关卡），再拒收 —— 与 `check_build_target` 同构。
             try:
@@ -3927,7 +4296,7 @@ async def execute_build(
             except OSError as exc:
                 led = f"（⚠ 台账没写成：{exc} —— 这次**没留下**『问过哪几行』的记录）"
             raise ToolError(
-                f"拒绝搭建：`{OUR_FOLDER_ROOT}/` 下有 **{len(traces)} 处人工痕迹**会被这次操作删掉 —— "
+                f"拒绝搭建：{_scope} —— "
                 "**一个 Actor 都没动**：\n" + head + more + "\n" + led + "\n"
                 "两条出路：\n"
                 "· **保住它们**（推荐）：把用户想要的改动**写回阶段二** —— "
@@ -3937,6 +4306,9 @@ async def execute_build(
                 "· **按 plan 覆盖它们**（会把上面这些行删掉重摆）：**把上面这份清单原样交给他"
                 "（一行都别省）→ 停下等他打字**，拿到他本人的原话后再调 "
                 "`execute_build(accept_user_edits=true, user_quote=\"他的原话\")`。\n"
+                "⚠ 只想动**其中几行**（`plan` 与台账本来一致、只是关卡里被人拖偏了）→ "
+                "点名那条路更省：`execute_build(only_labels=[\"那几行的 label\"], dry_run=true)` "
+                "拿清单 + 留痕 → 用户答复 → 再带他的原话真跑。\n"
                 "⚠ 现在这是**两步闸**：没先问过 / 问过的那批与现在这批不一致 / 答复来得太快"
                 f"（< {MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒）—— **照样拒收**。"
                 "⚠ 想先看清「会覆盖什么」，用 `dry_run=true`（演练不碰关卡、也不要原话）。\n"
@@ -3945,17 +4317,89 @@ async def execute_build(
         # **第 2 步**：核对「问过没有 / 问的那批就是这批 / 有他本人的原话 / 距提问够久」。
         #   加固由来：外部 Agent 收到上面那条拒收后**自己**传了 `accept_user_edits=true`，
         #   用户手拖过的水面（差 30 cm）就这么被覆盖了 —— 覆盖必须是"两步 + 人的凭据"。
+        # ⚠ **不在这里销账**（2026-10-03 改）：以前这一步过了就立刻
+        #   `_mark_user_edits_answered()` —— 于是**删到一半失败**时，用户已经给出的同意
+        #   （和他的原话）先被消费掉了，重试要**重新问、重新等 15 秒**。
+        #   同意是**人的动作**，不该被一次没干成的执行吃掉；所以挪到真跑**落完之后**再销账。
         _quote_ok = _user_edits_gate(traces, level, mode, user_quote)
-        try:
-            _mark_user_edits_answered(_quote_ok)
-        except OSError:
-            pass
+    elif dry_run and not accept_user_edits and mode == "incremental":
+        # **「第 1 步」的零副作用入口**（2026-10-03 加，实测逼出来的）：
+        #   起因（客户 agent 报的）：他要"按 plan 覆盖两行人工痕迹"时发现，**默认参数的真跑增量
+        #   根本不扫人工痕迹** —— 那一版 plan == 台账 ⇒ 要删的 0 行 ⇒ `traces` 是空的；
+        #   而 `dry_run` 又被上面那句 `if traces and not dry_run` 排除 ⇒ **既不拒收、也不留痕**。
+        #   于是"先问过"这件事，当时**在默认那条路上根本没有入口**（⚠ **不是**"只有
+        #   `full + force_full` 才做得成" —— 那句是假的：两处全量闸都带 `not dry_run`，
+        #   全量**演练**从来不拦；假约束的由来是没人去读那两处判据）。
+        #   现在：演练本来就**扫全表（或点名那几行）、列清单**，
+        #   让它**顺带留痕**（只写我们自己的 JSON，**关卡一个 Actor 都不动**）。
+        #   ⚠ **记的就是 `traces`**（2026-10-03 第二处改）：与真跑第 2 步算的**是同一个函数**
+        #     （`_manual_traces_in_play`）。以前这里记的是裸 `manual`，而真跑记的是
+        #     `manual ∩ 会被删的行` —— 只要 `manual` 里有一行"台账有、plan 已删"，
+        #     两批就永远对不上，**拿着用户正确的答复照样被拒**。
+        #   ⚠ 触发条件**不许再挂 `traces`**（2026-10-03 第三处改）：挂了它就回到那个洞上 ——
+        #     「有手改过的行、但它们这一版都不会被删」时既不列清单也不留痕。
+        #     两类情况现在都认：① `traces` 非空 → 这一版真会消费它们，留痕；② `traces` 为空 →
+        #     **如实说**「这一版没有任何人工痕迹会被消费」（而不是当成"没问题"）。
+        #     ⚠ 与真跑第 2 步**仍然对得上**：真跑那边 `traces` 为空的**同样不要求原话**
+        #       （`if traces and not dry_run` 进不去 ⇒ `_quote_ok` 是空串）—— 两边同一个判据。
+        #   ⚠ 第 2 步的判据**一条都没放松**：仍要**他的原话** + **距提问 ≥
+        #     `MIN_USER_EDITS_ANSWER_DELAY_S` 秒**；这里只是把"问过"这一步变得做得到。
+        if not traces and named:
+            # ⚠ **点名时不许出现"不留痕"**（2026-10-03 第四处改，实测死路）：
+            #   点名那几行如果"现状与 plan 一致"，`traces` 可能是空的 —— 但**你点名了这几行**
+            #   就是要"按 plan 重摆一遍"，第 2 步照样要你的原话。若这里什么都不写，
+            #   第 2 步就会被"你还没把这份人工痕迹清单问过用户"拒掉 —— **死循环**。
+            #   所以：点名时**写一份"空清单的留痕"**（记下这几个 label + 本次没有任何差异），
+            #   让"问过"这一步成立；报文里如实说清"没有差异可列"。
+            try:
+                _save_user_edits_question(
+                    [{"label": x, "why": ["点名重摆：现状与 plan 一致，无差异可列"]} for x in _only_given],
+                    level, mode)
+                warns.append(
+                    f"✅ 演练**留痕**（点名 {len(_only_given)} 行、本次**没有差异**）："
+                    + "、".join(f"「{x}」" for x in _only_given)
+                    + f" → `{USER_EDITS_PATH.name}`。"
+                    "⚠ 这几行的**现状与 plan 一致**，所以没有「要覆盖什么」可列 —— "
+                    "真跑仍是「按 plan 重摆一遍」（会删了重建），所以第 2 步照旧要你的原话。")
+            except OSError as exc:
+                warns.append(f"⚠ 留痕没写成（{exc}）—— 第 2 步会被拒。")
+        elif not traces:
+            warns.append(
+                "⚠ 演练：这一版**没有任何人工痕迹会被消费**"
+                "（没有手改过的行，或手改过的那几行这一版都不会被删 / 重摆）—— 所以这次**不留痕**、"
+                "第 2 步也不会要求你拿原话。"
+                "⚠ 如果你要的是「关卡里那几行被人手拖偏了、挪回 plan」，**正是这种情况** —— "
+                "走点名那条：`execute_build(only_labels=[\"那几行的 label\"], dry_run=true)`。"
+                "（`evaluate_layout()` 只出报告、**不写留痕**，在人工痕迹两步闸里帮不上忙。）")
+        else:
+            try:
+                _save_user_edits_question(traces, level, mode)
+                warns.append(
+                    f"✅ 演练**顺带留痕**：这一批问的是哪几行（{len(traces)} 行）→ "
+                    f"`{USER_EDITS_PATH.name}` —— 第 2 步会拿它核对。"
+                    "（⚠ 这是 `dry_run` **唯一**一处写入：我们自己的 JSON，**关卡一个 Actor 都没动**。）")
+            except OSError as exc:
+                warns.append(
+                    f"⚠ 留痕没写成（{exc}）—— 这次**没留下**『问过哪几行』的记录，第 2 步会被拒。")
+            _named_tip = ""
+            if named:
+                # ⚠ 不在 f-string 里嵌带引号的推导式（那要 Python 3.12+）—— 先算好再拼。
+                _labels_tip = [r["label"] for r in rows if str(r["uid"]) in named]
+                _named_tip = f"only_labels={_labels_tip!r}, "
+            _tip = f"`execute_build({_named_tip}accept_user_edits=true, user_quote=…)`"
+            warns.append(
+                "两步走完才是覆盖：**把上面那条人工痕迹清单原样交给用户、停下等他打字** → "
+                f"拿到他的原话再调 {_tip}"
+                "（只动那几行，其余行一个都不碰）。"
+                "⚠ 想**保住**他的手改就别传覆盖开关：走阶段二把新位置写回 plan"
+                "（`request_plan_change` → `generate_plan(patch=…)` → 重画图 → 用户看图确认）。")
 
     if dry_run:
         if mode == "incremental":
             diff_dry = _incremental_diff(
                 targets, same, gone, changed, orders, reclaim_actor, drifted, manual,
-                ledger_note=str(BUILD_STATE_PATH) + ("" if ledger_by_uid else "（**还没有**）"))
+                ledger_note=str(BUILD_STATE_PATH) + ("" if ledger_by_uid else "（**还没有**）"),
+                named=named)
         else:
             diff_dry = {
                 "全量重摆": True,
@@ -4073,6 +4517,17 @@ async def execute_build(
         matched_uids, bad_by_uid)
     ledger_path = _save_build_state(level, gate["plan_hash"], mode, new_ledger_rows)
 
+    # ⚠ **销账放在这里，不放闸那边**（2026-10-03 改）：真跑**落完了**（台账已写）才把这次问答
+    #   移进 `history`、清掉 `asked_at` —— 意味着"这一次的同意用掉了，下一批人工痕迹要重新走两步"。
+    #   为什么不能早点销（原来在 `_user_edits_gate` 通过时就销）：删到一半失败 / 官方中途报错时，
+    #   用户**已经给出的同意和他那句原话**会先被消费掉，重试要**重新问、重新等 15 秒**。
+    #   同意是**人的动作**，不该被一次没干成的执行吃掉。
+    if _quote_ok:
+        try:
+            _mark_user_edits_answered(_quote_ok)
+        except OSError as exc:
+            warns.append(f"⚠ 问答台账没更新（{exc}）—— 下一次仍会要求这批复述一遍。")
+
     # --- [完工-19] 重摆后**自动补材质** · ✅ 实测 2026-09-30T12:21Z（第 35 轮真跑）---------------
     # 实测证据：`execute_build()` 增量重摆「沥青车行道」1 行（`Actor_7 → Actor_8`，官方调用 19 次）
     #   → warnings 里出现「阶段五**自动补材质**：这次重摆的白膜 1 行 → 新贴 1 / 本来就对 0 / 没成 0」；
@@ -4129,10 +4584,21 @@ async def execute_build(
 
     if mode == "incremental":
         diff_summary = _incremental_diff(
-            targets, same, gone, changed, orders, reclaim_actor, drifted, manual)
+            targets, same, gone, changed, orders, reclaim_actor, drifted, manual, named=named)
         warns.append(f"增量：没动的 {len(same)} 行**一个 Actor 都没碰**（台账里那些行原样保留）。")
         warns.append(f"本次模式：**增量**（{mode_why or 'mode=incremental'}）—— 只动了 "
                      f"{len(targets)} 行、官方调用 {calls} 次。**下次改几行也不用传参数**（默认就是这条）。")
+        # ⚠ 点名（`only_labels`）真跑成功时**必须把这一句喊出来**（2026-10-03 加）：
+        #   不然"只动了 2 行"和"全量删了 41 行再摆 41 行"在报文里长得一样，
+        #   而人恰恰要判断的就是"这次有没有把我别的东西动了"。
+        if named:
+            _named_labels = [r["label"] for r in targets]
+            warns.append(
+                f"✅ **点名（`only_labels`）**：这一轮**只**把那 {len(targets)} 行**按 plan 重摆**了 —— "
+                + "、".join(f"「{x}」" for x in _named_labels[:8])
+                + ("…" if len(_named_labels) > 8 else "")
+                + f"；其余 {len(same)} 行**一个 Actor 都没碰**、也没读。"
+                "依据 = 用户的**原话**「" + str(_quote_ok or user_quote).strip() + "」。")
     else:
         diff_summary = {
             "全量重摆": True, "要删": len(remove_refs), "要摆": len(targets), "没动": 0,
@@ -4177,6 +4643,17 @@ async def execute_build(
              + (f"🔴 **先看这个：{len(mismatches)} 行读回没对上**（落成 {placed} / 对上 {verified}）"
                 "—— **别当成做完了**，逐条查 `mismatches`，台账里那些行 `verified=false`；"
                 if mismatches else "")
+             # ⚠ "这次一行都没动"**不许被读成"没问题"**（2026-10-03 加）：它只说明两份纸面文件一致。
+             + ("⚠ **这次一行都没动**：那只说明「指令表与台账逐行一致」，"
+                "**不等于**「关卡里的东西就是对的」—— 真跑增量不读没动的行（见上面 warnings）。"
+                "⚠ 如果你要的正是「关卡里那几行被人手拖偏了、挪回 plan」，**这条默认路永远不动** —— "
+                "走点名那条：`execute_build(only_labels=[\"那几行的 label\"], dry_run=true)` "
+                "+ 用户原话（它不是 `evaluate_layout()`：后者只出报告、不写留痕）。"
+                if not targets else "")
+             # ⚠ 点名成功时要一眼看出"只动了这几行"（2026-10-03 加）—— 与全量重摆区分开。
+             + (f"✅ **点名重摆完成**：只动了你点名的那 {len(targets)} 行（按 plan 重摆），"
+                f"其余 {len(same)} 行原样没碰。依据 = 用户原话「{str(_quote_ok or user_quote).strip()}」。"
+                if named else "")
              + "① 在 UE 里看这几处对不对"
              "（`rows` 里 `ok=false` 的就是没落成的）；② `mismatches` 非空就逐条查；"
              "③ 还要改就回阶段二：改 plan → **重画图（写新指纹 + 本轮变更集那几行）** → "
@@ -6579,6 +7056,34 @@ def _stage2_next_step(plan: dict, acc: PlanAcceptance, empty: bool = False) -> s
     )
 
 
+# --- 阶段二 / 阶段三 共用 · 现场对账报告的**判据与提醒**（2026-10-03 加）------------------  【模块：state】
+# 为什么单独抽出来：G15（改数据那条闸）与 G16（落关卡那条闸）**认的是同一份报告**
+#   （`views/evaluate_v1.json`）—— 两处各写一遍判据 = 迟早两处会说不同的话。
+def _evaluate_bad_rows(rep: dict) -> list[dict]:
+    """现场对账报告里**非一致**的行（`ok` / `same` / 空 之外的一切）。
+
+    ⚠ 判据只有这一份：G15 / G16 都调它。`status` 的取值由 `evaluate_layout()` 写。
+    """
+    rows = [r for r in (rep.get("rows") or []) if isinstance(r, dict)]
+    return [r for r in rows if str(r.get("status") or "") not in ("ok", "same", "")]
+
+
+def _evaluate_rows_notice(rep: dict, ok_text: str) -> str:
+    """过闸之后的**提醒**（不是拦）：把非一致的行摆出来，问一句"你要改的是不是这几行"。
+
+    `ok_text` = 全绿时那句回话（G15 / G16 各自点名自己是哪道闸）。
+    """
+    bad = _evaluate_bad_rows(rep)
+    if not bad:
+        return ok_text
+    show = "；".join(f"「{r.get('label')}」{r.get('status')}" for r in bad[:8])
+    more = f"（还有 {len(bad) - 8} 行）" if len(bad) > 8 else ""
+    return ("⚠ 现场对账**不是全绿**（这是放行时的提醒，不是拦）："
+            f"{len(bad)} 行与台账 / plan 不一致：{show}{more}。"
+            "**请先确认：你要改的是不是这几行？现实里的需求还存在吗？**"
+            "（如果用户已经在 UE 里把问题改掉了，那这一版就不该按旧前提动它。）")
+
+
 # --- 阶段二 · **G15「改数据之前必须先看过现场」**（2026-10-03 加，用户要求：「必须把这个改为硬闸」）--  【模块：state】
 # 触发它的实例（用户原话：「这是目前我遇到最严重的问题」）：他在 UE 里**先把两台售卖机拽走了 10 多米**，
 #   才来提「三间隔只有 10 厘米」。agent 那一轮**只读 `plan_v1.json` 的纸面旧值**就自己推算改动，
@@ -6631,17 +7136,80 @@ def _live_state_guard(planning, new_plan: dict) -> str:
             "它证明不了你看过现场 —— 一个字节都没写。\n"
             f"· 正确顺序：{how}（先把 UE 打开、`official_status()` 报过连上，再跑对账）\n· {why}")
     # 过闸了：把报告里**非一致**的行摆出来，提醒"你要改的是不是这几行"
-    rows = [r for r in (rep.get("rows") or []) if isinstance(r, dict)]
-    bad = [r for r in rows
-           if str(r.get("status") or "") not in ("ok", "same", "")]
-    if not bad:
-        return "✅ 现场对账是本版的、且查过关卡 —— 闸放行（报告里没有非一致的行）。"
-    show = "；".join(f"「{r.get('label')}」{r.get('status')}" for r in bad[:8])
-    more = f"（还有 {len(bad) - 8} 行）" if len(bad) > 8 else ""
-    return ("⚠ 现场对账**不是全绿**（这是放行时的提醒，不是拦）："
-            f"{len(bad)} 行与台账 / plan 不一致：{show}{more}。"
-            "**请先确认：你要改的是不是这几行？现实里的需求还存在吗？**"
-            "（如果用户已经在 UE 里把问题改掉了，那这一版就不该按旧前提动它。）")
+    # （措辞与 G16 共用同一份 —— 见 `_evaluate_rows_notice()`）
+    return _evaluate_rows_notice(
+        rep, "✅ 现场对账是本版的、且查过关卡 —— 闸放行（报告里没有非一致的行）。")
+
+
+# --- 阶段三 · **G16「落关卡之前必须先看过现场」**（2026-10-03 加）-----------------------  【模块：state】
+# 由来（2026-10-03 实测，客户 agent 报的）：增量真跑**只拿"指令表 vs 台账"两份我们自己写的文件对账**，
+#   **一行关卡现状都没读**，就报出「这次要动 0 行」—— 而"0 行"只说明**两份纸面数据一致**，
+#   说明不了关卡里是什么样（用户在 UE 里手挪过的东西、上次没落成的行，都不在这两份文件的差异里）。
+#   同一轮它传的 `force_full=true` 也被静默吞掉（那条由 `_resolve_build_mode()` 拦住）——
+#   两件事同源：**纸面自洽被当成了现场证据**。
+# 判据（**只查真跑**；演练与 `adopt` 不查）：
+#   · 台账**空**（第一次搭 / 换过图）→ 不拦（没有可对账的基线），只说一句；
+#   · 台账**有行** → 必须有一份**当版**的现场对账 `views/evaluate_v1.json`：
+#     `plan_hash` == **盘上这一版**的指纹，且 `level_checked=true`（真查过关卡那一维）。
+#     ⚠ **唯一的例外 = 换图**（台账记的关卡 ≠ 当前关卡 ⇒ 现场这一维**无从对起**，例如"换图 +
+#       全量重摆"）：那种情况**豁免但要当场点名**，不许静默放过（否则会变成一条死路）。
+# 与 G15 的关系（为什么不会白花调用）：**共用同一份报告、同一个键** —— 正常那条链
+#   「`evaluate_layout()`（看现场）→ `generate_plan(patch)`（按现状改）→ `execute_build()`（落）」
+#   里，改完 plan 之后要**重新对账一次**（plan 指纹变了，旧报告不是这一版的），此后落关卡直接用。
+# ⚠ **局限（照实说）**：它只保证"**读过现场**"，保证不了"读懂、并据此决定动哪些行"
+#   —— 与 G15 / 回读闸同一条局限（纪律闸，不是正确性闸）。
+def _level_seen_guard(planning, dry_run: bool, adopt: bool) -> str:
+    """落关卡**之前**过这道闸：不过就抛 `ToolError`；过了返回一句**提醒**（调用方放进 warnings）。"""
+    if dry_run:
+        return ""                                   # 演练：一个 Actor 都不落，不拦
+    if adopt:
+        return ""                                   # 认领现状本来就是"读现场"那个动作，不拦
+    ledger = load_json(BUILD_STATE_PATH) or {}
+    if not (ledger.get("rows") or []):
+        return ("提示：台账还是空的（第一次搭 / 换过图）—— G16 没拦（没有可对账的基线）。"
+                f"⚠ 但「`{OUR_FOLDER_ROOT}/` 下已经有 Actor 却没有可用台账」那一条由别的闸管。")
+    if not planning.OUT_JSON.exists():
+        return ""                                   # 还没有 plan：整批校验会拒（不在这儿抢话说）
+    try:
+        plan = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return ""
+    how = ("先 `official_status()`（确认链路）→ 再 `evaluate_layout()`（**读关卡现状 + 写报告**）"
+           "→ 看清现场与 plan / 台账差在哪 → **再**真跑落关卡")
+    why = ("⚠ 为什么拦：增量对账**只比两份我们自己写的文件**（指令表 vs 台账）——"
+           "**它们一致 ≠ 关卡里就是那样**。2026-10-03 实测：只报「这次要动 0 行」的那一轮，"
+           "一行关卡现状都没读；用户已经在 UE 里挪过的东西、上次没落成的行，"
+           "都不在这两份文件的差异里。")
+    rep = load_json(EVALUATE_PATH) or {}
+    if not rep:
+        raise ToolError(
+            "拒收：**这一版要真落关卡，但你还没看过关卡现状**（没有现场对账报告）"
+            "—— 一个 Actor 都没动。\n"
+            f"· 正确顺序：{how}\n· {why}")
+    if str(rep.get("plan_hash") or "") != str(planning.plan_geometry_hash(plan)):
+        raise ToolError(
+            f"拒收：**手上那份现场对账不是这一版的**（`{EVALUATE_PATH.name}` 是拿**别的版本**的 plan "
+            "做的）—— 一个 Actor 都没动。\n"
+            f"· 正确顺序：{how}（**改完 plan 之后要重新对账一次**：plan 指纹变了）\n· {why}")
+    if not rep.get("level_checked"):
+        # ⚠ **换图例外**（2026-10-03 自查补）：台账记的关卡 ≠ 当前关卡时，`evaluate_layout()` 会把
+        #   `level_checked` 置 false（它自己那条"换图了就不硬比"的口径）—— 那种情况**现场这一维
+        #   根本无从对起**（台账里的 Actor 引用在别的图上）。若在这儿一律拒收，就会造成**死路**：
+        #   "换图 + 全量重摆（G8 那条出路）"永远过不去。所以换图**豁免**，但**必须点名**、
+        #   并把该走的路摆在眼前（`adopt=true` 重新登记基线 / 或确实推倒重来）。
+        #   ⚠ 这不会放过 2026-10-03 那类事故：那是**同一张图**上没查关卡那一维，照样拒收。
+        _lvl, _led_lvl = str(rep.get("level") or ""), str(rep.get("ledger_level") or "")
+        if _lvl and _led_lvl and _lvl != _led_lvl:
+            return (f"⚠ **G16 豁免（换图）**：台账记的关卡是 `{_led_lvl}`，当前关卡是 `{_lvl}` —— "
+                    "关卡那一维本来就没法对（台账里的 Actor 引用在别的图上）。"
+                    "⚠ 这条豁免**不等于**你看过现场：要么在这张图上 `execute_build(mode=\"incremental\", "
+                    "adopt=true)` 重新登记基线，要么确认你确实要按 plan 推倒重来。")
+        raise ToolError(
+            "拒收：**那份对账没查关卡那一维**（UE 当时连不上，`level_checked=false`）—— "
+            "它证明不了你看过现场 —— 一个 Actor 都没动。\n"
+            f"· 正确顺序：{how}（先把 UE 打开、`official_status()` 报过连上，再跑对账）\n· {why}")
+    return _evaluate_rows_notice(
+        rep, "✅ G16：手上那份现场对账是当版的、且查过关卡 —— 闸放行（报告里没有非一致的行）。")
 
 
 def _write_plan(plan: dict) -> dict:
@@ -6805,11 +7373,17 @@ async def generate_plan(
         list[dict] | None,
         Field(description=(
             "**白膜占位**的放置表（一物一行）。每行："
-            "`element_key`、`label`、`shape`（cube / plane）、`pos`、`footprint_m`、"
-            "`rot_deg`、`size_source`（**必须写明是「预估」**）、`note`；`asset_path` 留空。"
-            "⚠ `shape=cube` 的**必须再给 `height_m`**（高度，米）—— 阶段一的白膜本来就有第三维"
-            "（`size_cm` 的 Z），阶段三要靠它把 cube 实例化出来；缺了这一维，阶段三只能靠人读 note。"
-            "`plane`（覆盖面）不用给高度。"
+            "`element_key`、`label`、`shape`（cube / plane）、`height_m`（**厚度，米，> 0，必填**）、"
+            "`pos`、`footprint_m`、`rot_deg`、`size_source`（**必须写明是「预估」**）、`note`；"
+            "`asset_path` 留空。"
+            "⚠ **`height_m` 是必填，`plane` 也不例外**：UE 的图元工具只有 "
+            "`add_cube` / `add_cone` / `add_cylinder` / `add_sphere` —— **没有 plane 工具**"
+            "（2026-10-03 调官方工具集清单确认），所以「面」落进 UE 也只能是 cube，"
+            "`plane` 只是「它是个覆盖面」的意思，**不减免厚度**。"
+            "写 `{\"shape\":\"plane\",\"height_m\":0.15}` 或 `{\"shape\":\"cube\",\"height_m\":0.15}` "
+            "落进 UE 一模一样。"
+            "⚠ 阶段一清单里 plane 那行的 `size_cm[2] = 0` 是**登记习惯**（覆盖面只登记长宽），"
+            "**不是厚度** —— 阶段三不看它，别拿 0 当厚度。"
             "⚠ 只许放**阶段一里没有可用资产**的元素（没找到的 / 只有材质实例顶着的）。"
             "⚠ **必须等已有资产放完之后再填这张表** —— 先占位，才知道白膜剩哪儿、该多大。"
         )),
@@ -8365,7 +8939,9 @@ async def _env_apply_material(
             used += 1
             mi_new = _ref_path(made) or ""
             asset = mi_new or asset
-            errs.append(f"⚠ **新建**了材质实例 `{asset}` —— **没存盘**，你不存就没了（本工具绝不存盘）")
+            errs.append(f"⚠ **新建**了材质实例 `{asset}` —— 它只活在内存里；"
+                        "本阶段真跑成功时会**自动存盘**，没存成 / 你传了 `save=false` 就要自己存"
+                        "（别的阶段一律不存盘）")
 
     # ⚠ **两种路径形状，必须分开用**（2026-09-29 两次真跑各踩一半，正好互补）：
     #   · `exists()` 与配置里写的 → **包路径**（`/Game/UEMCP/env/MI_Cloud_Sunset`）；
@@ -8753,7 +9329,14 @@ async def setup_environment(
                      "① 台账里记的 **Actor 引用会先验活** —— 它可能已经不在"
                      "（存盘 / 重开关卡之后重建会换名），不在就退回「按类找」、仍没有就按因素表"
                      "的 `spawn` 重建；② **我们自己建的** Actor（在 `UEMCP_env/` 下的后处理卷 /"
-                     "局部体积雾）会被**删掉** —— 那才是「动手前它不存在」的原样"))] = False,
+                     "局部体积雾）会被**删掉** —— 那才是「动手前它不存在」的原样。"
+                     "⚠ 回滚**默认也存盘**（除非 `save=false`）——退回原样之后就该是这个样子。"))] = False,
+    save: Annotated[bool, Field(
+        description=("**真跑成功后自动存盘**（默认 true）。走官方 `AssetTools.save_assets` —— "
+                     "传空列表 = **存所有脏资产**（关卡 + 新建的 MI / 后处理卷一起落盘）。"
+                     "⚠ 这是**唯一允许存盘**的阶段（2026-10-03 用户指令：「环境搭建可以存盘」）；"
+                     "别的阶段（搭场景 / 贴材质 / 出图 / 对账）照旧**一律不存盘**。"
+                     "演练（`dry_run=true`）**不存**；存失败会如实报（不算「环境没配好」）。"))] = True,
 ) -> EnvReport:
     """**阶段六 · 环境搭建**：按时段配**整套环境** —— 不只灯光。
 
@@ -8762,7 +9345,7 @@ async def setup_environment(
       ⚠ **本阶段不出图**：出图归**阶段七**（`capture_preview()` 代码保留、归那边用）；
       验收 = **用户在 UE 里自己看**。
 
-    做六件事：
+    做七件事：
       ① 读**环境配置** `config/environments.json`（**每次调用都重读** —— 改它不用改代码、不用重启）；
          里面有两段：`factors`（**有哪些环境因素**：key / 中文名 / 类路径 / 组件名 / 是否新建 / 材质属性名，
          按键覆盖内置兜底）与 `presets`（时段 → 各因素写什么）；
@@ -8771,7 +9354,8 @@ async def setup_environment(
       ③ **先读现值** —— 它同时就是台账（`views/environment_state_v1.json`，回滚依据）；
       ④ **幂等**：现值就是要写的值 → 跳过（`already`）；
       ⑤ 写 → **读回核对**（写进去但读回不是它 = 没成，如实报）；
-      ⑥ 因素表里标了 `spawn` 的、关卡里又没有 → **建一个**（后处理卷实测 0 个 → 会建，放进 `UEMCP_env/`）。
+      ⑥ 因素表里标了 `spawn` 的、关卡里又没有 → **建一个**（后处理卷实测 0 个 → 会建，放进 `UEMCP_env/`）；
+      ⑦ **真跑成功后自动存盘**（`save=true`，默认开）—— 见下面那条"唯一允许存盘的阶段"。
 
     ⚠ **处理顺序写死在代码里**（`ENV_FACTOR_ORDER`，2026-09-29 用户拍板 A 案）：
       载体的**找 / 建**全部在写之前 → 太阳 → 大气 → 天光 → 高度雾 → **局部体积雾** → 体积云 → 后处理。
@@ -8786,7 +9370,14 @@ async def setup_environment(
       ① 台账里记的 **Actor 引用会先验活**再用（存盘 / 重开关卡后重建会换名，引用会失效）；
       ② **我们自己建的** Actor（`UEMCP_env/` 下的后处理卷 / 局部体积雾）回滚时是**删掉**，
          不是"写回引擎默认值" —— 它动手前不存在，只有删掉才算回到原样。
-    ⚠ **绝不存盘** —— 配完在 UE 里看，存不存由你定。
+    ⚠ **本阶段是唯一允许存盘的阶段**（2026-10-03 用户指令：「把绝不存盘这个规则去掉，环境搭建可以存盘」）：
+      真跑成功后**自动存盘**（`save=true` 默认开）—— 走官方 `AssetTools.save_assets`，传空列表 =
+      **存所有脏资产**（**关卡** + 这次新建的 MI / 后处理卷 / 局部体积雾**一起落盘**）。
+      为什么这条规则在这里放开：环境配完不存，切关卡或关编辑器就白配了（用户实测痛点）。
+      ⚠ **别的阶段照旧一律不存盘**（阶段三搭场景 / 阶段五贴材质 / 阶段七出图与对账）——
+      那条纪律没有被取消，只是**不在本阶段**。
+      ⚠ 演练（`dry_run=true`）**不存**；存盘失败**不算环境没配好**（环境已经写进关卡了），
+      如实报进 `warnings`，让你自己在 UE 里按 Ctrl+S。
     ⚠ 两条**必须整份写**的实测坑（不然会把状态写坏）：结构体属性是**整体替换**（只写一个键
       会打坏其余键）、`set_actor_transform` 会把没给的字段**打到默认值**（只传 rotation 会把
       location 清零）。本工具按「先读现值 → 合并 → 整份写」处理，见 `_env_write_value`。
@@ -8810,7 +9401,7 @@ async def setup_environment(
     warns: list[str] = []
 
     # ① 环境配置**每次调用都重新读**（与材质表同一条纪律：配置改完立刻生效、不用重启）
-    factors_tbl, presets, src_note = _env_config()
+    factors_tbl, presets, src_note, env_lights = _env_config()
     if src_note:
         warns.append(src_note)
     known = set(factors_tbl)
@@ -8955,6 +9546,68 @@ async def setup_environment(
             if rest:
                 entry["props"] = {**(entry.get("props") or {}), **rest}
             spec_all[key] = entry
+
+    # ---------- ③-b **环境灯具**（2026-10-03 加：官方光源类可枚举，缺的只是编排）------------------
+    # 来历（用户实测反馈）：agent 想在小店门口加一盏点光，结论是"现有工具只能改那 6 个环境 Actor，
+    #   要加灯得写新工具" —— **缺的确实是编排，但不用新工具、也不用改代码**：
+    #   · 官方 `SceneTools.add_to_scene_from_class` 能 spawn 任意类；
+    #   · 官方 `ObjectTools.search_subclasses(/Script/Engine.Light)` 实测返回：
+    #     `DirectionalLight` / `PointLight` / `SpotLight` / `RectLight` / `GeneratedMeshAreaLight`
+    #     —— 所以**光源类写在配置里**，以后加新类不用改代码（与 `factors` 段同一条纪律）。
+    # 表的形状（`config/environments.json` 的 `lights` 段，与 `presets` 平级）：
+    #   `{ "name": "小店门口点光", "class": "/Script/Engine.PointLight",
+    #      "component": "LightComponent",                     ← 属性在哪（实测组件名是 LightComponent0）
+    #      "transform": {"location_m": [-15, 0, 6]}, "props": {...}, "material": {...} }`
+    # ⚠ 走的是**同一套机制**：当成一个合成因素塞进 `spec_all` ⇒ 找 / 建 / 先读现值 / 幂等 / 整份写 /
+    #   读回核对 / 台账 / `restore` 删掉我们建的 —— **一份判据都没有新写**。
+    # ⚠ **不新增键到内置因素表**（`ENV_FACTOR_DEFAULT`）——环境因素表保持干净，灯不进 `ENV_FACTOR_ORDER`。
+    # ⚠ `factors` 过滤**管不着灯**（它是"环境因素"，不是因素表里的键）。
+    # ⚠ 实测默认值（建出来的 `PointLight_0.LightComponent0`）：`intensity=8` / `lightColor=白` /
+    #   `attenuationRadius=1000` / `mobility=Stationary`；⚠ **`useTemperature` 不存在**（读都读不到，
+    #   别照搬方向光的属性名）。
+    lights_spec: list[dict] = []
+    if isinstance(env_lights, list):
+        for _li, _item in enumerate(env_lights, 1):
+            if not isinstance(_item, dict):
+                warns.append(f"⚠ `lights[{_li}]` 不是对象（收到 {type(_item).__name__}）—— **跳过这一盏**。")
+                continue
+            _lname = str(_item.get("name") or f"环境灯 #{_li}").strip()
+            _lcls = str(_item.get("class") or "").strip()
+            if not _lcls:
+                warns.append(f"⚠ `lights` 里「{_lname}」没给 `class` —— **跳过这一盏**"
+                             "（例：`/Script/Engine.PointLight`）。")
+                continue
+            _key = f"light:{_lname}"
+            # 形状与预设里那三段一致；`overrides` 里给了同名键就整块盖掉（临时微调也认灯）
+            _spec = {k: v for k, v in _item.items()
+                     if k in ("props", "settings", "transform", "material") and isinstance(v, dict)}
+            _ov = (overrides or {}).get(_key)
+            if isinstance(_ov, dict) and _ov:
+                _spec = {**_spec, **_ov}
+                warns.append(f"`overrides` 盖了灯具「{_lname}」：{'、'.join(sorted(_ov))}。")
+            spec_all[_key] = _spec
+            cls_of[_key] = _lcls
+            hints[_key] = str(_item.get("component") or "LightComponent")
+            factors_tbl[_key] = {
+                "cn": _lname, "class": _lcls, "component": hints[_key],
+                "folder": str(_item.get("folder") or ENV_ACTOR_FOLDER), "spawn": True,
+            }
+            cn[_key] = _lname
+            lights_spec.append({
+                "key": _key, "name": _lname, "class": _lcls,
+                "component": hints[_key],
+                # 创建时的 label/名字：`_env_spawn_actor` 的 `name` 实测**不改对象名**（靠分组认），
+                # 但**分组 + label** 足够让我们下次认出"这一盏就是我们建的那一盏"。
+                "folder": str(_item.get("folder") or ENV_ACTOR_FOLDER),
+                "initial_transform": _spec.get("transform") or {},
+            })
+    if lights_spec:
+        warns.append(
+            f"灯具：配置里有 {len(lights_spec)} 盏（"
+            + "、".join(f"「{x['name']}」→ `{x['class']}`" for x in lights_spec[:6])
+            + ("…" if len(lights_spec) > 6 else "")
+            + f"）—— 关卡里没有就 `spawn` 到 `{ENV_ACTOR_FOLDER}/`，有就按配置写值（幂等 + 读回核对）。")
+
     if not spec_all:
         raise ToolError("这次没有任何因素要处理（`factors` 过滤后为空，或这一档预设是空的）—— "
                         "**一个属性都没写**。")
@@ -9181,12 +9834,41 @@ async def setup_environment(
         except OSError as exc:
             warns.append(f"⚠ 环境台账没记上（{exc}）—— 环境已改，但**回滚依据没落盘**，"
                          "要退回原样得手工在 UE 里改。")
+
+    # ---- ⑦ 自动存盘（2026-10-03 用户指令：「环境搭建可以存盘」；本阶段是**唯一**允许存盘的阶段）----
+    # 为什么走 `save_assets` 传空列表：官方那侧 `AssetTools.save_assets(asset_paths)` 的语义是
+    #   "**空列表 = 存所有脏资产**"（实测自官方工具集清单）—— 一次把**关卡**与**这次新建的 UE 资产**
+    #   （云用的 MI、后处理卷、局部体积雾）都落盘，不用我们逐个猜该存哪些资产路径。
+    # ⚠ 失败**不算"环境没配好"**：环境已经写进关卡了，只是没落盘 —— 如实报，让人自己 Ctrl+S。
+    save_state = "skipped"
     if dry_run:
-        warns.append("演练：**一个属性都没写**。要真配就去掉 `dry_run` 重调。")
+        save_state = "dry_run"
+        warns.append("演练：**一个属性都没写**，也没存盘。要真配就去掉 `dry_run` 重调。")
+    elif save:
+        calls += 1
+        try:
+            saved = bool(await call_official(ctx, "save_assets", {"asset_paths": []},
+                                             toolset=TS_ASSET))
+        except ToolError as exc:
+            saved, save_state = False, "failed"
+            warns.append(f"⚠ **存盘失败**（{exc}）—— 环境已经写进关卡、也过了读回核对，"
+                         "但**没落盘**：请在 UE 里按 Ctrl+S 自己存一次（本工具不会再试）。")
+        else:
+            if saved:
+                save_state = "saved"
+                warns.append(
+                    "✅ **已存盘**（官方 `save_assets`，空列表 = 存所有脏资产）—— "
+                    "关卡与这次新建的 UE 资产（云用的 MI / 后处理卷 / 局部体积雾）一起落盘。"
+                    "⚠ 本阶段是**唯一**允许存盘的阶段；别的阶段照旧不存。")
+            else:
+                save_state = "failed"
+                warns.append("⚠ 官方 `save_assets` 返回**否**（没说原因）—— **没落盘**，"
+                             "请在 UE 里按 Ctrl+S 自己存一次。")
     else:
-        warns.append("**全程未存盘** —— 配完的样子在 UE 里看，存不存由你定。")
-        if not restore:
-            warns.append("想退回我们动手前那一版：`setup_environment(restore=true)`。")
+        save_state = "off"
+        warns.append("⚠ 你传了 `save=false`：**这次没存盘** —— 切关卡 / 关编辑器前请自己存。")
+    if not dry_run and not restore:
+        warns.append("想退回我们动手前那一版：`setup_environment(restore=true)`。")
 
     if dry_run:
         # ⚠ 判据是 **`r.wrote` 非空**，不是 `r.status == "dry"`（2026-09-29 实测暴露的口径错）：
@@ -9204,12 +9886,19 @@ async def setup_environment(
                      f"{failed} 项没成"
                      + (f"；其中 **{deleted} 个 Actor 是删掉的**（我们自己建的，动手前不存在）"
                         if deleted else "")
-                     + "。在 UE 里看一眼是否回到原样。⚠ 存不存盘由你定。")
+                     + "。在 UE 里看一眼是否回到原样。"
+                     + {"saved": "✅ **已存盘**。", "failed": "⚠ **没落盘** —— 请自己在 UE 里存一次。",
+                        "off": "⚠ `save=false`：**没落盘**，请自己存。",
+                        "dry_run": "（演练：没存。）"}.get(save_state, ""))
     else:
         next_step = (f"环境配好了：{applied} 项写入、{already} 项本来就一样、{failed} 项没成"
                      f"（预设 `{chosen}`）。**请在 UE 里自己看** —— 本阶段**不出图**；不满意就改 "
                      "`config/environments.json` 再跑一次（不用改代码、不用重启）。"
-                     "⚠ 出图（`capture_preview()`）归**阶段七**，不属本阶段。")
+                     + {"saved": "✅ 这次是**自动存盘**过的（本阶段允许存盘）。",
+                        "failed": "⚠ **没落盘** —— 请自己在 UE 里存一次（Ctrl+S）。",
+                        "off": "⚠ `save=false`：**没落盘**，请自己存。",
+                        "dry_run": "（演练：没存。）"}.get(save_state, "")
+                     + "⚠ 出图（`capture_preview()`）归**阶段七**，不属本阶段。")
 
     return EnvReport(
         stage="阶段六 · 环境搭建（灯光 ＋ 天空/大气/天光/雾/云/后处理/时段）",
