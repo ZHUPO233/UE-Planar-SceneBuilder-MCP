@@ -426,6 +426,68 @@ def main() -> int:
         check("⑩ 八阶段总览：正好 8 条 / 编号 1..8 / 四个键齐 / 状态取值合法 / **不调官方工具**",
               False, f"{type(exc).__name__}: {exc}")
 
+    # --- ⑪ 纪元（epoch 2）：活动 plan 的解析 + 取原话那条判据的**回归**（2026-10-04 加 · 纯离线）---
+    # 为什么要有它：
+    #   ① 「阶段三结束 ⇒ 换新 plan + 新台账」之后，"读哪一份 plan"全靠 `active_plan_path()`
+    #      这一处判据（全工程十几个读点都走它）—— 它解析错一步，后面全错，而且是**静默**的
+    #      （会拿着冻结的 v1 当权威，或反过来）；
+    #   ② 2026-10-04 修的那个 bug：微调分支原先用 `planning.pending_changes(plan)` 取用户原话，
+    #      而那个函数按**改完之后**的新指纹筛台账事件（`request_plan_change` 记要求时写的是
+    #      **改之前**的旧指纹）⇒ **永远筛不到** ⇒ 微调从不生效（现场 `tuned_count=0`）。
+    #      所以这里钉住：那条回归的判据是 **`pending_changes` 不许出现在
+    #      `_pending_change_quote` 实际引用的全局名里**（真回退成 `planning.pending_changes(plan)`
+    #      这个名字必然进 `co_names` ⇒ 立刻红）；顺带挡住「自己按 `plan_geometry_hash` 筛」。
+    #      ⚠ docstring / 注释里提到这些名字**都不算**（那句留痕正是要的）。
+    # ⚠ **不真建 `views/plan_v2.json`**（那是运行时状态 —— 预检不许碰，更不许留下痕迹）：
+    #   把规划层的 `PLAN_V2_PATH` 临时指到一个 `tmp` 目录里的假路径上验三档，验完**原样还原**。
+    #   ⚠ 解析的是 `active_plan_path()`（它在**调用时**读模块全局，所以能这样打桩）。
+    # ⚠ **磁盘上没有 `plan_v2.json` 是正常状态**，这一项**不会**因此失败（断言的是解析行为）。
+    try:
+        import inspect as _inspect4
+        import json as _json4
+        import tempfile as _tempfile
+
+        _pl2 = mod["_planning_modules"]()
+        _orig_v2 = _pl2.PLAN_V2_PATH
+        _ok_none = _ok_v2 = _ok_broken = False
+        try:
+            with _tempfile.TemporaryDirectory() as _td:
+                _fake_v2 = Path(_td) / "plan_v2.json"
+                _pl2.PLAN_V2_PATH = _fake_v2
+                # ① v2 不在 ⇒ 纪元 1（`OUT_JSON`）
+                _ok_none = bool(_pl2.active_plan_path() == _pl2.OUT_JSON
+                                and _pl2.active_epoch() == 1)
+                # ② v2 在且能解析 ⇒ 它、纪元 2
+                _fake_v2.write_text(_json4.dumps({"unit": "m", "assets": [], "whiteboxes": []}),
+                                    encoding="utf-8")
+                _ok_v2 = bool(_pl2.active_plan_path() == _fake_v2
+                              and _pl2.active_epoch() == 2)
+                # ③ v2 在、但**读不动** ⇒ 退回 v1（"文件在、内容坏"由 `generate_plan` 那条闸拒收）
+                _fake_v2.write_text("{ 这不是 JSON", encoding="utf-8")
+                _ok_broken = bool(_pl2.active_plan_path() == _pl2.OUT_JSON
+                                  and _pl2.active_epoch() == 1)
+        finally:
+            _pl2.PLAN_V2_PATH = _orig_v2        # ⚠ 原样还原：预检不留痕
+
+        # ⚠ 判据用**代码对象**、不用源码文本：`co_names` = 这个函数**真的引用了哪些全局名**。
+        #   主判据是 `pending_changes`（那个 bug 的形状：回退成 `planning.pending_changes(plan)`）；
+        #   `plan_geometry_hash` 只是顺带挡「自己按指纹筛」。
+        #   反之，docstring / 注释里提到这些名字**都不算问题**（那句留痕正是要的）。
+        _q_src = _inspect4.getsource(mod["_pending_change_quote"])            # 正项仍看源码
+        _q_names = mod["_pending_change_quote"].__code__.co_names             # 真的引用了哪些全局名
+        _ok_quote = ("pending_changes" not in _q_names          # ⚠ 这条才是那个 bug 的回归：
+                                                            #   回退成 planning.pending_changes(plan)
+                                                            #   这个名字必然进 co_names ⇒ 立刻红
+                     and "plan_geometry_hash" not in _q_names   # 顺带挡住「自己按指纹筛」
+                     and "change_window_open" in _q_src)        # 它是字符串字面量，只在源码/co_consts 里
+        check("⑪ 纪元：活动 plan 解析对（v2 在⇒v2 / 不在或读不动⇒v1）+ 取原话**不按几何指纹筛**",
+              bool(_ok_none and _ok_v2 and _ok_broken and _ok_quote),
+              f"缺文件⇒v1={_ok_none} 有文件⇒v2={_ok_v2} 坏文件⇒v1={_ok_broken} "
+              f"quote_ok={_ok_quote}")
+    except BaseException as exc:                      # noqa: BLE001
+        check("⑪ 纪元：活动 plan 解析对（v2 在⇒v2 / 不在或读不动⇒v1）+ 取原话**不按几何指纹筛**",
+              False, f"{type(exc).__name__}: {exc}")
+
     print()
     if FAILED:
         print(f"预检没过（{len(FAILED)} 项）：{FAILED}")

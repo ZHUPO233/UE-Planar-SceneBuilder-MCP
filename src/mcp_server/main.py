@@ -186,6 +186,28 @@ BUILD_ORDERS_PATH = VIEWS_DIR / "build_orders_v1.json"
 # 只能全量重摆（把用户根本没动过的东西也删一遍再摆一遍）。
 BUILD_STATE_PATH = VIEWS_DIR / "build_state_v1.json"
 
+# 阶段三 · **纪元 2 的搭建台账**（2026-10-04 加）—— 阶段三结束时由
+# `execute_build(confirm_stage3=…)` 把纪元 1 那份**整表接力**过来（不重摆、不重对账）。
+# 为什么另起一份：v1 台账记的是"阶段三那一次搭成什么样"——**那是那次搭建的凭据**，
+#   不该被后续一行行的微调改写掉（改完就回答不了"当初搭的到底是哪一版"）。
+#   接力那一份带 `epoch` = 2 这个标记；v1 从此只读。
+# ⚠ 读写它的**唯一咽喉**是 `active_ledger_path()` —— 别在别处各拼一次路径。
+BUILD_STATE_V2_PATH = VIEWS_DIR / "build_state_v2.json"
+
+
+def active_ledger_path() -> Path:
+    """**现在算数的那份搭建台账是哪个文件** —— 全工程读写台账的唯一咽喉。
+
+    口径（与 plan 那边同构）：`views/build_state_v2.json` 在 ⇒ 它（纪元 2）；
+    否则 `views/build_state_v1.json`。
+
+    ⚠ 与 plan 那边**故意不一样的一处**：这里只判"文件在不在"，**不判能不能解析** ——
+      台账读不动时 `_load_build_state()` 本来就返回 `{}`（当"没有基线"，各闸自己拒收），
+      而**退回 v1 只会更糟**：那会拿一份已经冻结的旧基线去对账，**静默出错**。
+      "读不动"这件事由各处按"没有台账"拒收，如实说话。
+    """
+    return BUILD_STATE_V2_PATH if BUILD_STATE_V2_PATH.exists() else BUILD_STATE_PATH
+
 # 阶段三 · **「搭哪张图」的答复台账**（2026-09-26 加）—— `check_build_target()` 把用户的答复记在这儿，
 # `execute_build()` 落关卡前拿它**核对当前关卡**。
 # 为什么必须有它（把软约束变硬）：`check_build_target` 是阶段三第 1 步，可代码里**从来没核对过
@@ -1930,14 +1952,18 @@ def _row_uid(element_key: str, label: str) -> str:
 
 
 def _load_build_state() -> dict:
-    """读搭建台账；没有 / 格式不对都返回 `{}`（当"没有基线"处理，拒不拒收由调用方定）。"""
-    doc = load_json(BUILD_STATE_PATH)
+    """读搭建台账（**走唯一咽喉** `active_ledger_path()`：纪元 2 开了就读 v2）；
+    没有 / 格式不对都返回 `{}`（当"没有基线"处理，拒不拒收由调用方定）。"""
+    doc = load_json(active_ledger_path())
     return doc if isinstance(doc, dict) else {}
 
 
 def _save_build_state(level: str, plan_hash: str, how: str, ledger_rows: list[dict],
                       placement: str = "", inner_calls: int = 0) -> str:
     """写搭建台账（**我们自己的文件，不碰 UE**）。`how` = full / incremental / adopt。
+
+    ⚠ **写到哪一份由 `active_ledger_path()` 定**（2026-10-04）：纪元 2 开了就写
+      `build_state_v2.json`，否则写 v1 —— 写点只有这一个，别在别处再拼路径。
 
     ⚠ `placement` / `inner_calls`（2026-10-04 加）：这一批**怎么落进去的** ——
       `batch`（官方脚本批处理）/ `per_row`（逐行）/ 空串（不是落位操作，如 `adopt`）。
@@ -1947,24 +1973,28 @@ def _save_build_state(level: str, plan_hash: str, how: str, ledger_rows: list[di
     ⚠ **写之前先把上一版移进 `views/archive/`**（2026-09-30 加）：以前这里是**覆盖写**，
       于是「这一整套操作到底用过什么模式」**事后无法从磁盘审计** —— 用户问
       「有没有全删全摆过」时磁盘上查不到，只能翻会话记录（实测就这样被问住一次）。
-      留档名 `build_state_<UTC 时间戳>.json`，与 plan 的留档同一套路。
+      留档名 `build_state_v<纪元>_<UTC 时间戳>.json`（纪元前缀是 2026-10-04 加的：
+      两代台账的留档同放一个目录，不带纪元会分不清谁是谁）。
       ⚠ 留档失败**不拦**本次落盘（把台账写下去比留档重要），只记一条日志。
     """
+    path = active_ledger_path()
+    epoch = 2 if path == BUILD_STATE_V2_PATH else 1
     try:
-        if BUILD_STATE_PATH.exists():
-            _ar = BUILD_STATE_PATH.parent / "archive"
+        if path.exists():
+            _ar = path.parent / "archive"
             _ar.mkdir(parents=True, exist_ok=True)
             _stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-            shutil.copy2(BUILD_STATE_PATH, _ar / f"build_state_{_stamp}.json")
+            shutil.copy2(path, _ar / f"build_state_v{epoch}_{_stamp}.json")
     except OSError as exc:                  # noqa: BLE001 —— 留档失败不该拦住落盘
         logging.getLogger(__name__).warning("搭建台账留档失败（不影响本次落盘）：%s", exc)
-    save_json(BUILD_STATE_PATH, {
+    save_json(path, {
         "stage": "阶段三 · 搭建台账（我们自己的文件，不是 UE 资产；里面没有任何关卡存盘）",
         "level": level,
         "plan_hash": plan_hash,
         "how": how,
         "placement": placement,
         "inner_calls": int(inner_calls or 0),
+        "epoch": epoch,
         "at": datetime.now(timezone.utc).isoformat(),
         "unit": "cm",
         "rows": ledger_rows,
@@ -1972,7 +2002,7 @@ def _save_build_state(level: str, plan_hash: str, how: str, ledger_rows: list[di
                  "`readback=true` 表示 loc/yaw/scale 是**从关卡读回来的**；"
                  "`false` 表示记的是**指令值**、没核实过。"),
     })
-    return str(BUILD_STATE_PATH)
+    return str(path)
 
 
 # --- 阶段三 · 「搭哪张图」的答复台账与闸（2026-09-26 加；**尚未实测** —— 等 preflight / 真跑补证据）--  【模块：state】
@@ -2881,6 +2911,7 @@ def _drawing_geometry(plan: dict) -> dict:
         "world": {"center": world.get("center"), "size": world.get("size"),
                   "bounds": world.get("bounds")},
         "coordinate_system": world.get("coordinate_system"),
+        "origin_view": _planning_modules().origin_view_spec(plan),
         "required_views": list(cs.get("required_views") or ["top"]),
         "views_why": str(cs.get("views_why") or ""),
         "required_labels": list(cs.get("required_labels") or []),
@@ -2912,6 +2943,8 @@ def _drawing_geometry(plan: dict) -> dict:
             "⑤ 纵向仍是 Z（高度不因远近倾斜），可用矩形 / 体块简化；"
             "⑥ 图上写一句「示意图，非严格投影」，并标视平线 / 地面线（可选）。"
             "顶视图画 `x_m` / `y_m` + `w_m`×`d_m`（可画矩形 + 朝向）。"
+            "⚠ **顶视图必须画「原图视角」箭头**：沿 +X、放图框下沿世界范围之外、文字"
+            "`原图视角（相机沿 +X 看）`；坐标以 `drawing.origin_view` 为准（**别自己摆**）。"
             "本版图里要点名的行 = `required_labels`（其中 `changed=true` 的是本次动过的）。"
             "⚠ **两张图**里都要写**当前几何指纹前 10 位**，否则 `confirm_plan` 拒收。"),
     }
@@ -2970,11 +3003,12 @@ async def _orders_snapshot() -> BuildOrdersResult:
     ⚠ `z_rules` 那几条 Z 口径是**推出来的口径、不是实测值** —— 觉得不对就说，改常量即可。
     """
     planning = _planning_modules()
-    if not planning.OUT_JSON.exists():
-        raise ToolError("还没有规划数据（views/plan_v1.json）：先走完阶段二，再生成指令表。")
-    plan = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+    plan_path = planning.active_plan_path()      # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+    if not plan_path.exists():
+        raise ToolError(f"还没有规划数据（{plan_path.name}）：先走完阶段二，再生成指令表。")
+    plan = planning.active_plan()
     if not (plan.get("assets") or plan.get("whiteboxes")):
-        raise ToolError("plan_v1.json 是**初始化状态**（两张表都空）—— 没有坐标可翻译。")
+        raise ToolError(f"{plan_path.name} 是**初始化状态**（两张表都空）—— 没有坐标可翻译。")
 
     rows, z_rules, warns = _compose_build_rows(plan, load_json(ASSET_LIST_PATH) or {})
     plan_hash = planning.plan_geometry_hash(plan)
@@ -3010,7 +3044,8 @@ async def _orders_snapshot() -> BuildOrdersResult:
     if not gate["confirmed"]:
         extra.append("⚠ 这份 plan **还没被确认**（闸门关着）—— execute_build 会拒收。")
     elif not gate["plan_hash_ok"]:
-        extra.append("⚠ 几何指纹对不上（plan_v1.json 被改过）—— 上次确认已作废，execute_build 会拒收。")
+        extra.append(f"⚠ 几何指纹对不上（{plan_path.name} 被改过）—— 上次确认已作废，"
+                     "execute_build 会拒收。")
     if state != "accepted":
         extra.append(f"⚠ 阶段二验收状态是 `{state}`（不是 accepted）—— execute_build 会拒收。")
 
@@ -3202,17 +3237,18 @@ async def _precheck_build(ctx: Context[AppContext], planning: Any) -> _Precheck:
       那张表只是留痕件（这条是 2026-09-27 读源码核对出来的，别再以为它会拦落盘）。
     """
     used = 0
-    if not planning.OUT_JSON.exists():
+    plan_path = planning.active_plan_path()      # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+    if not plan_path.exists():
         raise ToolError("还没有规划数据：先走完阶段二（generate_plan → 出图 → confirm_plan）。")
-    plan = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+    plan = planning.active_plan()
     problems: list[str] = []
 
     gate = planning.gate_check(plan)
     if not gate["confirmed"]:
-        problems.append("阶段二闸门没过：plan_v1.json 的 `confirmation.confirmed` 是 false"
+        problems.append(f"阶段二闸门没过：{plan_path.name} 的 `confirmation.confirmed` 是 false"
                         "（用户还没确认这一版规划）")
     if not gate["plan_hash_ok"]:
-        problems.append("几何指纹对不上：plan_v1.json 被改过，上一次确认已作废"
+        problems.append(f"几何指纹对不上：{plan_path.name} 被改过，上一次确认已作废"
                         "（要重新出图、重新确认）")
     state = planning.acceptance_state(plan)
     # ⚠ **第四阶段 · 微调版**（2026-10-04 用户拍板）也放行 —— 它没有图，但有**用户原话**与
@@ -3415,7 +3451,7 @@ async def _adopt_ledger(
         stage="阶段三 · 认领现状（adopt：只读现状 + 写台账，没动任何 Actor）",
         level=level, dry_run=False, refused=False, reason="adopt：不动 Actor，只登记基线",
         plan_hash=plan_hash, planned=len(rows),
-        mode="incremental", ledger_path=str(BUILD_STATE_PATH), ledger_written=True,
+        mode="incremental", ledger_path=str(active_ledger_path()), ledger_written=True,
         diff={"认领回来的": len(adopted_rows), "认不出的": len(unmatched),
               "指令表里还没有的": not_yet},
         removed=0, placed=0, verified=0, groups={}, rows=[],
@@ -4097,7 +4133,7 @@ async def execute_build(
         ))] = "",
     only_labels: Annotated[list[str], Field(
         description=(
-            "**点名：这一轮只把这几行挪回 plan 的位置**（`plan_v1.json` 里的 `label`，一物一行、"
+            "**点名：这一轮只把这几行挪回 plan 的位置**（**活动那份 plan** 里的 `label`，一物一行、"
             "必须唯一命中）。用在「plan 与台账一致、但关卡里那几行被人手拖偏了」的时候 —— "
             "那是唯一能只动这几行、又不动其余行的路（全量重摆会把 `UEMCP/` 下全部删了重来）。"
             "⚠ **闸一点都不绕**：它本质就是「按 plan 覆盖手改」⇒ 真跑**必须**同时给 "
@@ -4111,11 +4147,33 @@ async def execute_build(
             "你从报文就能看出来，不会静默退回全表。"
             "⚠ 不传它 / 传空列表 = 行为与以前**逐字相同**（走 `plan↔台账` 差异那条增量路）"
         ))] = [],
+    confirm_stage3: Annotated[str, Field(
+        description=(
+            "**阶段三结束 · 换纪元（epoch 2）**：用户在 UE 里看过之后说的那句**原话**。"
+            "给了它（非空）⇒ 这一次调用**只做切换、一个 Actor 都不动**（不碰关卡、不调官方）："
+            "① 现在还是纪元 1（`views/plan_v2.json` 不在）；"
+            "② **当前活动台账**里每一行都落成了（`ok=false` / `verified=false` / `mismatch` "
+            "一个都没有；老台账缺 `ok` 时按「有 actor」算）；③ 有他本人的原话（空 = 拒收）。"
+            "然后冻 `plan_v1.json`（只动 `confirmation` —— 不进几何指纹，不作废任何确认）、"
+            "归档一份 v1、开 `views/plan_v2.json`（整表照抄）接管，并把搭建台账**整表接力**成 "
+            "`views/build_state_v2.json`（**不重摆、不重对账**，带 `epoch: 2` 标记）。"
+            "⚠ `dry_run=true` + 它就只预告、**一个字节都不写**。"
+            "⚠ 切换成功后先调一次 `get_plan()`（落盘挂了「待回读」）；此后改行走 "
+            "`request_plan_change` → `generate_plan(patch=…)` → `execute_build(only_labels=[…])`，"
+            "**不画图、不重确认**。"
+        ))] = "",
 ) -> BuildReport:
     """
     【场景④ 落关卡】什么时候用我：要往关卡里摆 / 重摆时 —— 默认只动与台账比变了的行；先 `dry_run=true` 看一遍。阶段三第 2 步（后半）：**把放置表落进关卡 —— 默认只动改过的行（增量），不推倒重来**。
     
     流程（顺序不能反）：
+      ★ **换纪元闸（2026-10-04 加，排在一切之前）**：`confirm_stage3` 给了（非空）⇒ 这一次
+          **只做切换、一个 Actor 都不动**（不碰关卡、不调官方）：纪元 1 还没开过 + 当前台账
+          **每一行都落成了** + 有用户原话 ⇒ 冻 `plan_v1.json`、开 `plan_v2.json`、
+          把台账整表接力成 `build_state_v2.json`。之后改行走
+          `request_plan_change` → `generate_plan(patch=…)` → `execute_build(only_labels=[…])`，
+          **不画图、不重确认**。⚠ 它与 `only_labels` / `mode` 取 `full` / `force_full` /
+          `adopt` / `accept_user_edits` / `user_quote` **互斥**（那些都是"要动 Actor"的开关）。
       ⓪ **「搭哪张图」闸**（2026-09-26 加）：`check_build_target()` 里那份**用户答复**必须存在，
          且与当前关卡对得上（选开新图而他还没换图 / 指定了别的图 / 中途换了图 → 拒收）。
          ⚠ 演练（`dry_run=true`）与 `adopt=true` 不拦（它们不碰关卡），但演练会在报告里点名
@@ -4208,12 +4266,47 @@ async def execute_build(
         raise ToolError(
             "拒收：`only_labels` 传了但**里面没有有效的 label**（空串 / 全是空白）—— "
             "一个 Actor 都没动。要么别传它（走默认增量），要么给要挪回 plan 那几行的 `label`。")
+
+    # ---------- 换纪元（epoch 2）：`confirm_stage3`（2026-10-04 加）--------------------------
+    # 用户拍板：「阶段三结束 ⇒ 换新 plan + 新台账」。**这一次调用只做切换、一个 Actor 都不动**
+    # （不碰关卡、不调官方）⇒ 它排在所有闸与所有官方调用**之前**。
+    _s3_quote = str(confirm_stage3 or "").strip()
+    if confirm_stage3 and not _s3_quote:
+        raise ToolError(
+            "拒收：`confirm_stage3` **传了但里面只有空白** —— 那不是他的话，也留不下任何凭据。\n"
+            "· 让他**在 UE 里看过**这一版之后回一句，把那句话原文（非空）填进 `confirm_stage3`。\n"
+            "· 一个 Actor 都没动、一个字节都没写。")
+    if _s3_quote:
+        # 与一切"要动 Actor / 要覆盖"的开关互斥：换纪元一个 Actor 都不动，那些参数在这儿
+        # **没有任何意义** —— 按本项目口径（硬规则 6：参数不许被静默吞掉）**当场拒收**。
+        _conflicts: list[str] = []
+        if _only_given:
+            _conflicts.append("`only_labels`（点名重摆几行）")
+        if mode != "auto":
+            _conflicts.append(f"`mode` 取 `{mode}`（换纪元不落位、不看落位模式）")
+        if force_full:
+            _conflicts.append("`force_full=true`")
+        if adopt:
+            _conflicts.append("`adopt=true`（认领现状）")
+        if accept_user_edits:
+            _conflicts.append("`accept_user_edits=true`（按 plan 覆盖手改）")
+        if str(user_quote or "").strip():
+            _conflicts.append("`user_quote`（那是覆盖手改那句话的位置）")
+        if _conflicts:
+            raise ToolError(
+                "拒收：`confirm_stage3`（**换纪元**：只切换、不动 Actor）与 "
+                + "、".join(_conflicts)
+                + " 不能同时给 —— 前者一个 Actor 都不动，后面那些都是「要动 Actor / 要覆盖」"
+                  "的开关。去掉它们再调（他本人的原话只填进 `confirm_stage3`）。")
+        return _promote_epoch2(planning, _s3_quote, dry_run=dry_run)
+
     # ⚠ **第四阶段 · 微调版 plan 的专属硬闸**（2026-10-04 用户拍板）——
     #   微调版的语义就是"**只动我刚说的那几行**"，所以：① 真跑**必须点名**；② **不许 `full`**。
     #   ⚠ 这里只读 plan 文件判"是不是微调版"（`confirmation.mode == "tuned"`），不碰 UE、不改盘。
     _tuned_plan = False
     try:
-        _pd = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+        # ⚠ 走咽喉：纪元 2 开了之后活动 plan 是 `plan_v2.json` —— 微调版正是纪元 2 的常态。
+        _pd = planning.active_plan()
         _tuned_plan = str((((_pd.get("confirmation") or {}).get("mode")) or "")) == "tuned"
     except (OSError, ValueError):
         _tuned_plan = False
@@ -4381,7 +4474,7 @@ async def execute_build(
 
     if mode == "incremental" and not ledger_by_uid:
         raise ToolError(
-            f"增量搭建需要**台账**（`{BUILD_STATE_PATH}`），现在没有 —— **一个 Actor 都没动**。"
+            f"增量搭建需要**台账**（`{active_ledger_path()}`），现在没有 —— **一个 Actor 都没动**。"
             "两条出路：\n"
             "· 关卡里已经搭好了 → 先用 `adopt=true` 认领现状（只读 + 写台账，**不动任何 Actor**）；\n"
             "· 关卡还没搭 / 想推倒重来 → 用 `mode=\"full\"` 跑一次（会先清 UEMCP/ 再整批重摆）。")
@@ -4443,7 +4536,7 @@ async def execute_build(
             raise ToolError(
                 "拒收：这些 label **不在当前 plan 里** —— **一个 Actor 都没动**："
                 + "、".join(f"`{lab}`" for lab in missing_in_plan)
-                + "\n· label 必须与 `plan_v1.json` 里的**一字不差**（点名只认 `label`）。"
+                + "\n· label 必须与**活动那份 plan** 里的**一字不差**（点名只认 `label`）。"
                   "先 `get_plan()` 看这一版到底有哪些 label（`drawing` 段里每行都带 `label`）。")
         picked = [by_label[lab][0] for lab in asked]
         named_uids = {str(r["uid"]) for r in picked}
@@ -4494,7 +4587,7 @@ async def execute_build(
     ledger_alive = [x for x in ledger_rows_all if str(x.get("actor") or "") in live_set]
     if ledger_rows_all and not ledger_alive:
         warns.append(
-            f"⚠ **台账已整体失效**：`{BUILD_STATE_PATH.name}` 里 {len(ledger_rows_all)} 行记的 "
+            f"⚠ **台账已整体失效**：`{active_ledger_path().name}` 里 {len(ledger_rows_all)} 行记的 "
             f"Actor 引用**一个都不在当前关卡里**（多半是关卡被重新加载 / 被别的会话或手工内容顶掉 / "
             "换过图）。它**不能**再当基线。现状："
             f"`{OUR_FOLDER_ROOT}/` 下有 {len(live_refs)} 个 Actor，其中 {len(unknown_refs)} 个"
@@ -4865,7 +4958,7 @@ async def execute_build(
         if mode == "incremental":
             diff_dry = _incremental_diff(
                 targets, same, gone, changed, orders, reclaim_actor, drifted, manual,
-                ledger_note=str(BUILD_STATE_PATH) + ("" if ledger_by_uid else "（**还没有**）"),
+                ledger_note=str(active_ledger_path()) + ("" if ledger_by_uid else "（**还没有**）"),
                 named=named)
         else:
             diff_dry = {
@@ -4905,7 +4998,7 @@ async def execute_build(
             level=level, dry_run=True, refused=False,
             reason="dry_run：只校验 + 算差异，**没动手**",
             plan_hash=gate["plan_hash"], planned=len(rows),
-            mode=mode, ledger_path=str(BUILD_STATE_PATH), ledger_written=False,
+            mode=mode, ledger_path=str(active_ledger_path()), ledger_written=False,
             diff=diff_dry,
             removed=0, placed=0, verified=0, groups={}, rows=[],
             official_calls=calls,
@@ -5353,12 +5446,14 @@ def _exchange_doc(plan: dict, rows: list[dict], asset_list: dict, level: str,
         "schema": "uemcp.exchange.scene/v1",
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "source": {
-            "plan": "views/plan_v1.json",
+            # ⚠ 走咽喉：纪元 2 开了之后权威几何是 `views/plan_v2.json`（别说成 v1）。
+            "plan": f"views/{_planning_modules().active_plan_path().name}",
             "plan_hash": plan_hash,
             "orders": BUILD_ORDERS_PATH.name,
             "level": level,
-            "note": ("**派生物**：权威几何永远是 plan_v1.json。这份文件被人改过**不会**自动"
-                     "回到 plan —— 用 `check_exchange()` 看对账报告，再回阶段二改。"),
+            "note": ("**派生物**：权威几何永远是**活动那份 plan**（纪元 1 = `plan_v1.json`、"
+                     "纪元 2 = `plan_v2.json`）。这份文件被人改过**不会**自动"
+                     "回到 plan —— 用 `check_exchange()` 看对账报告，再回阶段二 / 四改。"),
         },
         "unit": "m",
         "coordinate_system": _exchange_coordinate_note(),
@@ -5445,9 +5540,10 @@ async def export_layout(
     calls = 0
     warns: list[str] = []
     planning = _planning_modules()
-    if not planning.OUT_JSON.exists():
+    plan_path = planning.active_plan_path()      # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+    if not plan_path.exists():
         raise ToolError("还没有规划数据：先走完阶段二（generate_plan → 出图 → confirm_plan）。")
-    plan = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+    plan = planning.active_plan()
     gate = planning.gate_check(plan)
     asset_list = load_json(ASSET_LIST_PATH) or {}
     rows, _z_rules, row_warns = _compose_build_rows(plan, asset_list)
@@ -5546,9 +5642,10 @@ async def check_exchange(
             f"读不到交换文件、或里面没有 `objects`：`{src}`。"
             "先用 `export_layout()` 导一份；如果你比的是别处的文件，把绝对路径传进来。")
     planning = _planning_modules()
-    if not planning.OUT_JSON.exists():
-        raise ToolError("还没有规划数据（views/plan_v1.json）—— 没有可比的基准。")
-    plan = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+    plan_path = planning.active_plan_path()      # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+    if not plan_path.exists():
+        raise ToolError(f"还没有规划数据（{plan_path.name}）—— 没有可比的基准。")
+    plan = planning.active_plan()
     now_hash = planning.plan_geometry_hash(plan)
     file_hash = str((doc.get("source") or {}).get("plan_hash") or "")
 
@@ -5765,7 +5862,7 @@ async def apply_surfaces(
     ledger_rows = [x for x in (ledger.get("rows") or []) if isinstance(x, dict)]
     if not ledger_rows:
         raise ToolError(
-            f"还没有搭建台账（`{BUILD_STATE_PATH.name}`）—— 贴材质靠台账里的**Actor 引用**，"
+            f"还没有搭建台账（`{active_ledger_path().name}`）—— 贴材质靠台账里的**Actor 引用**，"
             "没台账就不知道贴谁。先把关卡搭起来（`execute_build()`）；"
             "场景已经搭好了就先 `execute_build(mode=\"incremental\", adopt=true)` 认领现状。")
 
@@ -5919,9 +6016,9 @@ async def adopt_user_edits(
     warns: list[str] = []
     calls = 0
     planning = _planning_modules()
-    plan_path = planning.OUT_JSON
+    plan_path = planning.active_plan_path()      # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
     if not plan_path.exists():
-        raise ToolError("拒绝认领：**还没有规划**（`views/plan_v1.json` 不在）—— 一个字节都没写。")
+        raise ToolError(f"拒绝认领：**还没有规划**（`{plan_path.name}` 不在）—— 一个字节都没写。")
     plan = json.loads(plan_path.read_text(encoding="utf-8-sig"))
     gate = planning.gate_check(plan)
     if not (gate.get("confirmed") and gate.get("plan_hash_ok")):
@@ -7933,6 +8030,42 @@ def _session_prereq_guard() -> None:
     )
 
 
+def _pending_change_quote() -> str:
+    """**改动窗口里那条「用户原话」** —— 判据只有这一处（`_change_request_guard` 与
+    `generate_plan` 的微调分支**共用**它，不许各写一遍）。
+
+    取法：验收台账 `change_window_open` 为真 ⇒ 取**最后一条** `kind == "change_requested"` 事件，
+    把它的 `items` 拼成一句（`items` 为空就退它的 `reason`）；窗口关着 / 没有那条事件 / 台账
+    读不动 ⇒ 空串。
+
+    ⚠ **绝不按几何指纹筛** —— 2026-10-04 修的就是这个 bug：`request_plan_change` 记改动要求时
+      写进去的指纹是**改之前**那一版的；而这里问的是「这一版**要**改成什么」。
+      按 `plan_geometry_hash(plan)`（改完之后的新指纹）去筛**必然筛不到** ⇒ 原话永远取不到 ⇒
+      微调从不生效（现场实测 `tuned_count=0`，每次 `generate_plan(patch)` 落盘后被打回
+      「等出图」，逼着重画两张图）。
+    ⚠ `planning.pending_changes()` **仍然按指纹筛**（那是给**阶段二验收**用的口径，不改）——
+      两者要回答的是不同的问题：那个问「这一版几何上有没有待办的改动要求」，
+      这个问「改动窗口里用户到底说了什么」。**别混用、也别拿它替这个。**
+    """
+    planning = _planning_modules()
+    try:
+        acc = planning.load_acceptance()
+    except Exception:                       # noqa: BLE001 —— 台账读不动不拦人（给空串）
+        return ""
+    if not isinstance(acc, dict) or not acc.get("change_window_open"):
+        return ""
+    last: dict | None = None
+    for ev in (acc.get("events") or []):
+        if isinstance(ev, dict) and str(ev.get("kind") or "") == "change_requested":
+            last = ev                      # 取**最后一条**：一轮里可以连着记好几次
+    if not last:
+        return ""
+    items = [str(x).strip() for x in (last.get("items") or []) if str(x).strip()]
+    if items:
+        return "；".join(items)
+    return str(last.get("reason") or "").strip()
+
+
 def _change_request_guard(planning, plan: dict) -> None:
     """**「改一份"已经被确认过"的规划之前，先留下『改什么 / 谁要的』」这道闸**（2026-09-26 加）。
 
@@ -7948,6 +8081,9 @@ def _change_request_guard(planning, plan: dict) -> None:
     出路（**不是要你等用户开口，是要你留下对应关系**）：
       · 用户提的 → `request_plan_change(items=[他的原话], by="用户")`；
       · 你自己发现要修 → `request_plan_change(items=["自查：…"], by="agent 自查")`。
+    ⚠ **窗口开着 ≠ 有原话**（2026-10-04 加，把丢原话这条判据**前移**到本闸）：改动窗口由
+      `request_plan_change()` 打开，但 `items` / `reason` 都空就等于**什么都没留下** ——
+      那种情况在这里当场拒收（否则会先落盘成「等出图」，逼用户白重画两张图才发现取不到原话）。
     ⚠ 台账读不动 → **放行**（与 `_readback_guard` 同口径：基础设施故障不拦人）。
     ⚠ 位置说明：本闸在 `_sync_scene_map_size()`（阶段一世界大小回填）**之后**跑 ——
       "同一次调用里既覆盖了世界大小、又被本闸拒收"这一种情况下，阶段一那份文件**已经**回填过。
@@ -7960,12 +8096,26 @@ def _change_request_guard(planning, plan: dict) -> None:
     if not isinstance(acc, dict) or not acc.get("accepted_rows"):
         return                              # 从没确认过 → 第一次排表，自由
     if acc.get("change_window_open"):
+        # ⚠ **窗口开着 ≠ 有原话**（2026-10-04 把这条判据**前移**到这儿）：`request_plan_change`
+        #   记的是 `items` / `reason`，两者都空就等于**什么都没留下** —— 那种情况在这里
+        #   **当场拒收**，而不是先落盘成 `awaiting_figure`、让用户白重画两张图之后才发现
+        #   取不到原话（2026-10-04 实测撞到的坏路径：`tuned_count` 恒 0）。
+        if not _pending_change_quote():
+            raise ToolError(
+                "拒收：**改动窗口开着，但台账里那几条改动要求一条可用的原话都没有** —— "
+                "一个字节都没写。\n"
+                "· 窗口是 `request_plan_change()` 打开的，它必须带上你说得出出处的那句话：\n"
+                "　 用户提的 → `request_plan_change(items=[他的原话], by=`用户`)`；\n"
+                "　 你自己发现要修的 → `request_plan_change(items=[`自查：…`], by=`agent 自查`)`。\n"
+                "· 为什么现在拦（而不是落盘之后再说）：拿不到原话，这一版就记不成「微调版」，"
+                "只会被打回「等出图」—— 那就得**白重画两张图**（实测踩过）。")
         return                              # 已经记过"要改什么 / 谁要的" → 窗口开着，放行
     new_hash = planning.plan_geometry_hash(plan)
     old: dict | None = None
     try:
-        if planning.OUT_JSON.exists():
-            old = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+        _apath = planning.active_plan_path()     # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+        if _apath.exists():
+            old = json.loads(_apath.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         old = None
     if isinstance(old, dict) and planning.plan_geometry_hash(old) == new_hash:
@@ -8114,6 +8264,19 @@ def _stage2_next_step(plan: dict, acc: PlanAcceptance, empty: bool = False) -> s
             "（否则确认时会被判成「图不认数据」），"
             + scope + "再使用给用户（**两张就是两张卡片**）。**没有图不许让用户确认。**"
         )
+    if acc.state == "tuned":
+        # ⚠ **四 · 微调 / 纪元 2 的常态**（2026-10-04 补一处漏分支）：原来这里没有 `tuned` 分支，
+        #   于是微调版会**掉到最下面那句「现在没有任何坐标」** —— 那话是错的（表里明明有行），
+        #   纪元 2 开了之后它还会成为**每次 `get_plan()` 都会看到**的下一步。
+        return (
+            f"**当前是【四 · 微调】那一版**（{head}**这一次没有图**）—— 依据是 "
+            "`confirmation.user_quote`（用户原话）+ `confirmation.rows`（改了哪几行、为什么）。"
+            "下一步：落关卡时**只点名那几行** —— `execute_build(only_labels=[…])`；"
+            "**不要重画图、也不要 `confirm_plan`**（那道看图闸只属于前三阶段）。"
+            "⚠ 验收方式 = **用户在 UE 里自己看**：要**报数字**给他（例：`Y −33.0 → −32.0`），"
+            "别说一句「改好了」。"
+            "⚠ 要回到「有图那种正常验收」：重画两张图 → `confirm_plan()`。"
+        )
     return (
         "现在**没有任何坐标**：先去拿用户上传的图，走完阶段一（提元素 → 用户确认 → "
         "找资产 → 使用清单），再按图规划每件东西的 `pos` 填进来。**别在没图时编坐标。**"
@@ -8194,15 +8357,20 @@ def _stage_acceptance_rows() -> tuple[dict, str]:
       `planning.acceptance_view()` 带出来了（判据只有那一处）。这里只负责"取不到就说取不到"。
     """
     plan_mod = _planning_modules()
-    out_json = getattr(plan_mod, "OUT_JSON", None)
+    # ⚠ 走咽喉（纪元 2 开了就是 `plan_v2.json`）—— 微调计数只有拿**活动那份 plan** 去问
+    #   `acceptance_view()` 才对得上（它算的是活动 plan 的指纹与变更集）。
+    try:
+        out_json = plan_mod.active_plan_path()
+    except Exception:                           # noqa: BLE001
+        out_json = getattr(plan_mod, "OUT_JSON", None)
     if out_json is None:
-        return {}, "规划层没有 OUT_JSON —— 微调计数这次没取到（**不是 0 次**，是没读到）"
+        return {}, "规划层没有活动 plan 路径 —— 微调计数这次没取到（**不是 0 次**，是没读到）"
     if not out_json.exists():
-        return {}, "views/plan_v1.json 不存在 —— 微调计数这次没取到（**不是 0 次**，是没读到）"
+        return {}, f"{out_json.name} 不存在 —— 微调计数这次没取到（**不是 0 次**，是没读到）"
     try:
         plan = json.loads(out_json.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError) as exc:
-        return {}, f"views/plan_v1.json 读不动（{type(exc).__name__}: {exc}）—— 微调计数没读成"
+        return {}, f"{out_json.name} 读不动（{type(exc).__name__}: {exc}）—— 微调计数没读成"
     try:
         view = plan_mod.acceptance_view(plan)
     except Exception as exc:                    # noqa: BLE001 —— 台账读不动不该把读工具带崩
@@ -8220,15 +8388,17 @@ def _stage_overview() -> list[dict]:
     八行的判据（**全部用现成产物，纯离线、不碰 UE**）：
       ① `catalog/asset_list.json` 在不在、有几行、几条白膜占位 —— ⚠ 这里只报**存在性**；
          「过没过期」要调 `get_asset_list()`（它比资产库指纹）才知道。
-      ② `views/plan_v1.json` 两张表的行数 + **现算**的验收状态（`planning.acceptance_state`）；
+      ② **活动那份 plan**（纪元 2 开了就是 `views/plan_v2.json`，否则 `views/plan_v1.json`）
+         两张表的行数 + **现算**的验收状态（`planning.acceptance_state`）；
          其中 `tuned` 如实写成「微调版 · 这一次没有图」（不是错误、别去修）。
-      ③ `views/build_state_v1.json` 的行数 vs plan 行数、`placement`、`at`，**以及——状态由谁定**：
+      ③ **活动那份搭建台账**的行数 vs plan 行数、`placement`、`at`，**以及——状态由谁定**：
          有一份**当版**的 `views/evaluate_v1.json`（`plan_hash` == 当前 plan 指纹）时，
          **状态与依据由它决定**（它的 `counts` 非零 ⇒ 进行中，并在依据里点名那几个数）；
          没有当版报告时**退回台账口径**，依据里写明「**真值未核**（要 `evaluate_layout()`）」。
          ⚠ 这不是两套判据：报告本身就是"关卡现状 vs plan/台账"的判定结果（评估工具写的），
            这里只是**读它**、不重算。**行数**照旧比 —— 报告说明不了"台账该有几行"。
-      ④ 验收台账里的 `tuned_count` / `tuned_rows_total`（由 `acceptance_view()` 带出）。
+      ④ 验收台账里的 `tuned_count` / `tuned_rows_total`（由 `acceptance_view()` 带出）
+          + **当前纪元**（`planning.active_epoch()`）：纪元 1 时写明「**纪元 2 还没开**（阶段三要先确认）」。
       ⑤ `config/surface_materials.json` 的 `materials` / `create` 键数（用现成的
          `_surface_materials()` / `_surface_creates()`）+ 建材质台账在不在。
       ⑥ `views/environment_state_v1.json` 在不在、最近一次动作的时间。
@@ -8239,6 +8409,24 @@ def _stage_overview() -> list[dict]:
     """
     plan_mod = _planning_modules()
     stages: list[dict] = []
+
+    # ---------- 纪元与活动文件（**唯一一处算**，③④ 两行都用它）--------------------------
+    # 判据全在规划层：`active_epoch()` / `active_plan_path()`（与全工程读写 plan 的地方**同源**）。
+    # ⚠ 算不出来就当**纪元 1**（严的那一侧：宁可多提示一次"纪元 2 还没开"，也不假装换过血）。
+    _epoch = 1
+    try:
+        _af = getattr(plan_mod, "active_epoch", None)
+        _epoch = int(_af()) if callable(_af) else 1
+    except Exception:                           # noqa: BLE001
+        _epoch = 1
+    try:
+        _plan_path = plan_mod.active_plan_path()
+        _plan_rel = f"views/{_plan_path.name}"
+    except Exception:                           # noqa: BLE001
+        _plan_path = getattr(plan_mod, "OUT_JSON", None)
+        _plan_rel = "views/plan_v1.json"
+    _ledger_path = active_ledger_path()
+    _ledger_rel = f"views/{_ledger_path.name}"
 
     # ---------- ① 资产确认 ----------
     assets_doc, assets_why = _safe_json(ASSET_LIST_PATH)
@@ -8273,7 +8461,7 @@ def _stage_overview() -> list[dict]:
                    "evidence": e1, "next": n1})
 
     # ---------- ② 平面放置规划 ----------
-    plan_doc, plan_why = _safe_json(plan_mod.OUT_JSON)
+    plan_doc, plan_why = _safe_json(_plan_path)
     n_assets = n_boxes = 0
     plan_rows = 0
     plan_ok = isinstance(plan_doc, dict)
@@ -8283,11 +8471,11 @@ def _stage_overview() -> list[dict]:
         plan_rows = n_assets + n_boxes
     if not plan_ok:
         s2 = STAGE_STATE_NOT_STARTED
-        e2 = f"读不到 views/plan_v1.json（{plan_why}）"
+        e2 = f"读不到 {_plan_rel}（{plan_why}）"
         n2 = "按参考图规划每行的 pos / footprint_m，再用 generate_plan() 落盘"
     elif plan_rows == 0:
         s2 = STAGE_STATE_NOT_STARTED
-        e2 = "views/plan_v1.json 在、但两张表都空（初始化态：一份坐标都没有）"
+        e2 = f"{_plan_rel} 在、但两张表都空（初始化态：一份坐标都没有）"
         n2 = "拿到参考图之后规划坐标，再调 generate_plan()"
     else:
         try:
@@ -8295,7 +8483,7 @@ def _stage_overview() -> list[dict]:
             acc_cn = str(plan_mod.ACCEPTANCE_STATES.get(acc_state, acc_state))
         except Exception as exc:                # noqa: BLE001 —— 状态算不动不该把读工具带崩
             acc_state, acc_cn = "unknown", f"验收状态没算出来（{type(exc).__name__}: {exc}）"
-        e2 = (f"views/plan_v1.json：资产 {n_assets} 行 + 白膜 {n_boxes} 行；"
+        e2 = (f"{_plan_rel}：资产 {n_assets} 行 + 白膜 {n_boxes} 行；"
               f"验收状态 {acc_state}（{acc_cn}）")
         if acc_state == "tuned":
             s2 = STAGE_STATE_NEED_USER
@@ -8343,9 +8531,9 @@ def _stage_overview() -> list[dict]:
                 if int(rep_counts.get(k) or 0) > 0] if report_ok3 else []
     rep_txt = "；".join(f"{k} {v}（{_VERDICT_CN.get(k, k)}）" for k, v in rep_hits)
 
-    build_doc, build_why = _safe_json(BUILD_STATE_PATH)
+    build_doc, build_why = _safe_json(active_ledger_path())
     if not isinstance(build_doc, dict):
-        s3, e3 = STAGE_STATE_NOT_STARTED, f"读不到 views/build_state_v1.json（{build_why}）"
+        s3, e3 = STAGE_STATE_NOT_STARTED, f"读不到 {_ledger_rel}（{build_why}）"
         n3 = "确认过的规划之后：check_build_target() 问清搭哪张图 → execute_build() 落关卡"
     else:
         rows3 = [r for r in (build_doc.get("rows") or []) if isinstance(r, dict)]
@@ -8359,12 +8547,12 @@ def _stage_overview() -> list[dict]:
                     f"{'行数对得上' if plan_rows == len(rows3) else '**行数对不上**'}）")
         if not rows3:
             s3 = STAGE_STATE_NOT_STARTED
-            e3 = "views/build_state_v1.json 在、但台账里 0 行（还没落过东西）"
+            e3 = f"{_ledger_rel} 在、但台账里 0 行（还没落过东西）"
             n3 = "check_build_target() 问清搭哪张图（拿到用户答复）→ execute_build()"
         elif report_ok3:
             # 报告说了算（它是唯一回答得了"关卡里现在到底对不对"的那一份）
             s3 = STAGE_STATE_DOING if rep_hits else STAGE_STATE_DONE
-            e3 = (f"views/build_state_v1.json：{rows_txt}；落位方式 {placement}；"
+            e3 = (f"{_ledger_rel}：{rows_txt}；落位方式 {placement}；"
                   f"at={built_at or '（没记）'}。**以当版对账报告为准**（"
                   f"views/evaluate_v1.json：plan_hash 对得上当前 plan、at="
                   f"{str(ev_doc.get('at') or '（没记）')}、"
@@ -8378,7 +8566,7 @@ def _stage_overview() -> list[dict]:
         else:
             # 没有当版报告 ⇒ 退回台账口径，并**明说真值未核**
             s3 = STAGE_STATE_DONE if not bad else STAGE_STATE_DOING
-            e3 = (f"views/build_state_v1.json：{rows_txt}；落位方式 {placement}；"
+            e3 = (f"{_ledger_rel}：{rows_txt}；落位方式 {placement}；"
                   f"at={built_at or '（没记）'}；"
                   + (f"**{len(bad)} 行 ok/verified = false**（没落成或读回对不上）"
                      if bad else "没有 ok=false / verified=false 的行")
@@ -8391,6 +8579,27 @@ def _stage_overview() -> list[dict]:
                   if bad else
                   "改动走 execute_build(only_labels=[…])；**要对真值先 evaluate_layout()**"
                   "（plan 改过之后必须重新对账，G15 / G16 那两道闸也认这份报告）")
+    # --- ③ 的**纪元**那一半（2026-10-04 加：阶段三结束 ⇒ 换新 plan + 新台账）--------------
+    # 判据**只加在这一个函数里**（别处再算一遍就是两套口径）：**真跑成功但纪元 2 还没开**
+    #   ⇒ 状态写「**需你确认**」，`next` 只给一个动作 —— `execute_build(confirm_stage3=…)`，
+    #   那一次调用**只做切换、一个 Actor 都不动**。
+    # "真跑成功"怎么判（都用现成产物，不另算）：台账里有行 + 没有 `ok=false` / `verified=false`
+    #   的行 + （有当版报告时）报告里没有非零计数。
+    _built_ok3 = False
+    if isinstance(build_doc, dict):
+        # ⚠ 只在台账读到时才取 `rows3` / `bad`（它们在上面那个 else 分支里定义）。
+        _built_ok3 = bool(rows3 and not bad and (not report_ok3 or not rep_hits))
+    if _built_ok3 and _epoch < 2:
+        s3 = STAGE_STATE_NEED_USER
+        e3 += (f"；⚠ **纪元 2 还没开**（当前纪元 {_epoch}）—— 阶段三这一步的**收尾**是把这一版"
+               "交给用户、他看过 UE 之后回一句话")
+        n3 = ("**唯一动作**：`execute_build(confirm_stage3=`你在 UE 里看过之后的那句话`)` —— "
+              "它**只切换、一个 Actor 都不动**（先把上面这份现场情况交给用户、停下等他打字）；"
+              "换完纪元 v1 plan / v1 台账冻结留档，新 plan / 新台账接管 ④~⑧，"
+              "此后改行走 `request_plan_change` → `generate_plan(patch=…)` → "
+              "`execute_build(only_labels=[…])`，**不画图、不重确认**")
+    elif _epoch >= 2:
+        e3 += f"；**纪元 2 已开**（当前纪元 {_epoch}：`{_plan_rel}` / `{_ledger_rel}` 在接管）"
     n3 += ("　⚠ ③ 只管**整体框架**（有哪些物体 / 大致摆在哪 / 世界与铺装的范围）——"
            "**整体没问题了才进 ④ 微调**；到 ④ 单个物体想挪/换/调，走 "
            "`request_plan_change` → `generate_plan(patch=…)` → `execute_build(only_labels=[…])`，"
@@ -8399,19 +8608,26 @@ def _stage_overview() -> list[dict]:
                    "evidence": e3, "next": n3})
 
     # ---------- ④ 微调 ----------
+    # ⚠ **纪元如实写在这里**（2026-10-04 加；判据只在本函数这一处）：纪元 1 = 纪元 2 还没开
+    #   （阶段三要先确认 —— 那一步在 ③ 的 `next` 里）；纪元 2 = 微调/后续阶段的正路已经通了。
     _av, _av_why = _stage_acceptance_rows()
     tuned_count = int(_av.get("tuned_count") or 0)
     tuned_rows = int(_av.get("tuned_rows_total") or 0)
+    _epoch_txt = f"当前纪元 {_epoch}（活动 plan `{_plan_rel}`、活动台账 `{_ledger_rel}`）"
+    if _epoch < 2:
+        _epoch_txt += ("；⚠ **纪元 2 还没开**（阶段三要先确认：`execute_build(confirm_stage3=…)`）"
+                       "—— 在纪元 2 开之前，微调这条路**还没接管**")
     if _av_why:
-        s4, e4 = STAGE_STATE_NOT_STARTED, _av_why
+        s4, e4 = STAGE_STATE_NOT_STARTED, f"{_epoch_txt}；{_av_why}"
         n4 = "先有确认过的规划（②）才有微调可言；取不到计数时按未开始处理，**不拿 0 当事实**"
     elif tuned_count:
         s4 = STAGE_STATE_DOING
-        e4 = (f"验收台账（planning.acceptance_view）：微调 {tuned_count} 次、"
+        e4 = (f"{_epoch_txt}；验收台账（planning.acceptance_view）：微调 {tuned_count} 次、"
               f"累计 {tuned_rows} 行；最近一次 {str(_av.get('updated_at') or '')}")
         n4 = "微调不出图、也不要二次确认 —— 报数字给用户，由他自己在 UE 里看"
     else:
-        s4, e4 = STAGE_STATE_NOT_STARTED, "验收台账里 tuned_count=0（还没微调过）"
+        s4 = STAGE_STATE_NOT_STARTED
+        e4 = f"{_epoch_txt}；验收台账里 tuned_count=0（还没微调过）"
         n4 = ("要改几行：request_plan_change(items=[…], by=「用户」) 先记原话 → "
               "generate_plan(patch=[…]) → execute_build(only_labels=[…])")
     stages.append({"no": 4, "name": STAGE_NAMES_8[3], "state": s4,
@@ -8559,13 +8775,14 @@ def _evaluate_rows_notice(rep: dict, ok_text: str) -> str:
 #   —— 与回读闸同一条局限（纪律闸，不是正确性闸）。
 def _live_state_guard(planning, new_plan: dict) -> str:
     """改放置表**之前**过这道闸：不过就抛 `ToolError`；过了返回一句**提醒**（调用方放进 warnings）。"""
-    ledger = load_json(BUILD_STATE_PATH) or {}
+    ledger = _load_build_state()        # ⚠ 走咽喉（纪元 2 开了就是 build_state_v2.json）
     if not (ledger.get("rows") or []):
         return ""                                   # 还没搭过：纯纸面阶段，不拦
     old: dict = {}
-    if planning.OUT_JSON.exists():
+    _apath = planning.active_plan_path()     # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+    if _apath.exists():
         try:
-            old = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+            old = json.loads(_apath.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
             old = {}
     try:
@@ -8624,14 +8841,15 @@ def _level_seen_guard(planning, dry_run: bool, adopt: bool) -> str:
         return ""                                   # 演练：一个 Actor 都不落，不拦
     if adopt:
         return ""                                   # 认领现状本来就是"读现场"那个动作，不拦
-    ledger = load_json(BUILD_STATE_PATH) or {}
+    ledger = _load_build_state()        # ⚠ 走咽喉（纪元 2 开了就是 build_state_v2.json）
     if not (ledger.get("rows") or []):
         return ("提示：台账还是空的（第一次搭 / 换过图）—— G16 没拦（没有可对账的基线）。"
                 f"⚠ 但「`{OUR_FOLDER_ROOT}/` 下已经有 Actor 却没有可用台账」那一条由别的闸管。")
-    if not planning.OUT_JSON.exists():
+    _apath = planning.active_plan_path()         # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+    if not _apath.exists():
         return ""                                   # 还没有 plan：整批校验会拒（不在这儿抢话说）
     try:
-        plan = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+        plan = json.loads(_apath.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return ""
     how = ("先 `official_status()`（确认链路）→ 再 `evaluate_layout()`（**读关卡现状 + 写报告**）"
@@ -8682,6 +8900,161 @@ def _write_plan(plan: dict) -> dict:
     """
     planning = _planning_modules()
     return planning.write_plan(plan)
+
+
+# --- 阶段三收尾 · **换纪元（epoch 2）**（2026-10-04 加；⚠ **尚未实测**）-----------------  【模块：state（纪元）】
+# 「阶段三结束 ⇒ 换新 plan + 新台账」（作者拍板「大换血」）。三条判据都过了才切：
+#   ① 现在还是纪元 1（`views/plan_v2.json` 不在 —— 纪元只开一次）；
+#   ② 拿**当前活动台账**核阶段三真的落完了：每一行都落成（`ok=false` / `verified=false` /
+#      `mismatch` 一个都没有；老台账缺 `ok` 字段时按"有 actor"算）；
+#   ③ `confirm_stage3` 非空 = **用户本人的原话**（空 = 拒收："让他看过 UE 再回一句"）。
+# 切换做两件事：`planning.promote_to_epoch2()`（冻 v1 + 开 v2）+ 把 v1 台账**整表接力**成 v2
+# （**不重摆、不重对账** —— 换的是"哪份文件算数"，不是现场）。
+# ⚠ 它**一个 Actor 都不动**、不调任何官方工具（因此不需要链路闸 / 开场动作闸）。
+
+def _epoch2_ready(ledger: dict) -> tuple[bool, str, dict]:
+    """判「阶段三真的落完了吗」→ `(能不能换, 不能换的原因, 统计)`。**判据只有这一处。**"""
+    rows = [r for r in (ledger.get("rows") or []) if isinstance(r, dict)]
+    bad: list[str] = []
+    for r in rows:
+        label = str(r.get("label") or r.get("uid") or "(没名字)")
+        mismatch = str(r.get("mismatch") or "").strip()
+        if r.get("ok") is False:
+            bad.append(f"「{label}」（`ok=false`：没落成）")
+        elif r.get("verified") is False:
+            bad.append(f"「{label}」（`verified=false`：读回对不上"
+                       + (f"：{mismatch}" if mismatch else "") + "）")
+        elif mismatch:
+            bad.append(f"「{label}」（台账里带 `mismatch`：{mismatch}）")
+        elif r.get("ok") is None and not str(r.get("actor") or "").strip():
+            # ⚠ **老台账 / `adopt` / 认领那几次都不写 `ok` 字段** —— 那时按"有没有 Actor 引用"算
+            #   （有引用 = 落成了）。没有引用 = 这一行**没有任何落成的凭据**，不算过。
+            bad.append(f"「{label}」（台账里**没有 Actor 引用** —— 这一行没有落成的凭据）")
+    stat = {"rows": len(rows), "bad": len(bad), "bad_rows": bad[:8]}
+    if not rows:
+        return False, ("当前搭建台账里**一行都没有**（阶段三还没落过东西）—— 谈不上结束。"
+                       "先 `check_build_target()` 问清搭哪张图（拿到用户答复）→ `execute_build()` 落一次。"), stat
+    if bad:
+        return False, (
+            f"当前搭建台账里**还有 {len(bad)} 行没落成 / 读回对不上** —— 阶段三没结束，"
+            "不许换纪元：\n· " + "\n· ".join(bad[:8]) + ("\n· …（还有更多，见台账）" if len(bad) > 8 else "")
+            + "\n先按 `execute_build()`（增量）把它们补上；要是想先看清现场，调 `evaluate_layout()`。"), stat
+    return True, "", stat
+
+
+def _save_ledger_epoch2(ledger: dict) -> str:
+    """把纪元 1 的搭建台账**整表接力**成 `views/build_state_v2.json`（不重摆、不重对账）。
+
+    为什么是"整表照抄"而不是"重新对一遍"：换纪元**不动任何 Actor** —— 现场没变，
+    重新对账只会多花几十次官方调用、还可能因为偶发读失败把好行写成"没落成"。
+    基线接力的意义是"**接着往下走**"，所以每一行的 `actor` 引用、`readback` 标记**原样带过去**。
+    """
+    doc = dict(ledger)
+    doc["epoch"] = 2
+    doc["promoted_at"] = datetime.now(timezone.utc).isoformat()
+    doc["relayed_from"] = str(BUILD_STATE_PATH)
+    doc["stage"] = ("阶段三 · 搭建台账（**纪元 2**：整表接力自纪元 1；"
+                    "换纪元没有动任何 Actor、也没有重新对账）")
+    doc["note"] = (str(doc.get("note") or "")
+                   + " ｜ **纪元 2 接力件**：每一行都是纪元 1 那一次搭建的凭据"
+                     "（`actor` 引用原样带过来）。纪元 1 的台账 `views/build_state_v1.json` "
+                     "从此只读留档。").strip()
+    save_json(BUILD_STATE_V2_PATH, doc)
+    return str(BUILD_STATE_V2_PATH)
+
+
+def _promote_epoch2(planning: Any, quote: str, dry_run: bool) -> BuildReport:
+    """**阶段三结束 ⇒ 换纪元**：只切换，一个 Actor 都不动。`dry_run` 只预告、一个字节都不写。
+
+    三步（顺序不能反）：
+      ① 三条判据（纪元没开过 / 台账每行都落成 / 有用户原话）—— 不过就**拒收**，说清差哪条；
+      ② `planning.promote_to_epoch2()`：冻 `plan_v1.json`（只动 `confirmation`，不进几何指纹）
+         + 归档一份 v1 + 写 `plan_v2.json`（整表照抄）；
+      ③ 把 v1 台账整表接力成 `build_state_v2.json`（加一个 `epoch` = 2 的标记）。
+    ⚠ 落盘走 `planning.write_plan(target=PLAN_V2_PATH)`（唯一写入点）⇒ 它会顺手挂一条
+      **待回读** —— 所以切换成功后的第一步是 `get_plan()`（只读），报文里写明了。
+    """
+    v1_path = planning.OUT_JSON
+    if planning.PLAN_V2_PATH.exists():
+        raise ToolError(
+            f"拒收：**纪元 2 已经开了**（`{planning.PLAN_V2_PATH.name}` 已在）—— 纪元只开一次，"
+            "一个 Actor 都没动。\n"
+            "· 此后改行走：`request_plan_change` → `generate_plan(patch=…)` → "
+            "`execute_build(only_labels=[…])`（**不画图、不重确认**）。\n"
+            "· 要看清现在算哪一份：`get_plan()`（它报当前纪元与活动文件）。")
+    try:
+        plan_v1 = json.loads(v1_path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as exc:
+        raise ToolError(
+            f"拒收：读不到纪元 1 的 plan（`{v1_path.name}`：{type(exc).__name__}: {exc}）—— "
+            "一个字节都没写。换纪元是**照抄那一刻的整表**，拿不到底稿就不换（不猜）。") from exc
+
+    ledger = _load_build_state()
+    ok_ready, why_not, stat = _epoch2_ready(ledger)
+    if not ok_ready:
+        raise ToolError(
+            "拒收：**这一批要换纪元，但阶段三还没落完** —— 一个 Actor 都没动。\n· " + why_not)
+    if not str(quote or "").strip():
+        # 这一条在调用方（`execute_build`）已经拦过一道；这里是本函数自己的防线 ——
+        # 判据不许只有一处调用点靠自觉（`planning.promote_to_epoch2()` 里还有第三道）。
+        raise ToolError(
+            "拒收：**换纪元必须有用户本人的原话**（`confirm_stage3` 为空）—— 一个 Actor 都没动。\n"
+            "· 先把这一版在 UE 里给他看过，**停下等他打字**，再把他那句话填进 `confirm_stage3`。")
+
+    old_hash = str(planning.plan_geometry_hash(plan_v1) or "")
+    rows_n = int(stat.get("rows") or 0)
+    if dry_run:
+        return BuildReport(
+            stage="阶段三 · 换纪元（演练 · 纪元 1 → 2）",
+            level=str(ledger.get("level") or ""), dry_run=True, refused=False,
+            reason="dry_run：只预告要写哪两个文件，**一个字节都没写**",
+            plan_hash=old_hash, planned=rows_n, mode="epoch2",
+            ledger_path=str(BUILD_STATE_V2_PATH), ledger_written=False,
+            diff={"会冻结（只读）": str(v1_path),
+                  "会归档一份 v1": "views/archive/plan_v1_<时间戳>_<confirmed|draft>.json（冻结前那一版）",
+                  "会新开（接管）": str(planning.PLAN_V2_PATH),
+                  "会接力台账": f"{rows_n} 行 → {BUILD_STATE_V2_PATH.name}（不重摆、不重对账）",
+                  "会动的 Actor": "0（一个都不动）"},
+            official_calls=0,
+            next_step=("演练：三条判据都过了。要真做就去掉 `dry_run` 重调 "
+                       "`execute_build(confirm_stage3=…)` —— 那一次**只切换、一个 Actor 都不动**。"),
+            warnings=["演练（`dry_run=true`）：**一个字节都没写** —— plan_v1 / plan_v2 / 两代台账"
+                      "都还是原样。"])
+    try:
+        planning.promote_to_epoch2(plan_v1, user_quote=quote)
+    except ValueError as exc:
+        raise ToolError(f"拒收：换纪元失败（{exc}）—— 一个 Actor 都没动。") from exc
+    ledger_path = _save_ledger_epoch2(ledger)
+
+    return BuildReport(
+        stage="阶段三 · 换纪元（纪元 1 → 2：换新 plan + 新台账）",
+        level=str(ledger.get("level") or ""), dry_run=False, refused=False,
+        reason=f"纪元 2 已开（用户原话「{quote}」）—— **只切换，一个 Actor 都没动**",
+        plan_hash=old_hash, planned=rows_n, mode="epoch2",
+        ledger_path=ledger_path, ledger_written=True,
+        diff={"冻结（只读）": str(v1_path),
+              "新 plan（接管）": str(planning.PLAN_V2_PATH),
+              "接力台账": f"{rows_n} 行 → {BUILD_STATE_V2_PATH.name}（不重摆、不重对账）",
+              "几何指纹": "与纪元 1 逐位相同（换的是哪份文件算数，不是几何）",
+              "动的 Actor": "0"},
+        official_calls=0,
+        next_step=(
+            f"**纪元 2 已开** —— `{planning.PLAN_V2_PATH.name}` 与 "
+            f"`{BUILD_STATE_V2_PATH.name}` 接管后续所有阶段（四~八）。\n"
+            "① 先调一次 `get_plan()`（只读回读：写盘挂了「待回读」，不回读的话下一步会被拒收）；\n"
+            "② 此后改行走 `request_plan_change(items=[用户原话], by=…)` → "
+            "`generate_plan(patch=[…])` → `execute_build(only_labels=[…])` —— "
+            "**不画图、不重确认**（依据是 `confirmation.user_quote` + `rows` 那套留痕）；\n"
+            "③ `views/plan_v1.json` 与 `views/build_state_v1.json` 从此**冻结只读**（留档）。"),
+        warnings=[
+            "**只切换，一个 Actor 都没动、没存盘、没重新对账** —— 现场与切换前逐行相同。",
+            f"纪元 1 已冻结：`{v1_path.name}`（`confirmation.frozen_by=epoch2`）+ "
+            f"`{BUILD_STATE_PATH.name}`（只读留档）；`views/archive/` 里另存了一份 v1。",
+            "⚠ 落盘顺手挂了一条「**待回读**」—— 先调 `get_plan()` 再往下走（这是既有纪律，"
+            "不是这次新加的）。",
+            "⚠ **尚未实测**（2026-10-04 写好）：第一次真跑请先 "
+            "`execute_build(confirm_stage3=…, dry_run=true)` 看一遍它要写哪两个文件。",
+        ])
 
 
 _PATCH_ASSET_FIELDS = {"label", "element_key", "asset_path", "pos", "footprint_m",
@@ -8881,7 +9254,7 @@ async def generate_plan(
     ] = None,
 ) -> PlanResult:
     """
-    【场景③ 规划验收】什么时候用我：要写 / 改平面放置表时（坐标由你规划）—— 已确认过的表要改，先调 `request_plan_change`。把**平面放置表**落盘成 `views/plan_v1.json` —— 阶段二主工具（记录，不是规划）。
+    【场景③ 规划验收】什么时候用我：要写 / 改平面放置表时（坐标由你规划）—— 已确认过的表要改，先调 `request_plan_change`。把**平面放置表**落盘成**活动那份 plan**（纪元 1 = `views/plan_v1.json`；**纪元 2 开了就是 `views/plan_v2.json`**）—— 阶段二主工具（记录，不是规划）。
     
     三件事：
       ① 校验并规整：一物一行、每行必须有 `pos` 与 `footprint_m`（米）；
@@ -8932,6 +9305,9 @@ async def generate_plan(
     ⚠ 改完先看 `get_plan().acceptance.change_set` —— 那告诉你**图里只需画哪几行**。
     """
     planning = _planning_modules()
+    # ⚠ **活动那份 plan**（纪元 2 开了就是 `plan_v2.json`）—— 本工具里凡是要说"写到哪个文件"
+    #   或读当前那份，都用它（走咽喉；别自己拼路径）。
+    _plan_path = planning.active_plan_path()
 
     # ⚠ 第 1 道闸：**上一版还没回读** → 先拒收（把文档里的软约束变硬，见 _readback_guard）
     _readback_guard()
@@ -8971,13 +9347,13 @@ async def generate_plan(
                 "`patch` 与整表（`assets` / `whiteboxes`）**不能同时给** —— "
                 "要打补丁就别重发整张表（这正是补丁的意义），要重发整表就别给 patch。"
             )
-        if not planning.OUT_JSON.exists():
-            raise ToolError("还没有 `views/plan_v1.json` —— 补丁只能改**已有**的放置表；"
+        if not planning.OUT_JSON.exists() and not planning.PLAN_V2_PATH.exists():
+            raise ToolError("还没有 plan（v1 / v2 都不在）—— 补丁只能改**已有**的放置表；"
                             "第一版请整表给（`assets` / `whiteboxes`）。")
         try:
-            cur_plan = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+            cur_plan = json.loads(_plan_path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError) as exc:
-            raise ToolError(f"读不动 views/plan_v1.json（{exc}）—— 补丁要有底稿才能打。") from exc
+            raise ToolError(f"读不动 {_plan_path.name}（{exc}）—— 补丁要有底稿才能打。") from exc
         if not (cur_plan.get("assets") or cur_plan.get("whiteboxes")):
             raise ToolError("当前放置表是**空的**（初始化状态）—— 没有行可以打补丁；"
                             "第一版请整表给（`assets` / `whiteboxes`）。")
@@ -9090,9 +9466,13 @@ async def generate_plan(
         )
 
     # 几何一模一样 → 沿用上次确认（重算一遍不该把确认弄丢）
-    if planning.OUT_JSON.exists():
-        old_conf = (json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
-                    .get("confirmation", {}) or {})
+    _prev_path = planning.active_plan_path()     # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+    if _prev_path.exists():
+        try:
+            old_conf = (json.loads(_prev_path.read_text(encoding="utf-8-sig"))
+                        .get("confirmation", {}) or {})
+        except (OSError, ValueError):
+            old_conf = {}
         if (old_conf.get("confirmed")
                 and old_conf.get("plan_hash") == plan["confirmation"]["plan_hash"]):
             plan["confirmation"].update({
@@ -9104,10 +9484,15 @@ async def generate_plan(
         elif old_conf.get("confirmed"):
             # ---------- 第四阶段 · 微调（2026-10-04 用户拍板）----------
             # 「整体搭建之后的小改」：**不画图、不要二次确认**，但必须有**用户原话** ——
-            # 那句话的来源就是 `request_plan_change()` 记下的改动要求（上面 `_change_request_guard()`
-            # 已经保证了"改已确认的 plan 之前必须先记一条"，所以这里读得到）。
+            # 那句话的来源就是 `request_plan_change()` 记下的改动要求。
+            # ⚠ **取原话走 `_pending_change_quote()`（唯一判据）** —— 2026-10-04 修的就是这里：
+            #   原先用 `planning.pending_changes(plan)`，而那个函数按**改完之后**的新指纹去筛
+            #   台账事件，可 `request_plan_change` 记要求时写的是**改之前**的旧指纹 ⇒
+            #   **永远筛不到** ⇒ 微调从不生效（现场实测 `tuned_count=0`，每次补丁落盘都被打回
+            #   「等出图」，逼用户白重画两张图）。`_change_request_guard()` 用的是同一个函数
+            #   （它已经在前面把"窗口开着但没原话"当场拒收了，所以这里也读得到）。
             # ⚠ 拿不到原话就**照旧按"确认作废"处理**：绝不自己编一句（编了就是伪造人的确认）。
-            _quote = "；".join(str(x) for x in (planning.pending_changes(plan) or []) if str(x).strip())
+            _quote = _pending_change_quote()
             if _quote:
                 _tuned_labels: list[str] = []
                 for _op in (patch or []):
@@ -9142,6 +9527,20 @@ async def generate_plan(
     if _live_note:
         warnings.append(_live_note)
 
+    # ⚠ **冻结的 v1 不许再写**（2026-10-04 加：防手滑的闸）——
+    #   判据：**纪元 2 已经开了**（`views/plan_v2.json` 在）而**活动目标退回了 v1**。
+    #   正常路径上不会发生（写盘走 `active_plan_path()` 咽喉，v2 在就写 v2）；能撞上它的
+    #   只有一种情况：**`plan_v2.json` 读不动**（半截写入 / 手改坏）⇒ 咽喉退回 v1。
+    #   那时**必须拒收** —— 否则新改动会写进那份**已冻结、只读**的 v1（留档就不是当初那一版了），
+    #   而 v2 里的坏文件还留在盘上冒充"现在算数的那一份"。
+    if planning.PLAN_V2_PATH.exists() and planning.active_plan_path() == planning.OUT_JSON:
+        raise ToolError(
+            "拒收：**纪元 2 已开，但 `views/plan_v2.json` 读不动**（活动目标退回了冻结的 v1）"
+            " —— 一个字节都没写。\n"
+            f"· 先把那份 v2 修好、或把它移走（移走 = 回到纪元 1，之后可重新换纪元），再重调本工具。\n"
+            f"· ⚠ `{planning.OUT_JSON.name}` 自换纪元起**冻结只读** —— 新改动一律写 "
+            f"`{planning.PLAN_V2_PATH.name}`；要看清现在算哪一份就调 `get_plan()`（它报当前纪元）。")
+
     planning.VIEWS_DIR.mkdir(parents=True, exist_ok=True)
     written = _write_plan(plan)
 
@@ -9162,7 +9561,7 @@ async def generate_plan(
             + f"{plan['confirmation']['plan_hash'][:10]}…）。"
         )
     if written.get("archived"):
-        warnings.append(f"上一版 plan_v1.json 已留档：views/archive/{written['archived']}。")
+        warnings.append(f"上一版 plan 已留档：views/archive/{written['archived']}。")
 
     # --- 阶段二验收（2026-09-25）：落盘那一步已自动把这一版记进台账，这里只**现算**状态 ---
     # 「生图 = 阶段二结束」：数据落盘时通常图还没画，所以状态多半是 awaiting_figure ——
@@ -9201,7 +9600,7 @@ async def generate_plan(
 
     return PlanResult(
         stage="阶段二 · 平面放置规划",
-        data_path=str(planning.OUT_JSON),
+        data_path=str(_plan_path),
         image_path="",
         summary=_summarize(plan),
         gate=_gate_model(planning.gate_check(plan)),
@@ -9279,7 +9678,13 @@ async def get_plan(
     ⚠ `gate.confirmed = false` → **一律不许进第三阶段**（AGENTS.md「规划图闸门」）。
     """
     planning = _planning_modules()
-    if not planning.OUT_JSON.exists():
+    _plan_path = planning.active_plan_path()     # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+    _epoch = 1
+    try:
+        _epoch = int(planning.active_epoch())
+    except Exception:                            # noqa: BLE001
+        _epoch = 1
+    if not _plan_path.exists():
         return PlanStatus(
             has_plan=False,
             stages=_stage_overview(),
@@ -9288,10 +9693,10 @@ async def get_plan(
                 "还没算过规划：先 generate_plan() 算一版，再让用户/客户过目确认。"
                 "**没有确认过的规划之前，不许往关卡里摆任何东西。**"
             ),
-            warnings=["views/plan_v1.json 不存在。"],
+            warnings=[f"views/{_plan_path.name} 不存在。"],
         )
 
-    plan = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+    plan = json.loads(_plan_path.read_text(encoding="utf-8-sig"))
     gate = _gate_model(planning.gate_check(plan))
     summary = _summarize(plan)
     status = str(plan.get("status") or ("initialized" if not (
@@ -9300,6 +9705,14 @@ async def get_plan(
         status = "confirmed"
 
     warnings: list[str] = []
+    # --- 纪元如实报（2026-10-04 加）--------------------------------------------------
+    # 纪元 2 是个**分水岭**：`plan_v1.json` 冻结只读、后续阶段走"不画图、不重确认"那条路。
+    # 开场（get_plan）不说清，接手的人会拿阶段二那套流程去套（还去重画两张图）。
+    if _epoch >= 2:
+        warnings.append(
+            f"**纪元 2 已开**（当前纪元 {_epoch}；活动 plan = `views/{_plan_path.name}`）—— "
+            "`views/plan_v1.json` 已**冻结只读**。此后改行走 `request_plan_change` → "
+            "`generate_plan(patch=…)` → `execute_build(only_labels=[…])`，**不画图、不重确认**。")
     if status == "initialized":
         warnings.append(
             "**这是初始化状态**（`assets` / `whiteboxes` 都是空的）—— 结构立好了，"
@@ -9308,7 +9721,7 @@ async def get_plan(
     if not gate.confirmed:
         warnings.append("这份规划**还没被确认** —— 不许进第三阶段。")
     if not gate.plan_hash_ok:
-        warnings.append("plan_v1.json 的数据被手改过，与写进去时不一致 —— 这份规划作废。")
+        warnings.append(f"{_plan_path.name} 的数据被手改过，与写进去时不一致 —— 这份规划作废。")
     # 指令表（留痕件）是不是这一版的（B 项 · 2026-09-27 · **尚未实测**）：它**不参与闸门**
     #   （`execute_build` 按 plan 自己重算，不读它），但"手上那份表是旧版"会让人看错版本 ——
     #   本次真跑就踩过：表是第 22 轮指纹、plan 已经是第 23 轮。所以顺手报一句，不拦。
@@ -9425,7 +9838,7 @@ async def get_plan(
     return PlanStatus(
         has_plan=True,
         status=status,
-        data_path=str(planning.OUT_JSON),
+        data_path=str(_plan_path),
         image_path="",
         summary=summary,
         gate=gate,
@@ -9489,10 +9902,11 @@ async def request_plan_change(
       你每次说要改，我直接 patch，没走变更台账」。）
     """
     planning = _planning_modules()
-    if not planning.OUT_JSON.exists():
+    _plan_path = planning.active_plan_path()     # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+    if not _plan_path.exists():
         raise ToolError("还没有规划数据：先 generate_plan() 记一版、出图给用户看过，再记改动。")
 
-    plan = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+    plan = json.loads(_plan_path.read_text(encoding="utf-8-sig"))
     if not (plan.get("assets") or plan.get("whiteboxes")):
         raise ToolError(
             "拒绝记录：这是**初始化状态**（`assets` / `whiteboxes` 都空）—— "
@@ -9506,7 +9920,7 @@ async def request_plan_change(
     acceptance = _acceptance_model(plan)
     return PlanResult(
         stage="阶段二 · 平面放置规划",
-        data_path=str(planning.OUT_JSON),
+        data_path=str(_plan_path),
         image_path="",
         summary=_summarize(plan),
         gate=_gate_model(planning.gate_check(plan)),
@@ -9552,11 +9966,11 @@ async def confirm_plan(
         ))],
 ) -> PlanResult:
     """
-    【场景③ 规划验收】什么时候用我：用户看过图并点头之后 —— 我必须拿到**他的原话**；没图、没原话都不许调我。把「这份规划被确认了」写回 `plan_v1.json`：**谁 / 何时 / 哪一版 / 用户的哪句话**。
+    【场景③ 规划验收】什么时候用我：用户看过图并点头之后 —— 我必须拿到**他的原话**；没图、没原话都不许调我。把「这份规划被确认了」写回**活动那份 plan**（纪元 1 = `plan_v1.json`）：**谁 / 何时 / 哪一版 / 用户的哪句话**。
     
     闸门不过就**拒绝确认**（这就是闸门的意义）：
       ① **空规划不许确认**（两张表都空：一份坐标都没有，确认它毫无意义）；
-      ② 数据指纹对不上 → `plan_v1.json` 被手改过，与写进去时不一致；
+      ② 数据指纹对不上 → 活动那份 plan 被手改过，与写进去时不一致；
       ③ **图不认这份数据**（`views/` 里没有图 / 图里没有当前几何指纹 / 图没覆盖该覆盖的行）——
          AGENTS：图与数据不一致 = 等于没确认。图由 AI 手绘，**画完把当前指纹写进图里**；
          ⚠ **要出哪几张图由 `change_set.required_views` 定**（2026-09-30 加，用户最终口径）：
@@ -9583,7 +9997,8 @@ async def confirm_plan(
       **不认这份数据的图会被代码自动清除**（也移进 `views/archive/`）—— 图这件事不许靠人记得。
     """
     planning = _planning_modules()
-    if not planning.OUT_JSON.exists():
+    _plan_path = planning.active_plan_path()     # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+    if not _plan_path.exists():
         raise ToolError("还没有规划数据：先 generate_plan() 记一版，让用户过目之后再确认。")
 
     quote = str(user_quote or "").strip()
@@ -9595,7 +10010,7 @@ async def confirm_plan(
             "· 他还没回话，就先别确认（也不许接着搭建）。"
         )
 
-    plan = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+    plan = json.loads(_plan_path.read_text(encoding="utf-8-sig"))
     if not (plan.get("assets") or plan.get("whiteboxes")):
         raise ToolError(
             "拒绝确认：这是**初始化状态**（`assets` / `whiteboxes` 都空、一份坐标都没有）。"
@@ -9603,7 +10018,7 @@ async def confirm_plan(
         )
     gate = planning.gate_check(plan)
     if not gate["plan_hash_ok"]:
-        raise ToolError("拒绝确认：plan_v1.json 的数据与写进去时不一致（被改过）。")
+        raise ToolError(f"拒绝确认：{_plan_path.name} 的数据与写进去时不一致（被改过）。")
 
     # --- ⚠ 图与数据必须一致（2026-09-24 收尾清单 #8；2026-09-25 加严；2026-09-26 改为按变更集）---
     # 判据在 planning.figure_check()：views/ 里要有图，且图认这份数据 ——
@@ -9633,7 +10048,7 @@ async def confirm_plan(
             )
         raise ToolError(
             "拒绝确认：图不认这份数据 —— " + fig["note"] + _views_msg
-            + "\n· 请拿 views/plan_v1.json 重画（**图内写明当前几何指纹，"
+            + f"\n· 请拿 views/{_plan_path.name} 重画（**图内写明当前几何指纹，"
               "且每一行的 label 都要出现**，每张图都要），再确认。"
               "要画哪些行 / 要出哪几张图可跑："
               "python -m mcp_server.planning.plan --figure-checklist"
@@ -9687,7 +10102,7 @@ async def confirm_plan(
     acceptance = _acceptance_model(plan)
     return PlanResult(
         stage="阶段二 · 平面放置规划",
-        data_path=str(planning.OUT_JSON),
+        data_path=str(_plan_path),
         image_path="",
         summary=_summarize(plan),
         gate=_gate_model(planning.gate_check(plan)),
@@ -11464,12 +11879,13 @@ async def capture_preview(
         pose_source = f"调用方给的 {len(raw_shots)} 个机位"
     else:
         planning = _planning_modules()
-        if not planning.OUT_JSON.exists():
+        _cap_path = planning.active_plan_path()      # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+        if not _cap_path.exists():
             raise ToolError(
-                f"没有 `{planning.OUT_JSON.name}` —— 自动机位要靠它的**世界范围**"
+                f"没有 `{_cap_path.name}` —— 自动机位要靠它的**世界范围**"
                 "（`world.center` / `world.size`，米）来推。要么先跑阶段二（`generate_plan`），"
                 "要么自己给 `shots`（`pos_m` / `look_at_m`，**米**）。")
-        plan = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+        plan = json.loads(_cap_path.read_text(encoding="utf-8-sig"))
         raw_shots = _preview_default_shots(plan if isinstance(plan, dict) else {})
         pose_source = "按 plan 的世界范围推的 3 个机位（俯视 3/4 + 两端人视）"
         warns.append("机位是**推的**（高度 / 退距按世界尺寸的比例给）—— 构图不满意就自己给 `shots`。")
@@ -11663,12 +12079,14 @@ async def evaluate_layout(
     calls = 0
     warns: list[str] = []
     planning = _planning_modules()
-    if not planning.OUT_JSON.exists():
+    _plan_path = planning.active_plan_path()     # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
+    if not _plan_path.exists():
         raise ToolError(
-            "还没有 `views/plan_v1.json` —— 落位对账对的是**阶段二确认过的放置表**。"
-            "先走完阶段二（`generate_plan` → 出图 → 用户确认 → `confirm_plan`）。")
+            f"还没有 `views/{_plan_path.name}` —— 落位对账对的是**确认过的放置表**。"
+            "先走完阶段二（`generate_plan` → 出图 → 用户确认 → `confirm_plan`）。"
+            "⚠ 纪元 2 开了之后就轮到 `views/plan_v2.json`（本工具自动认它）。")
 
-    plan = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+    plan = json.loads(_plan_path.read_text(encoding="utf-8-sig"))
     plan_hash = planning.plan_geometry_hash(plan)
     gate = planning.gate_check(plan)
     if not gate.get("confirmed"):
@@ -11685,7 +12103,7 @@ async def evaluate_layout(
     ledger_stale = bool(ledger_hash) and ledger_hash != plan_hash
     if not ledger_rows:
         warns.append(
-            f"⚠ **没有搭建台账**（`{BUILD_STATE_PATH.name}`）—— 「上次搭了什么」就没有凭据，"
+            f"⚠ **没有搭建台账**（`{active_ledger_path().name}`）—— 「上次搭了什么」就没有凭据，"
             "**每一行都判不了**（结论一律 `unchecked`）。台账由 `execute_build()` 落完自动写；"
             "关卡里其实已经搭好了、只是没有台账 → 用 "
             "`execute_build(mode=\"incremental\", adopt=true)` 认领现状。")
@@ -11947,7 +12365,7 @@ async def evaluate_layout(
                 "at": datetime.now(timezone.utc).isoformat(),
                 "level": level, "level_checked": level_checked,
                 "plan_hash": plan_hash, "plan_confirmed": bool(gate.get("confirmed")),
-                "ledger_path": str(BUILD_STATE_PATH), "ledger_level": ledger_level,
+                "ledger_path": str(active_ledger_path()), "ledger_level": ledger_level,
                 "ledger_plan_hash": ledger_hash, "ledger_stale": ledger_stale,
                 "rows_total": len(rows), "counts": counts,
                 "rows": [x.model_dump() for x in every],     # 报告里**全量**（含一致的行）
@@ -11964,7 +12382,7 @@ async def evaluate_layout(
     return EvaluateReport(
         stage="阶段七 · 评估与闭环迭代（落位对账）",
         level=level, plan_hash=plan_hash, plan_gate=_gate_model(gate),
-        ledger_path=str(BUILD_STATE_PATH), ledger_level=ledger_level,
+        ledger_path=str(active_ledger_path()), ledger_level=ledger_level,
         ledger_plan_hash=ledger_hash, ledger_stale=ledger_stale,
         level_checked=level_checked, rows_total=len(rows), counts=counts,
         rows=shown, groups=groups, stray_actors=stray_actors,

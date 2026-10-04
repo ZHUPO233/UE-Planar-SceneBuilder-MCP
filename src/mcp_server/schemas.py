@@ -801,10 +801,13 @@ class PlanStatus(BaseModel):
         default=None,
         description=(
             "**画图用的逐行几何**（2026-09-30 加；`include_plan=true` 且规划非空时带出）："
-            "`{unit, world, coordinate_system, required_views, views_why, required_labels, "
+            "`{unit, world, coordinate_system, origin_view, required_views, views_why, required_labels, "
             "changed_dims, rows, removed_labels, z_rules, note}`，"
             "每行 = `{label, kind, element_key, layer, x_m, y_m, z_base_m, z_top_m, w_m, d_m, h_m, "
             "rot_deg, changed}`（**单位米**）。"
+            "另有 `origin_view` = **顶视图那个「原图视角」箭头的坐标与文字**"
+            "（`arrow_from_m` / `arrow_to_m` 是**米、世界坐标**；`label` = 图上要写的字）——"
+            "**以它为准，别自己摆箭头**（与「别自己推 Z」同一条纪律）。"
             "它的 Z 口径与阶段三**同源**（`_compose_build_rows()`）⇒ 平面图 / 立面图都用它画，"
             "**别自己推 Z**（推错 = 图与数据不一致 = 等于没确认）。"
             "⚠ 它是**只读派生值**：不写进 `plan_v1.json`、**不进几何指纹**（读状态不会作废确认）。"
