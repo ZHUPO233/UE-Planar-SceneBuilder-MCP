@@ -95,6 +95,9 @@ PlanResult = _schemas.PlanResult
 PlanStatus = _schemas.PlanStatus
 SurfaceRowResult = _schemas.SurfaceRowResult
 SurfaceReport = _schemas.SurfaceReport
+CreatedMaterial = _schemas.CreatedMaterial
+CreateSurfacesReport = _schemas.CreateSurfacesReport
+AdoptEditsReport = _schemas.AdoptEditsReport
 ExchangeReport = _schemas.ExchangeReport
 ExchangeDiffReport = _schemas.ExchangeDiffReport
 EnvRowResult = _schemas.EnvRowResult
@@ -149,6 +152,11 @@ TS_ASSET = "editor_toolset.toolsets.asset.AssetTools"    # 找资产 / 改名 / 
 TS_SCENE = "editor_toolset.toolsets.scene.SceneTools"    # 关卡信息 / 摆 Actor / outliner
 TS_ACTOR = "editor_toolset.toolsets.actor.ActorTools"    # 读回变换 / 改标签 / 读组件
 TS_PRIM = "editor_toolset.toolsets.primitive.PrimitiveTools"  # 白膜加图元（add_cube）
+# 官方**脚本批处理**通道（2026-10-04 加）：一次调用里跑完 N 行的 spawn / add_cube / 分组。
+# ⚠ 它的沙箱**只允许 import `math/copy/re/time/json/datetime`**（2026-10-04 实测
+#   `get_execution_environment`）—— **没有文件系统、没有网络**。所以台账 / 几何指纹 /
+#   人工痕迹 / 读回对账**一律留在编排层**，脚本只当"手脚"。这条边界是实测划出来的。
+TS_PROG = "editor_toolset.toolsets.programmatic.ProgrammaticToolset"
 TS_OBJECT = "editor_toolset.toolsets.object.ObjectTools"  # 读对象属性（白膜尺寸在组件上）
 
 # 资产类别 → 官方的类路径（find_assets 的 asset_type 要的是类路径）
@@ -202,21 +210,23 @@ USER_EDITS_PATH = VIEWS_DIR / "user_edits_v1.json"
 # 为什么值得留档：对账结果是"这一版到底搭成什么样"的证据，与搭建台账同源、互为佐证。
 EVALUATE_PATH = VIEWS_DIR / "evaluate_v1.json"
 
-MIN_CONFIRM_DELAY_S = 15.0
+MIN_CONFIRM_DELAY_S = 5.0
 """确认前，那张图至少要"出炉"多少秒 —— **防机器人式秒确认**（2026-09-26 加）。
 
 依据：**图是 agent 自己画的、确认也是它自己调的** —— 画完立刻 `confirm_plan`，只可能有一个意思：
 它压根没把图给用户看（实测被这么绕过一次：客户原话「你摆你牛魔呢，图都不先让我确认就摆」）。
-人看一眼平面图不可能 15 秒内完成，我们自己在图上核对一遍要几分钟。
-⚠ 这是**可调的口径**（觉得太严/太松就改这个数），不是实测出来的物理常量。"""
+人看一眼平面图不可能 5 秒内完成，我们自己在图上核对一遍要几分钟。
+⚠ 这是**可调的口径**（觉得太严/太松就改这个数），不是实测出来的物理常量。
+⚠ **2026-10-04 由 15 秒下调为 5 秒**（用户指令：「代码里所有等 15 秒操作改为等 5 秒」）。"""
 
-MIN_USER_EDITS_ANSWER_DELAY_S = 15.0
+MIN_USER_EDITS_ANSWER_DELAY_S = 5.0
 """「人工痕迹」两步闸里，**从提问到答复至少要隔多少秒**（2026-09-30 加）。
 
 为什么（与上面那条同一条纪律）：把"有 N 处人工痕迹会被删"这份清单写出来、交给用户、
-等他打字回话，**不可能 15 秒内完成** —— 问完立刻带着"原话"回来，只可能是自己编的。
+等他打字回话，**不可能 5 秒内完成** —— 问完立刻带着"原话"回来，只可能是自己编的。
 ⚠ 同样是**可调的口径**，不是实测常量。⚠ 它拦不住"存心等够时间再编"（代码验不了真话），
-但配合台账里留下的**问过哪几行 + 那句话原文**，事后可以当场对质。"""
+但配合台账里留下的**问过哪几行 + 那句话原文**，事后可以当场对质。
+⚠ **2026-10-04 由 15 秒下调为 5 秒**（同一条用户指令；口径放松了，**判据一条没变**）。"""
 
 # --- 阶段三 · 落位口径（**plan 里没有 Z** —— 竖直方向只能在这里推，依据照实写出来）----  【模块：build】
 # 为什么口径写在代码里而不是文档里：文档会腐烂，代码里的常量改不动就摆不出来。
@@ -448,6 +458,25 @@ ENV_MATERIAL_FOLDER = "/Game/UEMCP/env"
 ⚠ 目录不存在时 `create` 会失败 —— 那条路会把官方报错**原文**带回来（不掩饰）。"""
 
 TS_MATINST = "editor_toolset.toolsets.material_instance.MaterialInstanceTools"
+# --- 阶段五 · **从零建材质**（2026-10-04 加 · ⚠ **尚未实测**）----------------------------------
+# 由来：`apply_surfaces` 只能贴**已存在**的材质；用户现场那 6 个 `/Game/UEMCP/Materials/M_*`
+#   工程里根本不存在 → 逐个 exists() 不过 → **整批拒收、一个都不贴**（现场就是白模）。
+#   ⇒ 缺的是"建材质"这一步的**编排**（官方 `MaterialTools` 本来就有一套：create_material /
+#     add_expression / connect_to_output / recompile —— 2026-10-04 实测 describe_toolset 确认）。
+# ⚠ **下面四个常量是"猜的属性名"**（来自官方工具 schema 的常规命名，**没有真跑核实过**）：
+#   真跑若报错，官方原文会带出来；改这四个常量即可，**不用改逻辑**。
+TS_MATERIAL = "editor_toolset.toolsets.material.MaterialTools"
+MAT_EXPR_VECTOR = "/Script/Engine.MaterialExpressionVectorParameter"
+MAT_EXPR_SCALAR = "/Script/Engine.MaterialExpressionScalarParameter"
+MAT_PARAM_NAME_PROP = "parameterName"
+MAT_PARAM_VALUE_PROP = "defaultValue"
+# 允许的参数名（= 官方 `EMaterialProperty` 去掉 `MP_` 前缀；抄自官方工具 schema 的枚举）。
+# 配置里写了不在这个集合里的键 → **当场拒收那一条**（不猜它该连到哪个输出）。
+MAT_OUTPUTS = (
+    "BaseColor", "Metallic", "Specular", "Roughness", "EmissiveColor", "Opacity", "OpacityMask",
+    "AmbientOcclusion", "Anisotropy", "Normal", "Refraction", "SubsurfaceColor", "ShadingModel",
+    "PixelDepthOffset", "WorldPositionOffset", "Displacement", "SurfaceThickness",
+)
 """材质实例工具集 —— 实测 2026-09-29 有 `list_parameters` / `get_/set_scalar_parameter` /
 `get_/set_vector_parameter` / `set_texture_parameter` / `set_static_switch_parameter` / `create`。
 云量 / 云密度就是靠它调的（参数实测叫 `Cloud_GlobalCoverage` / `Cloud_GlobalDensity`）。"""
@@ -808,7 +837,7 @@ async def app_lifespan(server: MCPServer):
 # instructions（dsh-mcp-client 的 connect() 返回值连赋值都没有）。
 # 真正到模型眼前的是 tools/list（工具名 + 描述 + schema），
 # 所以要求写在各工具的 docstring 里。
-mcp = MCPServer("UEMCP-SceneLayout", lifespan=app_lifespan)
+mcp = MCPServer("UEPLANE-SceneLayout", lifespan=app_lifespan)
 
 
 # --- [完工-02] 厚函数（纯逻辑，不碰网络，可直接单测）---  【模块：ue_adapter/assets/state（按函数分）】
@@ -1434,8 +1463,9 @@ def candidates_for(
 
 @mcp.tool()
 async def official_status(ctx: Context[AppContext]) -> OfficialStatus:
-    """自检：能不能连上官方 Unreal MCP，并报告协议版本和工具集数量。
-    ⚠ **闸的钥匙**（不是可选步骤）：`_link_guard()` 认它 —— **任何碰 UE 的工具**（它们都经
+    """
+    【场景① 开场先看】什么时候用我：每轮开场、动手之前 —— 我是**链路闸的钥匙**（不先调我，任何碰 UE 的工具都会被拒）。自检：能不能连上官方 Unreal MCP，并报告协议版本和工具集数量。
+        ⚠ **闸的钥匙**（不是可选步骤）：`_link_guard()` 认它 —— **任何碰 UE 的工具**（它们都经
       `official_client()`）在本 server 进程里没见它**报过连上**，就会被拒收并点名要你先调它。
       （2026-09-26 它只被 `execute_build()` 要求；**2026-09-30 起扩到所有碰 UE 的路径** ——
       用户要求「每次要动 UE 必须检查连接状态」；它同时是唯一能当"链路诊断"的口子。）
@@ -1464,7 +1494,12 @@ async def official_status(ctx: Context[AppContext]) -> OfficialStatus:
         _mark_link_state(True)
     except ToolError as exc:
         _mark_link_state(False, str(exc))
-        return OfficialStatus(reachable=False, error=str(exc))
+        return OfficialStatus(
+            reachable=False, error=str(exc),
+            # ⚠ 这里**只给指路**，不搬判据（本工具是链路诊断，保持轻 —— 阶段总览的唯一判据在
+            #   `_stage_overview()`，由 get_plan / get_asset_list 带出来）。
+            stage_hint="阶段总览见 get_plan().stages（八阶段 + 依据 + 下一步）",
+        )
 
     # 协商出的协议版本：上面那次 list_toolsets 调用已经把连接建起来了，
     # 所以此刻读 client.protocol_version 是安全的（未连接时抛 RuntimeError）。
@@ -1476,7 +1511,10 @@ async def official_status(ctx: Context[AppContext]) -> OfficialStatus:
     except (RuntimeError, AttributeError) as exc:
         logging.getLogger(__name__).warning("读协议版本失败（已忽略）：%r", exc)
 
-    return OfficialStatus(reachable=True, protocol_version=version, toolset_count=count)
+    return OfficialStatus(
+        reachable=True, protocol_version=version, toolset_count=count,
+        stage_hint="阶段总览见 get_plan().stages（八阶段 + 依据 + 下一步）",
+    )
 
 
 # --- 阶段三 · 步骤 1：搭建目标检查（2026-09-26 用户要求）--------------------------  【模块：state（搭哪张图闸）】
@@ -1589,7 +1627,7 @@ def _bt_warn_existing_actors(
 
     if our_count:
         if not want:
-            hint = " 还没有指令表可比 —— 先用 `generate_build_orders()` 生成。"
+            hint = " 还没有指令表可比 —— 先用 `execute_build(dry_run=true)` 生成。"
         elif want == our_count:
             hint = (f" 与 `views/build_orders_v1.json` 的 {want} 行**数量一致**，看起来就是这一版"
                     "搭出来的 → 局部改动走**增量**：`execute_build(mode=\"incremental\")`"
@@ -1610,6 +1648,11 @@ def _bt_question_and_options(current: str, candidates: list[str]) -> tuple[str, 
         f"搭在哪里？（当前关卡：{current or '读不到'}）"
         "① 开新图　② 用项目里已有的某张图（你把路径给我）　③ 就用当前这张图 —— 你定。"
         "⚠ 官方工具里**没有「新建关卡」**，所以选 ① 的话要**你在 UE 里新建并打开**，我再去那张图上搭。"
+        "⚠ 先说清**第三阶段负责什么**：它只管**整体框架** —— 有哪些物体、大致摆在哪儿、"
+        "世界与铺装的范围；**单个物体的细节不在这一步**。"
+        "**整体框架没问题了，才进入第四阶段·微调**：那时单个物体想挪 / 想换 / 想调，"
+        "我直接改那一行、**不重画图、也不重新确认整体**。"
+        "所以这一步请先看整体对不对 —— 个体的细节留到第四阶段调，不必为一个物体重走这一套。"
     )
     options = [
         "① 开新图 —— 你在 UE 里新建并打开（官方没有 new level 工具，我只能在你建好的图上搭）",
@@ -1699,7 +1742,7 @@ def _bt_next_step(answer: dict | None, decision_key: str, kept_answer: bool) -> 
         return (
             f"答复已留痕（`{decision_key}`）。**下一步**："
             "⓪ 开场动作（`official_status()` + `get_asset_list()`，各一次；没做过 `execute_build` 会拒收）→ "
-            "① `generate_build_orders()` 生成搭建指令表 → "
+            "① `execute_build(dry_run=true)` 生成搭建指令表 → "
             "② `execute_build()` 落关卡 —— 它会**先核对『这份答复 vs 当前关卡』**，不一致就拒收列出来；"
             "③ 想先看不动手就传 `dry_run=true`。⚠ `execute_build` 还会过**回读闸**"
             "（这一版没 `get_plan()` 过就拒收）。⚠ 全程**不存盘**。"
@@ -1731,8 +1774,9 @@ async def check_build_target(
             "**用户答复的原话（给了 `decision` 就必填）** —— 与 `confirm_plan` 同一条纪律："
             "拿不出原话，就说明你还没问过他。**不许自己编**"))] = "",
 ) -> BuildTargetCheck:
-    """阶段三第 1 步：问清楚「搭在哪张图」—— **不碰关卡**，只写我们自己的答复台账。
-
+    """
+    【场景④ 落关卡】什么时候用我：阶段二确认完、要落关卡之前 —— 先问我"**搭哪张图**"，拿到用户答复再往下。阶段三第 1 步：问清楚「搭在哪张图」—— **不碰关卡**，只写我们自己的答复台账。
+    
     为什么第一步是它（用户 2026-09-26 明确要求）：**别动用户的 UE**。开搭之前必须先问清楚
     目标是**新图**、**指定的既有图**、还是**当前这张图**；确认开新图才新建关卡，有指定就去
     指定地方搭。
@@ -1794,12 +1838,12 @@ async def check_build_target(
 # --- 阶段三 · 步骤 2：搭建指令表 + 批量落关卡（2026-09-26）-----------------------  【模块：build】
 # 用户原话（2026-09-26）：「继续完善第三阶段，第二步代码，按照位置坐标表开始一次性全部批量搭建」。
 # 分工照 docs/阶段三-资产布局生成.md §2：
-#   ① `generate_build_orders()` —— **纯计算**，把 plan（米）翻成 UE 能照做的指令表（厘米）；
+#   ① `execute_build(dry_run=true)` —— **纯计算**，把 plan（米）翻成 UE 能照做的指令表（厘米）；
 #   ② `execute_build()` —— **先整批校验**（不过就一个 Actor 都不落）→ 清旧的 → 按表落 → 读回对账。
 # ⚠ 两个工具**都不存盘**（不调任何 save 类工具）—— 这是硬规矩。
 #
 # ✅ [完工-14] 实测 2026-09-26（经 MCP 真跑，非演练）：plan 指纹 a01717bd14…（已确认+验收通过）
-#   · `generate_build_orders()` → 落盘 views/build_orders_v1.json，**60 行**（资产 39 + 白膜 21），
+#   · `execute_build(dry_run=true)` → 落盘 views/build_orders_v1.json，**60 行**（资产 39 + 白膜 21），
 #     分元素 house5/tree34/road1/sidewalk2/grass9/path6/shrub3，warnings 为空；
 #   · `execute_build()` → **placed 60 / 60**、`removed 0`（首跑，图上本来没有 UEMCP/ 的东西）、
 #     `official_calls 206`、7 个分组各就各位、落完后 UEMCP/ 计数 60（= 指令表行数，没报警）；
@@ -1808,7 +1852,7 @@ async def check_build_target(
 #   · 全程未调任何 save。
 # ✅ [完工-14] 追加实测 2026-09-26（同一批工具，第二次真跑 —— 把上面那条修正验掉了）：
 #   plan 指纹 36d3697d37…（第 22 轮，用户看图后确认）· **89 行**（资产 39 + 白膜 50）：
-#   · `generate_build_orders()` → 89 行，分元素 house5/tree34/road1/sidewalk2/grass5/path25/shrub17；
+#   · `execute_build(dry_run=true)` → 89 行，分元素 house5/tree34/road1/sidewalk2/grass5/path25/shrub17；
 #     报出**越界警告**（#60/#68 屋后走道中心已出界）—— 如实报、不拦（越界处置留给阶段四）。
 #   · `execute_build()` → **placed 89 / 89**、`removed 60`（清掉上一版全部旧 Actor）、
 #     `verified 89 / 89`、**`mismatches` 空**、`official_calls 383`、7 个分组计数与指令表逐项相等。
@@ -1891,8 +1935,14 @@ def _load_build_state() -> dict:
     return doc if isinstance(doc, dict) else {}
 
 
-def _save_build_state(level: str, plan_hash: str, how: str, ledger_rows: list[dict]) -> str:
+def _save_build_state(level: str, plan_hash: str, how: str, ledger_rows: list[dict],
+                      placement: str = "", inner_calls: int = 0) -> str:
     """写搭建台账（**我们自己的文件，不碰 UE**）。`how` = full / incremental / adopt。
+
+    ⚠ `placement` / `inner_calls`（2026-10-04 加）：这一批**怎么落进去的** ——
+      `batch`（官方脚本批处理）/ `per_row`（逐行）/ 空串（不是落位操作，如 `adopt`）。
+      `inner_calls` = 脚本内部实际执行了几次工具调用。**为什么要记**：留痕要能事后回答
+      「这一版是用哪条路落的」——与 `how` 记"全量还是增量"同一个道理（都是事后对质用的）。
 
     ⚠ **写之前先把上一版移进 `views/archive/`**（2026-09-30 加）：以前这里是**覆盖写**，
       于是「这一整套操作到底用过什么模式」**事后无法从磁盘审计** —— 用户问
@@ -1913,6 +1963,8 @@ def _save_build_state(level: str, plan_hash: str, how: str, ledger_rows: list[di
         "level": level,
         "plan_hash": plan_hash,
         "how": how,
+        "placement": placement,
+        "inner_calls": int(inner_calls or 0),
         "at": datetime.now(timezone.utc).isoformat(),
         "unit": "cm",
         "rows": ledger_rows,
@@ -2094,8 +2146,31 @@ def _traces_key(traces: list) -> list[str]:
     return sorted(x for x in rows if x)
 
 
+def _handoff_line(count: int) -> str:
+    """给调用方一句**可以直接转交给用户**的话 —— 第 2 步要拿到**他本人的原话**。
+
+    ⚠ 报文里**必须**给出这句：不给出，"把清单交到人手里"就仍然只是句劝告。
+    ⚠ **2026-10-04 撤掉了「应答码」**（用户指令：「把这个什么码删掉，太离谱了」）——
+      原来要求用户把第 1 步报文里那个一次性码（`覆盖41行-3f2a`）**念回来**，才让真跑。
+      **撤掉的代价如实写在这里**：现在**挡不住**"拿一句更早说过的话顶 `user_quote`"
+      （2026-10-04 那次实测事故的原始场景）。剩下的防线只有三条：
+      ① 必须**先问过**（没留痕 ⇒ 拒收）· ② **问过的那批要就是现在这批** · ③ 原话非空 + 距提问 ≥ 地板秒数。
+      **不许把这条讲成"伪造不了"** —— 它做到的是**不能悄悄干**（台账里留着原话，事后可对质）。
+    """
+    return (
+        "👉 **下一步只有这一件事**：把上面那份清单**原样交给用户**、**停下等他打字**，"
+        "拿到**他本人的原话**之后，再调 "
+        "`execute_build(accept_user_edits=true, user_quote=\"他回的整句\")`。\n"
+        f"  ⚠ 这次要问的是这 {int(count)} 行；**别把「确认吗」塞进问题框**，"
+        "也别拿更早说过的话来顶 —— 这一批必须是他**看过这份清单之后**说的话。")
+
+
 def _save_user_edits_question(traces: list, level: str, mode: str) -> str:
-    """**第 1 步**：记下「问用户的是哪几行人工痕迹」（**不碰关卡、不改 plan**）。返回台账路径。"""
+    """**第 1 步**：记下「问用户的是哪几行人工痕迹」（留痕件）。
+
+    **不碰关卡、不改 plan**；返回**台账路径**。第 2 步拿它核对"问过的那批 == 现在这批"。
+    ⚠ 2026-10-04 撤掉应答码之后，这里**不再生成任何码**（用户指令：「把这个什么码删掉」）。
+    """
     rows = _traces_key(traces)
     doc = {
         "stage": "阶段三 · 「人工痕迹」问答台账（我们自己的文件，非 UE 存盘）",
@@ -2108,8 +2183,10 @@ def _save_user_edits_question(traces: list, level: str, mode: str) -> str:
         "history": list(_load_user_edits().get("history") or []),
         "note": ("`asked_rows` = 问用户时逐行列出的那几行（关卡现状与台账不符 / 台账解释不了的 Actor）；"
                  "`answer` = 他的答复（`decision` = overwrite + `quote` 原话 + `at`）。"
-                 "`execute_build` 要按 plan 覆盖之前会核对：**没问过 / 问过的那批与现在不一致 / "
-                 f"距提问不到 {MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒 → 拒收**（一个 Actor 都不动）。"
+                 "`execute_build` 要按 plan 覆盖之前，**第 2 步只核对两件事**："
+                 "① 这一批对不对得上（没问过是它的特例）② **有没有他本人的原话** —— "
+                 "不过就拒收（一个 Actor 都不动）；"
+                 f"另有一道地板（距提问 ≥ {MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒，只挡秒答）。"
                  "覆盖真跑成功之后这道问答被移进 `history`（下一批要重新问）。"),
     }
     save_json(USER_EDITS_PATH, doc)
@@ -2119,23 +2196,38 @@ def _save_user_edits_question(traces: list, level: str, mode: str) -> str:
 def _user_edits_gate(traces: list, level: str, mode: str, user_quote: str) -> str:
     """**第 2 步**：要按 plan 覆盖这些人工痕迹之前先过这道闸。过不了抛 `ToolError`（= 拒收，一个 Actor 都不动）。
 
-    三条判据都要过：
-      ① **问过**：台账里有 `asked_at`（第 1 步真的跑过）—— 没问过直接要覆盖 = 拒收；
-      ② **问的就是现在这批**：`asked_rows == 现在这批的 label 集合`（多一行 / 少一行都要重问）；
-      ③ **有他本人的原话**，且**距提问 ≥ `MIN_USER_EDITS_ANSWER_DELAY_S` 秒**（问完立刻自己答复 = 没人看过）。
+    ⚠ **对外只有两步**（2026-10-04 用户反馈「太多了、太复杂了」，据此收缩）：
+      · **第 1 步（工具做）**：把人改过的那几行列成清单 + 留痕；
+      · **第 2 步（人做）**：他把原话给我。
+      工具侧核对的**独立判据只有两条**（下面①②），另加一道**地板**（③，挡"问完 0.2 秒就自己答"，
+      不承担防伪造）—— 完整清单只维护在 `docs/全流程-闸门地图.md`，别处只讲两步。
+
+    ① **这一批**：台账里有留痕、且 `asked_rows == 现在这批的 label 集合`。
+       ⚠ "还没问过"**不是第三条判据**，它是这一条的特例（没留痕 ⇒ 集合必然对不上），只是报错话要分开写。
+    ② **有他本人的原话**（`user_quote` 去空白后非空）。
+       ⚠ **这一条能证明的东西很少，别把它讲大**：文字证明不了"人真的看过"（只有他能说出这句话，
+       而代码验不了真话）。它保证的是**不能悄悄干**（空原话 = 直接拒收）+ 台账里留着他那句话可对质。
+    ③ **地板（不是判据）**：距提问 ≥ `MIN_USER_EDITS_ANSWER_DELAY_S` 秒。
+       它**挡不住伪造**（等 5 秒即可、真人也不必 5 秒）—— 留着只为挡住"问完立刻自己答"这种机器人式动作。
+
+    ⚠ **2026-10-04 撤掉了「应答码」这道判据**（用户原话：「把这个什么码删掉，太离谱了」）。
+      它当时补的是"拿一句**更早说过的话**顶 `user_quote`"那个洞（2026-10-04 实测：清单打印了、
+      但没到过人手里）。撤掉之后**那个洞重新敞着** —— 如实记在这里，不假装还堵着：
+      想再堵它只有一条路（要求"人说过这句话"的可验证凭据），而那个凭据本项目**没有**。
     """
     quote = str(user_quote or "").strip()
     doc = _load_user_edits()
+    # ---------- 判据① 这一批 ----------
+    #   ⚠ "还没问过"**不是第三条判据** —— 它是这一条的特例（没留痕 ⇒ 集合必然对不上），
+    #     只是报错话要分开写（"你还没问过他"比"两批对不上"有用得多）。
     if not str(doc.get("asked_at") or ""):
         raise ToolError(
             "拒绝搭建：**你还没把这份人工痕迹清单问过用户**（或上一批问答已经用掉了）—— "
             "一个 Actor 都没动。\n"
-            "正确顺序（**两步，别合成一步**）：① 先按**默认参数**（不带 `accept_user_edits`）调一次 —— "
-            "它会把清单逐行列出来、**拒绝执行**，同时留痕「你问的是哪几行」；"
-            "② **把那份清单原样交给用户、停下等他打字**；"
-            "③ 拿到他的原话再调 `execute_build(accept_user_edits=true, user_quote=…)`。\n"
-            "（为什么拦：这是同类事故第二次 —— 上一次外部 agent 收到拒收后**自己**传了 `true`，"
-            "把用户手拖过的东西覆盖掉了，全程没问过人。）"
+            "正确顺序（**两步，别合成一步**）：① `execute_build(dry_run=true)` —— 它会把清单逐行列出来"
+            "并**留痕**（`asked_rows`）；② **把那份清单原样交给用户、停下等他打字**；"
+            "③ 拿到**他本人的原话**，再调 `execute_build(accept_user_edits=true, user_quote=…)`。\n"
+            "（为什么拦：同类事故第三次 —— 上一次外部 agent 收到拒收后**自己**传了 `true`。）"
         )
     asked = [str(x) for x in (doc.get("asked_rows") or [])]
     now = _traces_key(traces)
@@ -2150,10 +2242,13 @@ def _user_edits_gate(traces: list, level: str, mode: str, user_quote: str) -> st
             + "\n把**现在这份清单**重新交给用户、拿他的答复再来"
               "（口径：问过的那批必须就是现在这批 —— 多一行少一行都说明他没看全）。"
         )
+    # ---------- 判据② 有他本人的原话 ----------
     if not quote:
         raise ToolError(
-            "拒绝搭建：要给 `user_quote`（**用户本人的原话**，例：「那是我改的，按 plan 覆盖吧」）—— "
-            "一个 Actor 都没动。⚠ **不许自己编**（编了就是伪造人的确认）；拿不出原话就说明你还没问他。"
+            "拒绝搭建：**没有他本人的原话**（`user_quote` 是空的）—— 一个 Actor 都没动。\n"
+            f"· 这一批要问用户的是这 {len(asked)} 行（清单见第 1 步的报文 / `{USER_EDITS_PATH}`）；\n"
+            "· 请把清单**原样交给用户、停下等他打字**，再把他回的**整句**填进 `user_quote` 真跑。\n"
+            "· ⚠ **不许自己编**一句原话 —— 编了就是伪造人的确认。"
         )
     waited: float | None = None
     try:
@@ -2163,10 +2258,9 @@ def _user_edits_gate(traces: list, level: str, mode: str, user_quote: str) -> st
         waited = None
     if waited is not None and waited < MIN_USER_EDITS_ANSWER_DELAY_S:
         raise ToolError(
-            f"拒绝搭建：你把清单交出去才 **{waited:.0f} 秒**，就带着『原话』回来了 —— "
-            f"用户不可能已经看完（这道下限是 {MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒）—— 一个 Actor 都没动。\n"
-            "正确顺序：**先调一次（不带覆盖开关）拿到清单 → 把清单原样交给用户 → 停下等他打字 → "
-            "再带他的原话回来**。"
+            f"拒绝搭建（**地板** —— 不是判据）：你把清单交出去才 **{waited:.0f} 秒**，就带着『原话』回来了 —— "
+            f"问完立刻自己答 = 没人看过（这道地板是 {MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒）—— 一个 Actor 都没动。\n"
+            "正确顺序：**`execute_build(dry_run=true)` 列清单 → 交给用户、停下等他打字 → 再带他的原话回来**。"
         )
     return quote
 
@@ -2302,8 +2396,8 @@ async def _live_vs_ledger(
     ledger_rows: list[dict],
     live_set: set[str],
     loc_tol: float = 0.5,
-) -> tuple[list[dict], int]:
-    """把**关卡现状**与台账逐行比一遍 → `([{uid,label,actor,kind,why,ledger}, …], 官方调用次数)`。
+) -> tuple[list[dict], list[dict], int]:
+    """把**关卡现状**与台账逐行比一遍 → `([改过的行…], [没比成的行…], 官方调用次数)`。
 
     为什么要有它（2026-09-26 加，客户 agent 自评里点名的那条「没帮到我」）：
       · `full` 会把 `UEMCP/` 下的 Actor **全部清掉** —— 用户手工挪过的那几个也在里面；
@@ -2316,20 +2410,46 @@ async def _live_vs_ledger(
         这正是"地皮高度变了却没人知道"的根因。
       ⚠ 位置容差给 **0.5 cm**（不是读回对账那 0.05）：这里判的是"人手动挪过没有" ——
         人挪一下至少几厘米，而浮点回写的零头不该刷出假警报。
-    只比"台账里有 Actor 引用、且那个 Actor 现在还在关卡里"的行；**读不回来就不判"改过"**（不猜）。
+
+    ⚠ **第二个返回值是「没比成」，不是「没问题」**（2026-10-04 加固 —— 补的是本文件自己点过名的那个洞）：
+      以前这三种行被**静默跳过**，于是"没查到"和"查了没问题"在报文里长得一模一样：
+        ① 台账那一行**没有 Actor 引用**（上次没落成 / 只登记过）；
+        ② 台账记的 Actor **不在关卡里**（引用失效 / 被删 / 重建换名）；
+        ③ `get_actor_transform` **读失败**，或白膜尺寸**读不回来**。
+      ⇒ 现在逐条带**原因**返回，由调用方点名（`execute_build` 进 `warnings` + `diff`；
+        `evaluate_layout` 判 `unchecked` 并写进 `why`）。口径与 `evaluate_layout` 的
+        「不许把『没报』当成『没问题』」同源。
+      ⚠ **仍然不拦**（只报不拒）：读不到是偶发故障（官方抖一下 / 引用被重建），拦下去会让整次搭建白跑；
+        这与 `_verify_rows` 对"白膜尺寸读不回来"的处理一致 —— **报出来，不假装核过**。
     """
     used = 0
     out: list[dict] = []
+    unread: list[dict] = []
     for old in ledger_rows:
+        uid = str(old.get("uid") or "")
+        label = str(old.get("label") or "")
+        kind = str(old.get("kind") or "")
         actor = str(old.get("actor") or "")
-        if not actor or actor not in live_set:
+        if not actor:
+            unread.append({
+                "uid": uid, "label": label, "kind": kind, "actor": "",
+                "why": "台账这一行**没有 Actor 引用**（上次没落成 / 只登记过）—— 它的关卡现状**没比成**"})
+            continue
+        if actor not in live_set:
+            unread.append({
+                "uid": uid, "label": label, "kind": kind, "actor": actor,
+                "why": f"台账记的 Actor 在关卡里**找不到**（`{actor}`）—— 它的关卡现状**没比成**"})
             continue
         used += 1
         try:
             got = await call_official(
                 ctx, "get_actor_transform", {"actor": {"refPath": actor}}, toolset=TS_ACTOR)
-        except ToolError:
-            continue                       # 读不到就不判"改过"（宁可漏报，不编）
+        except ToolError as exc:
+            # ⚠ 读不到**不再静默**：它是「没比成」，不是「没问题」（宁可漏报，也绝不编）
+            unread.append({
+                "uid": uid, "label": label, "kind": kind, "actor": actor,
+                "why": f"读它的变换失败（{exc}）—— 这一行**没比成**（不是没问题）"})
+            continue
         loc, yaw, scale = _xform_of(got)
         why: list[str] = []
         if loc is not None and not _loc_close(loc, old.get("loc_cm"), tol=loc_tol):
@@ -2342,24 +2462,36 @@ async def _live_vs_ledger(
                 pass
         if scale is not None and not _scale_close(scale, old.get("scale")):
             why.append(f"缩放 {old.get('scale')} → 现在 {scale}")
-        if str(old.get("kind") or "") == "whitebox":
+        live_dim: Any = None
+        if kind == "whitebox":
             dim, cost = await _read_cube_size_cm(ctx, actor)
             used += cost
+            live_dim = dim if (isinstance(dim, list) and len(dim) == 3) else None
             want = old.get("size_cm")
-            if (isinstance(dim, list) and len(dim) == 3
-                    and isinstance(want, (list, tuple)) and len(want) == 3):
+            if not (isinstance(dim, list) and len(dim) == 3):
+                unread.append({
+                    "uid": uid, "label": label, "kind": kind, "actor": actor,
+                    "why": "白膜尺寸（厚薄 / 高宽）**读不回来** —— 这一行只比了位置 / 朝向 / 缩放，"
+                           "尺寸那半**没比成**（不是没问题）"})
+            elif isinstance(want, (list, tuple)) and len(want) == 3:
                 if [round(float(x), 2) for x in dim] != [round(float(x), 2) for x in want]:
                     why.append(f"白膜尺寸（厚薄 / 高宽）{list(want)} → 现在 {dim}")
         if why:
             out.append({
-                "uid": str(old.get("uid") or ""),
-                "label": str(old.get("label") or ""),
+                "uid": uid,
+                "label": label,
                 "actor": actor,
-                "kind": str(old.get("kind") or ""),
+                "kind": kind,
                 "why": why,
                 "ledger": old,
+                # ⚠ **读回来的现状值**（2026-10-04 加）：`adopt_user_edits()` 要用它把"手改"
+                #   写回 plan —— 认领的值必须**从关卡来**，不许拿 plan 的纸面值凑。
+                "live": {"loc": list(loc) if isinstance(loc, list) else None,
+                         "yaw": float(yaw) if isinstance(yaw, (int, float)) else None,
+                         "scale": list(scale) if isinstance(scale, list) else None,
+                         "size_cm": live_dim},
             })
-    return out, used
+    return out, unread, used
 
 
 def _row_changes(order: dict, old: dict) -> list[str]:
@@ -2810,10 +2942,16 @@ def _counts_of(rows: list[dict]) -> dict:
     }
 
 
-@mcp.tool()
-async def generate_build_orders() -> BuildOrdersResult:
-    """阶段三第 2 步（前半）：把确认过的**平面放置表翻译成 UE 能照做的搭建指令表**。
-    ⚠ **编排内部件**：不是必经步骤 —— `execute_build()` 会自己按 plan 重算指令表；它的独立价值是**离线预览 + 留痕**（不碰 UE 就能看这一批会落成什么样）。
+# ⚠ **已并进 `execute_build`**（2026-10-04 用户拍板「只并这一个」；工具面 **21 → 20**）：
+#   原来那个独立工具（`generate_build_orders`）**不对外了**，保留内核当**内部件** ——
+#   由 `execute_build(dry_run=true)` **顺手调用**：算指令表 + 落 `views/build_orders_v1.json` 留痕件。
+#   为什么并它（`docs/工具面审计.md` 的判断）：它是**纯翻译件** —— `execute_build` 自己会重算，
+#   它**不承载任何决策、也不是任何闸的钥匙** ⇒ 并掉它**不改任何闸的行为**，只是少一个工具。
+#   ⚠ 别再把它挂回 `@mcp.tool()`。
+async def _orders_snapshot() -> BuildOrdersResult:
+    """
+    阶段三第 2 步（前半）：把确认过的**平面放置表翻译成 UE 能照做的搭建指令表**。
+        ⚠ **编排内部件**：不是必经步骤 —— `execute_build()` 会自己按 plan 重算指令表；它的独立价值是**离线预览 + 留痕**（不碰 UE 就能看这一批会落成什么样）。
 
     读 `views/plan_v1.json`（米）+ `catalog/asset_list.json`（白膜厚度 / 材质线索），
     落盘 `views/build_orders_v1.json`（厘米），**一个 Actor 都不落、不碰关卡**。
@@ -3077,11 +3215,17 @@ async def _precheck_build(ctx: Context[AppContext], planning: Any) -> _Precheck:
         problems.append("几何指纹对不上：plan_v1.json 被改过，上一次确认已作废"
                         "（要重新出图、重新确认）")
     state = planning.acceptance_state(plan)
-    if state != "accepted":
-        problems.append(f"阶段二验收状态是 `{state}`，不是 `accepted`")
+    # ⚠ **第四阶段 · 微调版**（2026-10-04 用户拍板）也放行 —— 它没有图，但有**用户原话**与
+    #   「改了哪几行、为什么」的留痕（`confirmation.mode == "tuned"`，由 `planning.mark_tuned()` 写）。
+    #   ⚠ 放行的**只有"图"这一条**：闸门 `confirmed`、几何指纹、逐条 `exists()`、行数相符、
+    #     白膜自洽**一条都没放松**（下面那几条判据照跑）。
+    _tuned_version = (state == "tuned")
+    if not _tuned_version and state != "accepted":
+        problems.append(f"阶段二验收状态是 `{state}`，不是 `accepted`（微调版 `tuned` 除外）")
 
     # ⚠ 证据链（2026-09-26）：确认里必须带**用户原话** —— 图是 agent 画的、确认是它调的，
     #   没有这句话就无法证明有人点过头（实测被绕过一次：客户当场质问"图都不先让我确认就摆"）。
+    #   ⚠ 微调版**同样要这句话**（它就是微调的全部凭据）—— 这一条对两种确认一视同仁。
     _conf = plan.get("confirmation") or {}
     if not str(_conf.get("user_quote") or "").strip():
         problems.append(
@@ -3090,6 +3234,11 @@ async def _precheck_build(ctx: Context[AppContext], planning: Any) -> _Precheck:
             "`confirm_plan(confirmed_by=…, user_quote=原话)`」重走一遍确认，再来搭建")
 
     rows, _z_rules, warns = _compose_build_rows(plan, load_json(ASSET_LIST_PATH) or {})
+    if _tuned_version:
+        warns.append(
+            "**这是微调版 plan**（`confirmation.mode=tuned`，**没有图**，依据是用户原话 + 改了哪几行）"
+            "—— 真跑**只会动点名的那几行**（`only_labels` 必填、`mode=full` 会被拒收）。"
+            "⚠ 要回到「正常验收」（有图那种）：重画两张图 → `confirm_plan()`。")
 
     want = len(plan.get("assets") or []) + len(plan.get("whiteboxes") or [])
     if len(rows) != want:
@@ -3273,7 +3422,7 @@ async def _adopt_ledger(
         official_calls=used,
         next_step=("台账已按**关卡现状**登记（一个 Actor 都没动、也没存盘）。之后的循环是："
                    "改 plan（`generate_plan`）→ **重画图（写新指纹 + 本轮变更集那几行）** → "
-                   "让用户看图确认（`confirm_plan`）→ `generate_build_orders()` → "
+                   "让用户看图确认（`confirm_plan`）→ `execute_build(dry_run=true)` → "
                    "`execute_build(mode=\"incremental\")` —— 那一次只动改动过的行。"
                    "⚠ 改完先看 `get_plan().acceptance.change_set.required_labels`："
                    "**那就是这一轮图里只需出现的那几行**，别整张重画。"),
@@ -3357,10 +3506,221 @@ def _manual_traces_in_play(
     return out
 
 
-async def _place_rows(
+@dataclass
+class _PlaceOutcome:
+    """② 落位的结果（`_place_rows` 的产物）。
+
+    ⚠ **`transport_calls` 与 `inner_calls` 是两个数，别混**：前者是"编排层→官方"的**往返次数**，
+      后者是"脚本内部实际执行了几次工具调用"。批处理省的**只是前者**（往返与上下文），
+      引擎那边的活一样多 —— 报成一个数就等于把工作量说小了。
+    ⚠ `method` 三个取值：`batch`（脚本一次落完）/ `per_row`（逐行老路）/ `batch_failed`。
+      `batch_failed` 时 `hard_error` 非空，且 `results` 是**空的** —— 那代表"没拿到结果"，
+      **不代表"一行都没落成"**（这个区别由调用方负责说清）。
+    """
+
+    results: list[BuildRowResult] = field(default_factory=list)
+    transport_calls: int = 0
+    inner_calls: int = 0
+    method: str = ""
+    hard_error: str = ""
+
+
+# --- 阶段三 · 落位：官方**脚本批处理**通道（2026-10-04 加 · ⚠ **尚未实测**）------------------
+# 由来（用户 2026-10-04 指令）：「整改一下第三阶段代码，最好调用官方那个工具批量一次性搭建完」。
+# 可行性是**实测**来的（2026-10-04，只读调用）：`ProgrammaticToolset` 的
+#   `get_execution_environment` 返回 `execute_tool(tool_name, json_input)` —— 它能调**任何
+#   已注册工具**，所以 `add_to_scene_from_asset` / `add_to_scene_from_class` / `add_cube` /
+#   `set_actor_folder` 都在脚本里调得到；沙箱只允许 `math/copy/re/time/json/datetime`，
+#   **没有文件系统** ⇒ 台账与指纹只能留在编排层。
+# **为什么不让脚本顺手把校验也做了**：判据必须只有一份。校验（G1–G16 / 整批 / 人工痕迹）
+#   在编排层先跑完才轮到脚本；读回对账也**不进脚本**（它是唯一的"写进去但读回不是它"防线）。
+# ⚠ **已知风险（尚未实测，别当成已解决）**：脚本是一次调用跑 N 行，若**传输中途断**，
+#   编排层拿不到逐行结果，而关卡里可能已经落了一部分 —— 那时**不猜、不悄悄退回逐行**
+#   （盲目重摆会把已落下的行再摆一遍），报文如实说"落了多少**未知**"，并给三条出路。
+#   `batch=false` 是随时可用的退路（逐行老路，失败只影响那一行）。
+# --- 【已修 · 2026-10-04 第一次真跑暴露出来的白膜取值 bug】------------------------------------
+# **现象（实测原件）**：D 侧 `views/archive/build_state_20261004T090954Z.json` —— 那次真跑的台账
+#   `placement="batch"`、**`inner_calls=2`**、56 行里**唯一一行 `actor=""`** 的就是 `sidewalk|人行道`；
+#   随后那一次 `placement="per_row"` 把它补成 `Actor_57` 才全绿。
+# **根因（源码）**：白膜行原来是 `got = {"refPath": spawned}` 再 `actor = _ref(got)`，而 `_ref()`
+#   只认官方回的 `returnValue`（脚本里官方回的是 `{'returnValue': {'refPath': ...}}`，实测）
+#   —— 于是 `actor` **恒为空** ⇒ 抛 `RuntimeError("no actor ref")` ⇒ **`set_actor_folder` 根本没被调到**
+#   （`inner_calls=2` 正好 = spawn + add_cube，第三次调用从未发生 —— 这就是那次的指纹）。
+#   后果不是"少一行"，而是**半成品**：Actor 建出来了、cube 也加上了，**引用却丢了** ⇒
+#   ① 台账记"没落成" ② 清场删不掉 ③ 补分组补不了 ④ 对账看不见（没进 `UEMCP/`）⇒ 永久游离。
+#   ⚠ **只影响白膜行**（资产行那条分支直接用官方回的对象，`_ref` 认得）—— 而 D 的 plan 56 行全是白膜，
+#     那次只是**增量单行**才只坏一行；**多行 / 全量用 `batch=true` 会成片出事**（由代码路径推出）。
+# **修法（本次）**：① 白膜行直接 `actor = _ref(got)`，不再绕裸 `refPath`；② `_ref()` **加固成也认裸
+#   `refPath`**（防以后再有人这么包）；③ **先记引用再分组**（分组单独一步、失败只记 `folder_ok=false`，
+#   引用保留）；④ `_recount_and_heal` 不再要求 `res.ok` —— **有引用就补分组**。
+#   ⚠ **本次修复尚未实测**：需要一次 `batch=true` 的**两行以上白膜**真跑来验（届时看
+#     `inner_calls` 是否 = 3×行数、`placement` 是否 `batch`、台账里每行是否都有 `actor`）。
+# --- [完工-22] 阶段三 · 落位批处理通道（2026-10-04）--------------------------------------------
+_BATCH_SCRIPT_TEMPLATE = '''import json
+
+PAYLOAD = json.loads(__PAYLOAD__)
+SCENE = "editor_toolset.toolsets.scene.SceneTools"
+PRIM = "editor_toolset.toolsets.primitive.PrimitiveTools"
+COUNT = [0]
+
+
+def _call(tool, args):
+    COUNT[0] = COUNT[0] + 1
+    return execute_tool(tool, json.dumps(args))
+
+
+def _ref(got):
+    if isinstance(got, dict):
+        inner = got.get("returnValue")
+        if isinstance(inner, dict):
+            path = inner.get("refPath")
+            return str(path) if path else ""
+        if isinstance(inner, str):
+            return inner
+        path = got.get("refPath")
+        if path:
+            return str(path)
+    if isinstance(got, str):
+        return got
+    return ""
+
+
+def run():
+    out = []
+    for row in PAYLOAD:
+        rec = {"uid": row["uid"], "index": row["index"], "actor": "", "ok": False,
+               "folder_ok": False, "error": ""}
+        actor = ""
+        try:
+            if row["kind"] == "asset":
+                got = _call(SCENE + ".add_to_scene_from_asset",
+                            {"asset_path": row["asset_path"], "name": row["name"],
+                             "xform": row["xform"]})
+                actor = _ref(got)
+            else:
+                got = _call(SCENE + ".add_to_scene_from_class",
+                            {"actor_type": {"refPath": row["class_path"]},
+                             "name": row["name"], "xform": row["xform"]})
+                actor = _ref(got)
+                if not actor:
+                    raise RuntimeError("add_to_scene_from_class returned no actor ref")
+                dim = row["size_cm"]
+                _call(PRIM + ".add_cube",
+                      {"actor": {"refPath": actor}, "name": "cube",
+                       "dimensions": {"x": dim[0], "y": dim[1], "z": dim[2]}})
+            if not actor:
+                raise RuntimeError("no actor ref")
+            rec["actor"] = actor
+        except Exception as exc:
+            rec["error"] = type(exc).__name__ + ": " + str(exc)
+            out.append(rec)
+            continue
+        try:
+            _call(SCENE + ".set_actor_folder",
+                  {"actor": {"refPath": actor}, "folder_path": row["folder"]})
+            rec["folder_ok"] = True
+            rec["ok"] = True
+        except Exception as exc:
+            rec["error"] = ("set_actor_folder failed: " + type(exc).__name__ + ": "
+                            + str(exc) + " (actor exists, ref kept)")
+        out.append(rec)
+    return {"rows": out, "calls": COUNT[0]}
+'''
+
+
+def _batch_place_script(targets: list[dict]) -> str:
+    """把这一批行编成一段**官方沙箱脚本**（配置进 `execute_tool_script`）。
+
+    ⚠ payload 走 `json.dumps(json.dumps(rows))` —— **两层**：
+      内层是真正的 JSON 数据，外层那份是**给 Python 当字符串字面量**用的
+      （`ensure_ascii=True` ⇒ 全 ASCII，转义规则与 Python 字面量兼容），
+      免得中文 label / 引号把脚本编坏（模板里的占位符是 `__PAYLOAD__`，用 `replace` 灌进去 ——
+      **不用 f-string**，脚本里全是 `{}`，f-string 会把它们当占位符）。
+    """
+    rows: list[dict] = []
+    for r in targets:
+        rows.append({
+            "uid": str(r.get("uid") or ""),
+            "index": int(r.get("index") or 0),
+            "kind": str(r.get("kind") or ""),
+            "asset_path": str(r.get("asset_path") or ""),
+            "class_path": ACTOR_CLASS_PATH,
+            "name": str(r.get("name") or ""),
+            "xform": {
+                "location": {"x": r["loc_cm"][0], "y": r["loc_cm"][1], "z": r["loc_cm"][2]},
+                "rotation": dict(r["rot"]),
+                "scale": {"x": r["scale"][0], "y": r["scale"][1], "z": r["scale"][2]},
+            },
+            "size_cm": [float(x) for x in (r.get("size_cm") or [0.0, 0.0, 0.0])],
+            "folder": str(r.get("folder") or OUR_FOLDER_ROOT),
+        })
+    payload = json.dumps(json.dumps(rows, ensure_ascii=True), ensure_ascii=True)
+    return _BATCH_SCRIPT_TEMPLATE.replace("__PAYLOAD__", payload)
+
+
+async def _place_rows_via_script(
+    ctx: Context[AppContext], targets: list[dict]
+) -> tuple[list[BuildRowResult], int, str]:
+    """一次脚本调用落完整批。返回 `(逐行结果, 脚本内调用次数, 硬错误)`。
+
+    ⚠ **硬错误**（拿不到可解析的逐行结果）= `(空, 0, 原因)` —— 那代表"结果未知"，
+      由调用方如实说清；这里**绝不**编一行结果出来（编 = 把未知说成已知）。
+    ⚠ 脚本**没回的那一行**按"没成"记（`结果不完整`）—— 一行都不许静默消失。
+    """
+    script = _batch_place_script(targets)
+    try:
+        got = await call_official(
+            ctx, "execute_tool_script", {"script": script}, toolset=TS_PROG)
+    except ToolError as exc:
+        return [], 0, str(exc)
+    data: Any = got
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (ValueError, TypeError):
+            return [], 0, f"脚本回的内容解析不了：{data[:200]!r}"
+    if not isinstance(data, dict):
+        return [], 0, f"脚本回的形状不对（{type(data).__name__}）—— 期望 {{'rows': [...], 'calls': N}}"
+    inner = int(data.get("calls") or 0)
+    back: dict[str, dict] = {}
+    for item in (data.get("rows") or []):
+        if isinstance(item, dict):
+            back[str(item.get("uid") or "")] = item
+    results: list[BuildRowResult] = []
+    for r in targets:
+        rec = back.get(str(r.get("uid") or ""))
+        if rec is None:
+            results.append(BuildRowResult(
+                index=r["index"], label=r["label"], kind=r["kind"], actor="",
+                loc_cm=list(r["loc_cm"]), scale=list(r["scale"]), yaw=r["rot"]["yaw"],
+                ok=False, error="脚本没回这一行（结果不完整）—— 这一行按没成处理"))
+            continue
+        actor = str(rec.get("actor") or "")
+        ok = bool(rec.get("ok")) and bool(actor)
+        # ⚠ **"建出来了但没进分组"不许与"根本没建出来"共用一句话**（2026-10-04 修）：
+        #   脚本现在**先记引用再分组**，所以这两种情况的区别在 `actor` 上 ——
+        #   有引用 ⇒ 编排层**能补分组、能清场、对账也看得见**（见 `_recount_and_heal`）；
+        #   没引用 ⇒ 才是真的没落成。报文里必须把这两种分开说。
+        if ok:
+            err = ""
+        elif actor:
+            err = (str(rec.get("error") or "")
+                   + "｜**Actor 已建出、引用已保留**（不是没落成）—— 编排层会就地补分组；"
+                     "补不上就会出现在 warnings 里，别当成「没问题」。")
+        else:
+            err = str(rec.get("error") or "脚本说这一行没落成")
+        results.append(BuildRowResult(
+            index=r["index"], label=r["label"], kind=r["kind"], actor=actor,
+            loc_cm=list(r["loc_cm"]), scale=list(r["scale"]), yaw=r["rot"]["yaw"],
+            ok=ok, error=err))
+    return results, inner, ""
+
+
+async def _place_rows_one_by_one(
     ctx: Context[AppContext], targets: list[dict]
 ) -> tuple[list[BuildRowResult], int]:
-    """② 按表落：资产行 `add_to_scene_from_asset`；白膜行 `Actor` + `add_cube`；再逐个进分组。
+    """② 按表落（**逐行老路**）：资产行 `add_to_scene_from_asset`；白膜行 `Actor` + `add_cube`；
+    再逐个进分组。`batch=false` 走这条 —— 它也是批处理那条路的**对照基准**。
 
     返回 `(逐行结果, 用掉几次官方调用)`。
     ⚠ **一行失败不带崩整批** —— `except Exception` 那一档是刻意的（见行内注释）。
@@ -3416,6 +3776,30 @@ async def _place_rows(
             yaw=r["rot"]["yaw"], ok=(err == ""), error=err,
         ))
     return results, used
+
+
+async def _place_rows(
+    ctx: Context[AppContext], targets: list[dict], batch: bool = True
+) -> _PlaceOutcome:
+    """② 落位**总入口**：默认走官方脚本批处理，`batch=false` 走逐行老路。
+
+    ⚠ **批次为空时两条路都不调官方**（0 次调用）—— 增量里"这次一行都不动"是常态，
+      别为它白跑一次脚本。
+    ⚠ **脚本通道失败时不许"静默降级"**（那是项目明令禁止的：参数 / 路径不许被无声吞掉）：
+      这里只把 `batch_failed` + 原文交上去，**由调用方**决定怎么报 —— 因为"关卡里落了没有"
+      这件事**只有关卡知道**，拿不到结果时任何自动重试都可能把已落下的行摆第二遍。
+    """
+    if not targets:
+        return _PlaceOutcome(results=[], transport_calls=0, inner_calls=0, method="batch")
+    if not batch:
+        results, used = await _place_rows_one_by_one(ctx, targets)
+        return _PlaceOutcome(results=results, transport_calls=used, inner_calls=0,
+                             method="per_row")
+    results, inner, hard = await _place_rows_via_script(ctx, targets)
+    if hard:
+        return _PlaceOutcome(results=[], transport_calls=1, inner_calls=0,
+                             method="batch_failed", hard_error=hard)
+    return _PlaceOutcome(results=results, transport_calls=1, inner_calls=inner, method="batch")
 
 
 async def _verify_rows(
@@ -3524,8 +3908,11 @@ async def _recount_and_heal(
         warns.append(f"落完复核 `{OUR_FOLDER_ROOT}/` 数量失败（{exc}）")
 
     pairs = list(zip(results, targets))
+    # ⚠ **有引用就补**，不再要求 `res.ok`（2026-10-04 修）：批处理脚本里"spawn 成了、分组没成"
+    #   的那一行 `ok=False` 但 `actor` 是好的 —— 以前这里把它排除掉，于是"引用在手却不去补"，
+    #   那个 Actor 就永远留在分组外（删不掉、补不了、对账看不见）。
     missing_in_folder = [(res, r) for res, r in pairs
-                         if res.ok and res.actor and res.actor not in set(after_refs)]
+                         if res.actor and res.actor not in set(after_refs)]
     if missing_in_folder and after_read_ok:
         fixed = 0
         for res, r in missing_in_folder:
@@ -3667,6 +4054,21 @@ async def execute_build(
                      "（89 行实测省约 100 次官方调用）；"
                      "`false`/`'off'` = 完全不读回（台账里 `readback=false`，记的是指令值）。"
                      "⚠ 省的是**确认能力**：`'transform'` 下『位置对了、厚薄不对』查不出来。"))] = True,
+    batch: Annotated[bool, Field(
+        description=(
+            "**默认 true = 用官方脚本批处理一次性落完**（`ProgrammaticToolset.execute_tool_script`："
+            "一次编排层调用里跑完这批 N 行的 spawn / `add_cube` / 进分组）。"
+            "⚠ 省的是**往返与上下文**，不是引擎工作量 —— 报文里 `official_calls`（编排层→官方的"
+            "往返次数）与 `inner_calls`（脚本内实际执行了几次工具调用）**分开记**，别混。"
+            "⚠ **校验、人工痕迹扫描、清场、读回对账一律不进脚本**：那个沙箱**没有文件系统、"
+            "没有网络**（实测 `get_execution_environment`），台账与几何指纹只能在编排层算；"
+            "而且判据只能有一份。"
+            "⚠ `false` = 退回**逐行**老路（一行一次调用，失败只影响那一行）—— 它也是两条路的"
+            "对照基准：落完的台账应当逐行一致。"
+            "⚠ 脚本通道**整体失败**时（拿不到逐行结果），报文会说「关卡里落了多少**未知**」并"
+            "**不写台账**、不读回、不补材质 —— 那时先 `evaluate_layout()` 看现场，"
+            "再用 `batch=false` 重跑，或 `adopt=true` 把现状认领成台账。"
+        ))] = True,
     accept_user_edits: Annotated[bool, Field(
         description=(
             "**默认 false = 保护用户在 UE 里手改的东西**：动手前先逐行读一遍**关卡现状**与台账比 —— "
@@ -3674,19 +4076,24 @@ async def execute_build(
             "**一律拒收并列出来**（一个 Actor 都不动）。"
             "确认『这些人工改动可以按 plan 覆盖（会被删掉重摆）』才传 true。"
             "⚠ 不要为了「让它过」随手传 true —— 那正是「用户手动改的东西被删了」的来源。"
-            "⚠ **这是两步闸（2026-09-30 加固）**：真跑要覆盖必须**先按默认参数调一次**（拿到那份"
-            "人工痕迹清单、代码会留痕「你问的是哪几行」）→ **把清单原样交给用户、停下等他打字** → "
-            "再带 `accept_user_edits=true` + 他的原话 `user_quote` 调第二次。"
-            "**没先问过 / 问的那批与现在这批不一致 / 答复来得太快，一律拒收**"
-            "（光有布尔开关，这道闸就只剩『靠自觉』）"
+            "⚠ **这是两步闸（2026-09-30 加固）**：真跑要覆盖必须"
+            "**先按默认参数调一次**（或 `dry_run=true`）—— 那一次会把人工痕迹清单逐行列出来、"
+            "留痕「你问的是哪几行」→ **把清单原样交给用户、停下等他打字** → "
+            "再带 `accept_user_edits=true` + 他本人的原话调第二次。"
+            "**第 2 步只核对两件事：这一批对不对得上（没问过是它的特例）+ 有没有他本人的原话** —— "
+            "不过就拒收（光有布尔开关，这道闸就只剩『靠自觉』）"
         ))] = False,
     user_quote: Annotated[str, Field(
         description=(
-            "**用户本人同意「按 plan 覆盖他手改的东西」的原话**（例：「那是我改的，按 plan 覆盖吧」）。"
+            "**用户本人同意「按 plan 覆盖他手改的东西」的原话** —— 例：「那是我改的，按 plan 覆盖吧」。"
             "⚠ 只在 `accept_user_edits=true` **且真跑**（`dry_run=false`）时必填："
-            "没有它 = **证明不了有人确认过**，一律拒收；演练（`dry_run=true`）不需要。"
-            "⚠ 还要求：**距你用默认参数拿到那份清单至少 15 秒**（问完立刻自己答复 = 没人看过）。"
-            "⚠ **不许自己编** —— 拿不出原话，就说明你还没问他"
+            "没有它（或空白）= **没有任何凭据**，一律拒收；演练（`dry_run=true`）不需要。"
+            f"⚠ 还要求：**距你列出那份清单至少 {MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒**"
+            "（问完立刻自己答复 = 没人看过）。"
+            "⚠ **不许自己编**；⚠ **也不许拿更早说过的话来顶**（例：「重新再搭建一下」这类）——"
+            "2026-10-04 实测就是这么被绕过去的：清单打印了，但没到过人手里。"
+            "⚠ **2026-10-04 起不再要求什么「应答码」**（用户指令：「把这个什么码删掉，太离谱了」）："
+            "文档里那句『必须包含应答码』**已作废** —— 现在只需要**他本人的原话**。"
         ))] = "",
     only_labels: Annotated[list[str], Field(
         description=(
@@ -3697,7 +4104,7 @@ async def execute_build(
             "`accept_user_edits=true` + `user_quote`（不给 → 拒收）。"
             "正确两步：① `execute_build(only_labels=[…], dry_run=true)` —— 只读这几行的现状、"
             "只列这几行、**留痕**（`asked_rows` 正好这几行）→ ② **把清单原样交给用户、停下等他打字** → "
-            "③ 隔 ≥15 秒，带他的原话真跑。"
+            f"③ 隔 ≥{MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒，带他的原话真跑。"
             "⚠ 与 `mode=\"full\"` / `adopt=true` **互斥**（同时给 → 拒收，不许静默忽略）；"
             "⚠ 点名的行**本来就在 plan 位置上**时会**跳过**（报文里记「本来就对」），不白删一遍；"
             "⚠ 报文里**一定会回显这次收到的 `only_labels`**（收到几行、叫什么）—— 它要是丢了参数，"
@@ -3705,8 +4112,9 @@ async def execute_build(
             "⚠ 不传它 / 传空列表 = 行为与以前**逐字相同**（走 `plan↔台账` 差异那条增量路）"
         ))] = [],
 ) -> BuildReport:
-    """阶段三第 2 步（后半）：**把放置表落进关卡 —— 默认只动改过的行（增量），不推倒重来**。
-
+    """
+    【场景④ 落关卡】什么时候用我：要往关卡里摆 / 重摆时 —— 默认只动与台账比变了的行；先 `dry_run=true` 看一遍。阶段三第 2 步（后半）：**把放置表落进关卡 —— 默认只动改过的行（增量），不推倒重来**。
+    
     流程（顺序不能反）：
       ⓪ **「搭哪张图」闸**（2026-09-26 加）：`check_build_target()` 里那份**用户答复**必须存在，
          且与当前关卡对得上（选开新图而他还没换图 / 指定了别的图 / 中途换了图 → 拒收）。
@@ -3733,7 +4141,7 @@ async def execute_build(
            ② **把清单原样交给用户、停下等他打字**；
            ③ 再带 `accept_user_edits=true` + `user_quote`（他的原话）调第二次。
          判据（三条都要过）：**问过** + **问的那批就是现在这批**（多一行少一行都重问）+
-         **有他本人的原话且距提问 ≥ 15 秒**（`MIN_USER_EDITS_ANSWER_DELAY_S`）。
+         **有他本人的原话且距提问 ≥ 5 秒**（`MIN_USER_EDITS_ANSWER_DELAY_S`，2026-10-04 由 15 秒下调）。
          演练（`dry_run=true`）不要求原话 —— 它不碰关卡。
          ⚠ **边界（不吹）**：这拦不住"存心等够时间再编一句话"（代码验不了真话）；它做到的是
          **不能悄悄干** + 台账里留着「问过哪几行 + 那句话原文」可以事后对质。
@@ -3753,6 +4161,10 @@ async def execute_build(
       ④ **按表落**：资产行 → `add_to_scene_from_asset`；白膜行 →
          `add_to_scene_from_class(/Script/Engine.Actor)` + `PrimitiveTools.add_cube`；
          然后逐个 `set_actor_folder` 进 `UEMCP/<类>`（这也是下一次清场的判据）。
+         ⚠ **这一段的往返方式由 `batch` 决定**（2026-10-04 加，见下面"两条路"那段）：
+         默认 `batch=true` = 官方 `ProgrammaticToolset.execute_tool_script` **一次调用落完整批**；
+         `batch=false` = 逐行（一行一次调用）。**换的只是往返方式** —— 校验 / 清场 / 读回 /
+         台账一个字都没变，也不许进脚本（那个沙箱没有文件系统）。
       ⑤ **读回对账**：逐个 `get_actor_transform` 与指令表的 `loc_cm / yaw / scale` 比；
          **白膜另外读组件 `RelativeScale3D`（×100 = 厘米）核对尺寸** —— 对不上的原地报出来（不掩饰）。
          ⚠ **档位**（2026-09-27 加，`_verify_level`）：`verify=true`（默认，`full`）连白膜尺寸一起验；
@@ -3796,6 +4208,31 @@ async def execute_build(
         raise ToolError(
             "拒收：`only_labels` 传了但**里面没有有效的 label**（空串 / 全是空白）—— "
             "一个 Actor 都没动。要么别传它（走默认增量），要么给要挪回 plan 那几行的 `label`。")
+    # ⚠ **第四阶段 · 微调版 plan 的专属硬闸**（2026-10-04 用户拍板）——
+    #   微调版的语义就是"**只动我刚说的那几行**"，所以：① 真跑**必须点名**；② **不许 `full`**。
+    #   ⚠ 这里只读 plan 文件判"是不是微调版"（`confirmation.mode == "tuned"`），不碰 UE、不改盘。
+    _tuned_plan = False
+    try:
+        _pd = json.loads(planning.OUT_JSON.read_text(encoding="utf-8-sig"))
+        _tuned_plan = str((((_pd.get("confirmation") or {}).get("mode")) or "")) == "tuned"
+    except (OSError, ValueError):
+        _tuned_plan = False
+    if _tuned_plan and not dry_run:
+        if mode == "full":
+            raise ToolError(
+                "拒收：**这是微调版 plan**（`confirmation.mode=tuned`）—— 微调只动那几行，"
+                "**不许全量重摆** —— 一个 Actor 都没动。\n"
+                "· 只想动那几行 → `execute_build(only_labels=[…])`（默认 `auto` 走增量）。\n"
+                "· 确实要整体重摆 → 那属于**阶段三**：先重画两张图 → `confirm_plan()` "
+                "把它变回「正常验收」那一版，再 `mode=\"full\", force_full=true`。")
+        if not _only_given:
+            raise ToolError(
+                "拒收：**这是微调版 plan，真跑必须点名**（`only_labels` 为空）—— 一个 Actor 都没动。\n"
+                f"· 这一版微调改的是：{'、'.join('「' + str(r.get('label') or '') + '」' for r in ((_pd.get('confirmation') or {}).get('rows') or [])[:8]) or '（留痕里没记 label）'}\n"
+                "· 正确用法：`execute_build(only_labels=[上面那几行], dry_run=true)` 先看一眼 → "
+                "再带同一个 `only_labels` 真跑。\n"
+                "· 为什么拦：不点名 = 允许它顺手重摆别的行 —— 那正是「用户手挪的东西被复原」"
+                "那类事故的来源。")
     if _only_given:
         if mode == "full":
             raise ToolError(
@@ -3810,7 +4247,11 @@ async def execute_build(
         # ⚠ 真跑必须配 `accept_user_edits=true` + `user_quote`：点名重摆本质就是"按 plan 覆盖手改"，
         #   不给这个开关就变成一条**裸点名覆盖**的通道（那正是人工痕迹两道闸要防的事）。
         #   宁可当场拒收，也不许"看起来只是点名、实际上默默抹掉用户手拖的位置"。
-        if not dry_run and not accept_user_edits:
+        #   ⚠ **唯一豁免 = 微调版 plan**（2026-10-04 加）：那种 plan 的 `confirmation.user_quote`
+        #     就是"他刚说要改这几行"的原话，再要一轮问答等于把微调又变回三步流程。
+        #     ⚠ 豁免的**只是这道前置**：真若那几行被他手改过，后面的人工痕迹闸照样拦
+        #     （`traces` 非空 ⇒ 仍要 `accept_user_edits=true` + 他的原话）。
+        if not dry_run and not accept_user_edits and not _tuned_plan:
             raise ToolError(
                 "拒收：**点名真跑必须同时给 `accept_user_edits=true`**（外加 `user_quote`）—— "
                 "一个 Actor 都没动。\n"
@@ -3818,7 +4259,8 @@ async def execute_build(
                 "必须走人工痕迹那两步闸 —— 先问过他、有他的原话，才准动。\n"
                 "· 正确两步：① `execute_build(only_labels=[…], dry_run=true)`（只读这几行的现状 + "
                 "**留痕**）→ ② **把清单原样交给用户、停下等他打字** → "
-                "③ 隔 ≥15 秒再调 `execute_build(only_labels=[…], accept_user_edits=true, "
+                f"③ 隔 ≥{MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒再调 "
+                "`execute_build(only_labels=[…], accept_user_edits=true, "
                 "user_quote=\"他的原话\")`。")
 
     # ⚠ 碰 UE 之前先过**回读闸**（2026-09-26 用户要求把软约束变硬）：这一版没回读过，就不许落关卡。
@@ -3846,14 +4288,14 @@ async def execute_build(
         warns.append(
             f"提示：还没生成指令表（`{BUILD_ORDERS_PATH.name}`）—— **不影响这次落盘**"
             "（`execute_build` 按 plan 自己重算），但拿它当参考就什么都没有；"
-            "想要留痕件就调 `generate_build_orders()`。")
+            "想要留痕件就调 `execute_build(dry_run=true)`。")
     elif str(_orders_doc.get("plan_hash") or "") != str(gate["plan_hash"] or ""):
         warns.append(
             f"⚠ 指令表 `{BUILD_ORDERS_PATH.name}` 是**旧版**（表里 plan_hash "
             f"{str(_orders_doc.get('plan_hash') or '(空)')[:10]}… ≠ 当前确认版 "
             f"{str(gate['plan_hash'] or '')[:10]}…）—— **不影响这次落盘**"
             "（`execute_build` 按 plan 自己重算），但别拿它当这一版看；"
-            "要更新就重跑 `generate_build_orders()`。")
+            "要更新就重跑 `execute_build(dry_run=true)`。")
 
     # ---------- 当前关卡 + 现状清点（**只数根文件夹一次**）----------
     live = await _scan_live_level(ctx, mode, dry_run, adopt, warns)
@@ -3964,8 +4406,10 @@ async def execute_build(
     #      `plan==台账` ⇒ 删除集是空 ⇒ `traces` 空 ⇒ 演练"不留痕" ⇒ 第 2 步永远被拒（死循环）；
     #   ③ `only_labels` 的参数类型**不许用可空联合**（`list[str] | None`）：实测客户端会把它**静默丢掉**，
     #      工具于是悄悄退回全表；现在用 `list[str] = []`，并在报文里**回显收到的 label** 自证。
-    # ⚠ 已知缺口（不是这次的范围）：`_live_vs_ledger` 对"台账引用不在 live_set"的行**静默跳过** ——
-    #   "没查到"会长得像"没问题"，值得以后单独治。
+    # ✅ 那条已知缺口**已于 2026-10-04 治掉**（原话：「`_live_vs_ledger` 对"台账引用不在 live_set"
+    #   的行静默跳过 —— 没查到长得像没问题」）：现在它把 **引用为空 / 引用不在关卡里 / 读变换失败 /
+    #   白膜尺寸读不回来** 四类行作为**第二个返回值**逐条带原因返回；`execute_build` 进
+    #   `warnings` + `diff`，`evaluate_layout` 判 `unchecked`。⚠ **仍然只报不拦**（读不到多是偶发）。
     # ----------------------------------------------------------------------------------------------
     # ---------- `only_labels`：**点名把这几行挪回 plan**（2026-10-03 加）------------------------
     # 由来（用户报的，D 盘现场实测）：`plan == 台账`、但关卡里那两行被人手拖走了 ——
@@ -4142,17 +4586,30 @@ async def execute_build(
     else:
         scan_rows = gone + [o for _r, o, _w in changed]
         scan_why = "只扫这次会被删掉的行（真跑增量）"
-    manual, used = await _live_vs_ledger(ctx, scan_rows, live_set)
+    manual, unreadable, used = await _live_vs_ledger(ctx, scan_rows, live_set)
     calls += used
     # 点名时把 `manual` 再夹一次：`_live_vs_ledger` 是通用的，别让它把范围外的行带进来
     #   （范围外的行**不拦也不报**是刻意的 —— 它们这一轮一个都不会动，见下面 `targets` 的过滤）。
     if named:
         manual = [m for m in manual if str(m.get("uid") or "") in named]
+        unreadable = [m for m in unreadable if str(m.get("uid") or "") in named]
     if manual:
         warns.append(
             f"⚠ 有 {len(manual)} 行**现状与台账不符**（人工改过 / 官方没照做；扫描范围：{scan_why}）："
             + "；".join(f"「{m['label']}」{'；'.join(m['why'])}" for m in manual[:6])
             + ("…" if len(manual) > 6 else ""))
+    # ⚠ **「没比成」也必须喊出来**（2026-10-04 加固 —— 补的是本文件自己点过名的那个洞）：
+    #   `_live_vs_ledger` 以前把这几类行**静默跳过**：引用为空 / 引用不在关卡里 / 读变换失败 /
+    #   白膜尺寸读不回来。于是它们在报文里与"查了、没问题"**长得一模一样** ——
+    #   客户那条口径（不许把「没报」当成「没问题」）在这一维上此前没有落实。
+    #   ⚠ 只报不拦：读不到多半是偶发（官方抖一下 / 引用被重建），拦下去会让整次搭建白跑。
+    if unreadable:
+        warns.append(
+            f"⚠ 有 {len(unreadable)} 行的**关卡现状没比成**（扫描范围：{scan_why}）—— "
+            "⚠ **「没比成」不等于「没问题」**："
+            + "；".join(f"「{u['label']}」{u['why']}" for u in unreadable[:6])
+            + ("…" if len(unreadable) > 6 else "")
+            + "。要逐行看清 → `evaluate_layout()`（它会把它们判 `unchecked` 并写明原因）。")
     # ⚠ **"没读到人工痕迹" ≠ "关卡没问题"**（2026-10-03 加，实测事故）：真跑增量**只扫"会被删 / 重摆的行"**
     #   （为了省调用），而这一版**一行都不动** ⇒ 扫描范围是空的 ⇒ 我们**一次都没读关卡**。
     #   客户 agent 就是这么报出「这次要动 0 行」的：**纸面自洽被当成了现场证据**。
@@ -4290,7 +4747,7 @@ async def execute_build(
         if not accept_user_edits:
             # **第 1 步**：先留痕「我问了哪几行」（不碰关卡），再拒收 —— 与 `check_build_target` 同构。
             try:
-                _save_user_edits_question(traces, level, mode)
+                _path1 = _save_user_edits_question(traces, level, mode)
                 led = ("（✅ 已留痕：**这一批问的是哪几行** → "
                        f"`{USER_EDITS_PATH.name}`；第 2 步会拿它核对，别跳过这一步）")
             except OSError as exc:
@@ -4301,25 +4758,27 @@ async def execute_build(
                 "两条出路：\n"
                 "· **保住它们**（推荐）：把用户想要的改动**写回阶段二** —— "
                 "`request_plan_change(items=[用户原话], by=\"用户\")` → `generate_plan(patch=[...])` → "
-                "**重画两张图** → 用户看图确认 → `generate_build_orders()` → 增量落。"
+                "**重画两张图** → 用户看图确认 → `execute_build(dry_run=true)` → 增量落。"
                 "这样 plan 与关卡就一致了（**用户手挪的那个位置会被保留**）。\n"
-                "· **按 plan 覆盖它们**（会把上面这些行删掉重摆）：**把上面这份清单原样交给他"
-                "（一行都别省）→ 停下等他打字**，拿到他本人的原话后再调 "
-                "`execute_build(accept_user_edits=true, user_quote=\"他的原话\")`。\n"
+                "· **按 plan 覆盖它们**（会把上面这些行删掉重摆）—— ⚠ **下一步只有这一件事**："
+                "把上面这份清单**原样交给用户、停下等他打字**，拿到**他本人的原话**之后再调 "
+                "`execute_build(accept_user_edits=true, user_quote=\"他回的整句\")`。\n"
                 "⚠ 只想动**其中几行**（`plan` 与台账本来一致、只是关卡里被人拖偏了）→ "
                 "点名那条路更省：`execute_build(only_labels=[\"那几行的 label\"], dry_run=true)` "
                 "拿清单 + 留痕 → 用户答复 → 再带他的原话真跑。\n"
-                "⚠ 现在这是**两步闸**：没先问过 / 问过的那批与现在这批不一致 / 答复来得太快"
-                f"（< {MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒）—— **照样拒收**。"
+                "⚠ **第 2 步只核对两件事**：① 这一批对不对得上 ② **有没有他本人的原话** —— "
+                f"不过就拒收（另有一道地板：距提问 ≥ {MIN_USER_EDITS_ANSWER_DELAY_S:g} 秒，只挡秒答）。\n"
                 "⚠ 想先看清「会覆盖什么」，用 `dry_run=true`（演练不碰关卡、也不要原话）。\n"
                 "（为什么拦：客户原话「用户手动改的东西不该删」。以前 `full` 无条件把 "
-                f"`{OUR_FOLDER_ROOT}/` 下全清、增量**从不读现状** —— 手改的东西就这么没了，还没人报。）")
+                f"`{OUR_FOLDER_ROOT}/` 下全清、增量**从不读现状** —— 手改的东西就这么没了，还没人报。"
+                "⚠ 2026-10-04 撤掉了当时的「应答码」：它要求用户把报文里那个码念回来，"
+                "用户判定「太离谱了」—— 现在**挡不住**『拿一句更早说过的话顶原话』，如实记着。）")
         # **第 2 步**：核对「问过没有 / 问的那批就是这批 / 有他本人的原话 / 距提问够久」。
         #   加固由来：外部 Agent 收到上面那条拒收后**自己**传了 `accept_user_edits=true`，
         #   用户手拖过的水面（差 30 cm）就这么被覆盖了 —— 覆盖必须是"两步 + 人的凭据"。
         # ⚠ **不在这里销账**（2026-10-03 改）：以前这一步过了就立刻
         #   `_mark_user_edits_answered()` —— 于是**删到一半失败**时，用户已经给出的同意
-        #   （和他的原话）先被消费掉了，重试要**重新问、重新等 15 秒**。
+        #   （和他的原话）先被消费掉了，重试要**重新问、重新等 5 秒**。
         #   同意是**人的动作**，不该被一次没干成的执行吃掉；所以挪到真跑**落完之后**再销账。
         _quote_ok = _user_edits_gate(traces, level, mode, user_quote)
     elif dry_run and not accept_user_edits and mode == "incremental":
@@ -4352,7 +4811,7 @@ async def execute_build(
             #   所以：点名时**写一份"空清单的留痕"**（记下这几个 label + 本次没有任何差异），
             #   让"问过"这一步成立；报文里如实说清"没有差异可列"。
             try:
-                _save_user_edits_question(
+                _path2 = _save_user_edits_question(
                     [{"label": x, "why": ["点名重摆：现状与 plan 一致，无差异可列"]} for x in _only_given],
                     level, mode)
                 warns.append(
@@ -4361,6 +4820,7 @@ async def execute_build(
                     + f" → `{USER_EDITS_PATH.name}`。"
                     "⚠ 这几行的**现状与 plan 一致**，所以没有「要覆盖什么」可列 —— "
                     "真跑仍是「按 plan 重摆一遍」（会删了重建），所以第 2 步照旧要你的原话。")
+                warns.append(_handoff_line(len(_only_given)))
             except OSError as exc:
                 warns.append(f"⚠ 留痕没写成（{exc}）—— 第 2 步会被拒。")
         elif not traces:
@@ -4373,11 +4833,12 @@ async def execute_build(
                 "（`evaluate_layout()` 只出报告、**不写留痕**，在人工痕迹两步闸里帮不上忙。）")
         else:
             try:
-                _save_user_edits_question(traces, level, mode)
+                _path3 = _save_user_edits_question(traces, level, mode)
                 warns.append(
                     f"✅ 演练**顺带留痕**：这一批问的是哪几行（{len(traces)} 行）→ "
                     f"`{USER_EDITS_PATH.name}` —— 第 2 步会拿它核对。"
                     "（⚠ 这是 `dry_run` **唯一**一处写入：我们自己的 JSON，**关卡一个 Actor 都没动**。）")
+                warns.append(_handoff_line(len(traces)))
             except OSError as exc:
                 warns.append(
                     f"⚠ 留痕没写成（{exc}）—— 这次**没留下**『问过哪几行』的记录，第 2 步会被拒。")
@@ -4388,13 +4849,19 @@ async def execute_build(
                 _named_tip = f"only_labels={_labels_tip!r}, "
             _tip = f"`execute_build({_named_tip}accept_user_edits=true, user_quote=…)`"
             warns.append(
-                "两步走完才是覆盖：**把上面那条人工痕迹清单原样交给用户、停下等他打字** → "
-                f"拿到他的原话再调 {_tip}"
-                "（只动那几行，其余行一个都不碰）。"
+                "⚠ **下一步只有这一件事**：把上面那条人工痕迹清单**原样交给用户**、"
+                "**停下等他打字** → 拿到**他本人的原话**再调 " + _tip
+                + "（只动那几行，其余行一个都不碰）。"
                 "⚠ 想**保住**他的手改就别传覆盖开关：走阶段二把新位置写回 plan"
                 "（`request_plan_change` → `generate_plan(patch=…)` → 重画图 → 用户看图确认）。")
 
     if dry_run:
+        # ⚠ **顺手落一份指令表留痕件**（2026-10-04：原来是独立工具 `generate_build_orders`，
+        #   现在并到这里 —— 它是纯翻译件、不参与任何闸门；`dry_run` 本来就会写 `user_edits` 留痕）。
+        try:
+            await _orders_snapshot()
+        except (OSError, ToolError) as exc:
+            warns.append(f"⚠ 指令表留痕件没落成（{exc}）—— 这次**没有** `build_orders_v1.json`。")
         if mode == "incremental":
             diff_dry = _incremental_diff(
                 targets, same, gone, changed, orders, reclaim_actor, drifted, manual,
@@ -4408,7 +4875,9 @@ async def execute_build(
                 "没动": 0,
                 "人工改过（现状与台账不符）": {m["label"]: m["why"] for m in manual},
                 "台账解释不了的活 Actor": unknown_refs,
+                "关卡现状没比成的行（≠没问题）": {u["label"]: u["why"] for u in unreadable},
             }
+        diff_dry["关卡现状没比成的行（≠没问题）"] = {u["label"]: u["why"] for u in unreadable}
         dry_warns = [
             f"演练：当前 `{OUR_FOLDER_ROOT}/` 下有 {len(live_refs)} 个 Actor"
             "（全量会把它们全清掉重摆；增量只动差异那几行）。",
@@ -4456,8 +4925,45 @@ async def execute_build(
             warns.append(f"清旧 Actor 失败：{ref}（{exc}）")
 
     # ---------- ② 按表落 ----------
-    results, cost = await _place_rows(ctx, targets)
-    calls += cost
+    # 两条路（2026-10-04）：默认官方**脚本批处理**（一次调用落完整批）；`batch=false` 逐行。
+    # 两者的**校验、清场、读回、台账一个字都没变** —— 换的只是"落"这一步的往返方式。
+    placed_out = await _place_rows(ctx, targets, batch=batch)
+    calls += placed_out.transport_calls
+    inner_calls = placed_out.inner_calls
+    if placed_out.hard_error:
+        # ⚠ **拿不到逐行结果 = 结果未知**：这里**不许**猜成"一行都没落成"（那是编），也
+        #   **不许**悄悄退回逐行重摆（那是"静默降级"，而且会把已落下的行再摆一遍 ——
+        #   实测过 `_live_vs_ledger` 认分组不认名字，重摆出来的是一批新 Actor）。
+        #   所以：不读回、不补材质、**不写台账**（台账里装不下"未知"），如实报 + 给三条出路。
+        warns.append(
+            "🔴 **脚本批处理通道整体失败 —— 关卡里到底落了没有「未知」（不是 0）**："
+            f"{placed_out.hard_error}。"
+            "本次**没有写台账**、没有读回对账、没有补材质 —— 因为我们**没拿到逐行结果**，"
+            "而「结果未知」这件事不许被写成任何一个数字。")
+        warns.append(
+            "出路（按代价从低到高）：① 先 `evaluate_layout()` 看现场到底有什么；"
+            "② **用 `batch=false` 重跑**（逐行老路：一行一次调用，失败只影响那一行，"
+            "而且落成的行会进台账）；③ 现场看着是完整的，就 `adopt=true` 把现状认领成台账。"
+            "⚠ 别在这时候盲目重跑 `batch=true` —— 已经落下的行会被再摆一遍。")
+        warns.append("**全程未存盘** —— 关卡里有没有变脏，请你在 UE 里看标题栏的未保存标记。")
+        return BuildReport(
+            stage=f"阶段三 · 批量落关卡（{mode}）",
+            level=level, dry_run=False, refused=False,
+            reason=f"脚本批处理通道整体失败（结果未知）：{placed_out.hard_error}",
+            plan_hash=gate["plan_hash"], planned=len(rows), removed=removed,
+            placed=0, verified=0, mismatches=[], groups={}, rows=[],
+            mode=mode, ledger_path="", ledger_written=False,
+            diff={"要删": len(remove_refs), "要摆": len(targets), "结果": "未知（脚本通道失败）"},
+            official_calls=calls, placement=placed_out.method, inner_calls=0,
+            next_step=(
+                "🔴 **先别当成「没搭」、也别当成「搭好了」**：脚本通道整体失败，"
+                "关卡里落了多少**未知**。"
+                "① 跑 `evaluate_layout()` 看现场（plan ↔ 台账 ↔ 关卡现状）；"
+                "② 按报告决定：缺的用 `batch=false` 重跑补上，或 `adopt=true` 认领现状；"
+                "③ 台账**这次没写**（`ledger_written=false`）—— 下次增量前先把基线对齐。"),
+            warnings=warns,
+        )
+    results = placed_out.results
 
     # ---------- ③ 读回对账 ----------
     checked = await _verify_rows(ctx, results, targets, verify_mode, warns)
@@ -4475,6 +4981,22 @@ async def execute_build(
     for res, r in zip(results, targets):
         if res.ok:
             groups[r["folder"]] = groups.get(r["folder"], 0) + 1
+
+    # ⚠ **落位走的是哪条路必须报出来**（2026-10-04）：批处理省的只是**往返**，不是引擎工作量 ——
+    #   把 `official_calls`（编排层→官方的往返次数）与 `inner_calls`（脚本内实际执行了几次工具调用）
+    #   **分开说清**，免得"调用次数大幅下降"被读成"活干少了"。
+    if placed_out.method == "per_row":
+        warns.append(
+            f"落位走的是**逐行**老路（`batch=false`）：编排层→官方 "
+            f"**{placed_out.transport_calls}** 次调用、脚本内 0 次。"
+            "⚠ 它与批处理那条路的台账应当**逐行一致** —— 对不上就是哪条路有 bug，别放过。")
+    else:
+        warns.append(
+            f"落位走的是**官方脚本批处理**（`execute_tool_script`）：编排层→官方 "
+            f"**{placed_out.transport_calls}** 次调用，脚本内实际执行 **{inner_calls}** 次工具调用。"
+            "⚠ **两个数别混**：省的是往返与上下文，引擎那边的活一样多。"
+            "校验 / 清场 / 读回对账**都没进脚本**（那条边界是实测划的：那个沙箱没有文件系统、"
+            "没有网络，台账与几何指纹只能在编排层算）。")
 
     after_refs, after, cost = await _recount_and_heal(ctx, results, targets, warns)
     calls += cost
@@ -4515,12 +5037,13 @@ async def execute_build(
     new_ledger_rows = _write_ledger_rows(
         rows, results, targets, ledger_by_uid, verified_uids, size_back, reclaim_actor,
         matched_uids, bad_by_uid)
-    ledger_path = _save_build_state(level, gate["plan_hash"], mode, new_ledger_rows)
+    ledger_path = _save_build_state(level, gate["plan_hash"], mode, new_ledger_rows,
+                                    placement=placed_out.method, inner_calls=inner_calls)
 
     # ⚠ **销账放在这里，不放闸那边**（2026-10-03 改）：真跑**落完了**（台账已写）才把这次问答
     #   移进 `history`、清掉 `asked_at` —— 意味着"这一次的同意用掉了，下一批人工痕迹要重新走两步"。
     #   为什么不能早点销（原来在 `_user_edits_gate` 通过时就销）：删到一半失败 / 官方中途报错时，
-    #   用户**已经给出的同意和他那句原话**会先被消费掉，重试要**重新问、重新等 15 秒**。
+    #   用户**已经给出的同意和他那句原话**会先被消费掉，重试要**重新问、重新等 5 秒**。
     #   同意是**人的动作**，不该被一次没干成的执行吃掉。
     if _quote_ok:
         try:
@@ -4608,6 +5131,9 @@ async def execute_build(
         warns.append(
             f"⚠ 本次模式：**全量重摆**（{mode_why or 'mode=full'}）—— 删了 {removed} 个、摆了 {placed} 个、"
             f"官方调用 {calls} 次。**下次只改几行时别传 `mode`**：默认 `auto` 只会动变动的那几个。")
+    # ⚠ 「没比成」的行也要进报告（2026-10-04 加固）—— 只写进 `warnings` 的话，
+    #   读 `diff` 的人（或下一次会话）看不到"还有几行根本没查成"。
+    diff_summary["关卡现状没比成的行（≠没问题）"] = {u["label"]: u["why"] for u in unreadable}
     if manual:
         # 客户原话：「它不会告诉我『用户手动改了地皮你别删』」—— 这一条就是那句"告诉"。
         # ⚠ 覆盖那一路必须**带上人的凭据**（`user_quote`）—— 不然这条报文只有"覆盖了"三个字，
@@ -4635,7 +5161,7 @@ async def execute_build(
         plan_hash=gate["plan_hash"], planned=len(rows), removed=removed, placed=placed,
         verified=verified, mismatches=mismatches, groups=groups, rows=results,
         mode=mode, ledger_path=ledger_path, ledger_written=True, diff=diff_summary,
-        official_calls=calls,
+        official_calls=calls, placement=placed_out.method, inner_calls=inner_calls,
         next_step=(
             (f"增量完成：这次动了 {len(targets)} 行（落成 {placed}、删掉 {removed}），"
              f"**没动的 {len(same)} 行原样留着**。"
@@ -4658,7 +5184,7 @@ async def execute_build(
              "（`rows` 里 `ok=false` 的就是没落成的）；② `mismatches` 非空就逐条查；"
              "③ 还要改就回阶段二：改 plan → **重画图（写新指纹 + 本轮变更集那几行）** → "
              "让用户看图确认 → "
-             "`generate_build_orders()` → 再 `execute_build(mode=\"incremental\")`；"
+             "`execute_build(dry_run=true)` → 再 `execute_build(mode=\"incremental\")`；"
              "④ 存不存盘由你在 UE 里决定（阶段三自己绝不存）。")
             if mode == "incremental" else
             (f"① 在 UE 里看：outliner 的 `{OUR_FOLDER_ROOT}/` 下应当有 {len(rows)} 个 Actor"
@@ -4895,8 +5421,9 @@ async def export_layout(
                      "⚠ 必须绝对路径 —— 相对路径会被解析到**引擎目录**并被拒（实测踩到），"
                      "而官方没有『取工程目录』的工具，所以这条路得你给，不是我们猜"))] = "",
 ) -> ExchangeReport:
-    """**阶段四 · 导出/交换**：把当前布局导成一份**与 DCC 无关**的场景描述。
-    ⚠ **编排内部件**：只在"要把这套布局搬到别的 DCC"时才需要；平时不用调。
+    """
+    【场景⑥ 导出·对账·出图】什么时候用我：要把布局交给 Blender 等 DCC 时 —— 我导出与 DCC 无关的场景描述。**阶段四 · 导出/交换**：把当前布局导成一份**与 DCC 无关**的场景描述。
+        ⚠ **编排内部件**：只在"要把这套布局搬到别的 DCC"时才需要；平时不用调。
 
     给谁用：**Blender / UE 之间搬同一套布局**（用户 2026-09-27：「以后方便在 Blender 和 UE
     等之间切换」）。所以文件里带的是**语义 + 尺寸 + 变换 + 材质 + 层**，不是模型。
@@ -4998,8 +5525,9 @@ async def check_exchange(
     path: Annotated[str, Field(
         description=(f"要比的交换文件；留空 = 我们自己的 `views/exchange/{EXCHANGE_JSON.name}`"))] = "",
 ) -> ExchangeDiffReport:
-    """**阶段四 · 回读对账**：把（可能被 Blender 那边改过的）交换文件与**当前 plan** 逐条比。
-    ⚠ **编排内部件**：只读对账，配合 `export_layout()` 用；平时不用调。
+    """
+    【场景⑥ 导出·对账·出图】什么时候用我：外部改过交换文件、要看看差在哪时 —— 我只出报告、不改 plan。**阶段四 · 回读对账**：把（可能被 Blender 那边改过的）交换文件与**当前 plan** 逐条比。
+        ⚠ **编排内部件**：只读对账，配合 `export_layout()` 用；平时不用调。
 
     ⚠ **本工具不改 plan、不写任何文件** —— 它只出报告。为什么（用户 2026-09-27 定的）：
       几何改动**必须经用户看图点头**（阶段二那道闸），拿外部文件直接改 plan 就是绕过它。
@@ -5094,7 +5622,7 @@ async def check_exchange(
             (f"逐条看 `rows`：改 {changed}、文件新增 {added}、文件删除 {removed}。"
              "要落到 plan：① `request_plan_change(items=[...], by=…)` 把「改什么 / 谁要的」记进台账；"
              "② `generate_plan(patch=[...])` 只改那几行；③ **重画图**（写新指纹 + 本轮变更集那几行）；"
-             "④ 用户看图点头 → `confirm_plan`；⑤ `generate_build_orders()` → "
+             "④ 用户看图点头 → `confirm_plan`；⑤ `execute_build(dry_run=true)` → "
              "`execute_build(mode=\"incremental\")` 只重摆改动的那几个。"
              if (changed or added or removed) else
              "两边一致，不用做什么。要再导一份就把 Blender 那边的改动先写回文件再比。")
@@ -5205,8 +5733,9 @@ async def apply_surfaces(
     only: Annotated[list[str] | None, Field(
         description=("只处理这几个 `element_key`（如 `[\"road\"]`）；留空 = 全部有材质映射的白膜行"))] = None,
 ) -> SurfaceReport:
-    """**阶段五 · 第 1 步**：给白膜**贴表面材质**（不贴的话落下去的就是灰白模）。
-
+    """
+    【场景⑤ 表面与环境】什么时候用我：白膜还是灰的、要把材质贴上去时 —— 只贴**组件级覆盖**，不动几何。**阶段五 · 第 1 步**：给白膜**贴表面材质**（不贴的话落下去的就是灰白模）。
+    
     做四件事：
       ① 读**搭建台账** `views/build_state_v1.json` —— 靠里面记的 **Actor 引用**贴，
          **不重新去关卡里找**（那得重跑一遍识别，是另一码事）；
@@ -5333,6 +5862,519 @@ async def apply_surfaces(
     )
 
 
+# --- 阶段三 · **认领手改**（2026-10-04 加 · ⚠ **尚未实测**）-----------------------------------  【模块：build】
+# 由来（用户原话）：「我人为操作它又画图又重新调用啥的太浪费时间了…人为操作了被发现，并且用户也确认
+#   就用人为操作的就别循环流程了，改个台账为当前现场值就行，只针对人为操作」。
+# 病根：默认那条增量**只比两份我们自己写的文件**（指令表 vs 台账）⇒ `plan == 台账` 时恒报「要动 0 行」；
+#   而"把关卡现状写回 plan"以前**只能走阶段二那条循环**（重规划 → **重画两张图** → 重新确认）——
+#   实测为了认领手拖的 2 cm，跑了 3 分 44 秒。
+# 本工具补的就是这一步：**值从关卡来**（不是从 plan 纸面来）——读现状 → 只改那几行的 plan → 台账也改
+#   成**实测值** → **不摆 Actor、不删 Actor、不重画图**。
+# ⚠ **闸照旧**（不新增机制）：仍要「先问过 + 问的那批就是这批 + 用户原话 + 地板」——
+#   否则 Agent 可以自己把任何漂移"认领"掉，那等于绕开"用户点头"（与 `execute_build` 的覆盖闸同构）。
+#   ⚠ 2026-10-04 把当时的「应答码」撤了（用户指令：「把这个什么码删掉，太离谱了」）。
+# ⚠ **代价照实说**：plan 几何一变 ⇒ 上次确认的指纹作废，而这一次**没有图** ⇒ 报文、`params` 与
+#   `acceptance.json` 里都写「**用户授权的几何变更、未出图**」，事后可对质。
+# ⚠ 只改**被判为"人工改过"的行**（`_live_vs_ledger` 的 `manual`）—— 其余行一个字都不碰。
+# ⚠ **为什么必须连 plan 一起改**：只改台账 ⇒ `plan ≠ 台账` ⇒ 下次增量判 `changed`、又把它摆回 plan
+#   （等于白认领）。所以"认领"的终点一定是**两边都变成关卡现状**。
+
+
+@mcp.tool()
+async def adopt_user_edits(
+    ctx: Context[AppContext],
+    only: Annotated[list[str], Field(
+        description=("只认领这几个 `label`（留空 = **全部**「人工改过」的行）。"
+                     "⚠ label 必须与 `plan_v1.json` 里一字不差、**唯一命中**"))] = [],
+    user_quote: Annotated[str, Field(
+        description=("**用户本人的原话**（例：「就用我手改的」）。"
+                     "真用：① 先 `dry_run=true` 列清单 → ② **把清单交给用户、停下等他打字** → "
+                     "③ 再带他那句话回来。⚠ **不许自己编**（编了就是伪造人的确认）；"
+                     "⚠ 2026-10-04 起**不需要什么应答码**（那句『原话里要带码』已作废）"))] = "",
+    dry_run: Annotated[bool, Field(
+        description=("true = 只读关卡现状、列清单 + **留痕**（写我们自己的 JSON），"
+                     "**一个字节都不写**（先看一遍再动手用这个）"))] = False,
+) -> AdoptEditsReport:
+    """
+    【场景④ 落关卡】什么时候用我：用户手改过、且他确认"**就用我手改的**"时 —— 把那几行按**关卡现状**写回 plan 与台账（不摆 Actor、不出图、不走阶段二循环）。阶段三 · **认领手改**：把「人工改过」的那几行，按**关卡现状**写回 plan 与台账。
+    
+    它替掉的是哪条烂路：`plan == 台账`、但关卡里那几行被人手拖过时，默认增量恒报「要动 0 行」，
+    于是只能走阶段二那条循环（`request_plan_change` → `generate_plan` → **重画两张图** → `confirm_plan`
+    → 再落）。用户原话：「太浪费时间了…就用我人为操作的就别循环流程了，改个台账为当前现场值就行」。
+
+    它做什么（顺序不能反）：
+      ① 读 plan（闸门照旧：**必须已确认、指纹对得上**）+ 台账（**没有基线就拒收**）；
+      ② 读关卡现状（`_live_vs_ledger`）→ 只挑**被判为"人工改过"的那些行**；
+      ③ `dry_run`：列清单 + **留痕** —— **一个字节都不写**；
+      ④ 真跑：过**同一道两步闸**（问过 / 同一批 / 有他本人的原话 / 地板）→ 把那几行按现状
+         **打补丁写回 plan**（只这几行）→ 台账那几行改成**实测值**（`readback=true`）→
+         把 plan 标成「用户已确认（手改认领）」→ 落盘（自动留档上一版、清掉不认新指纹的旧图）；
+      ⑤ **一个 Actor 都不动**（不摆、不删），**也不重画图**。
+
+    ⚠ **只管"人工改过"的行**：plan 自己改过的行（`changed`）不归它 —— 那是 `execute_build` 的活。
+    ⚠ 白膜行的 `height_m` 要读组件尺寸：**读不回来就跳过那一行**（不猜），并在报文里点名。
+    ⚠ 认领之后 `get_plan().acceptance.state` 会显示「**等出图**」—— 那是**如实**的：几何确实变了、
+      而这一次**没有图**。要恢复正常验收就走阶段二重画两张图。
+    """
+    warns: list[str] = []
+    calls = 0
+    planning = _planning_modules()
+    plan_path = planning.OUT_JSON
+    if not plan_path.exists():
+        raise ToolError("拒绝认领：**还没有规划**（`views/plan_v1.json` 不在）—— 一个字节都没写。")
+    plan = json.loads(plan_path.read_text(encoding="utf-8-sig"))
+    gate = planning.gate_check(plan)
+    if not (gate.get("confirmed") and gate.get("plan_hash_ok")):
+        raise ToolError(
+            "拒绝认领：**这一版规划没确认，或指纹对不上** —— 一个字节都没写。\n"
+            f"（`confirmed={gate.get('confirmed')}` / `plan_hash_ok={gate.get('plan_hash_ok')}`）\n"
+            "认领的前提是「有一版确认过的 plan 可以改」；先 `get_plan()` 看清状态。")
+
+    scan = await _scan_live_level(ctx, "incremental", dry_run, False, warns)
+    calls += scan.used
+    level = str(scan.level or "")
+    ledger = scan.ledger if isinstance(scan.ledger, dict) else {}
+    ledger_rows = [x for x in (ledger.get("rows") or []) if isinstance(x, dict)]
+    if not ledger_rows:
+        raise ToolError(
+            "拒绝认领：**没有搭建台账**（或台账是空的）—— 没有基线就谈不上「与台账不符」。\n"
+            "关卡里已经搭好了的话，先用 `execute_build(mode=\"incremental\", adopt=true)` 认领现状。")
+
+    manual, _unreadable, used = await _live_vs_ledger(ctx, ledger_rows, set(scan.live_refs))
+    calls += used
+    by_label = {str(m.get("label") or ""): m for m in manual if str(m.get("label") or "")}
+    if only:
+        miss = [x for x in only if x not in by_label]
+        if miss:
+            raise ToolError(
+                "拒绝认领：这些 `label` **不在「人工改过」的那批里** —— 一个字节都没写："
+                + "、".join(f"`{x}`" for x in miss)
+                + "\n· 只认**确实与台账不符**的行（`only` 只能收窄、不能扩大）；"
+                  "想看现场到底什么样 → `evaluate_layout()`（只读）。")
+        picked = [by_label[x] for x in only]
+    else:
+        picked = list(manual)
+
+    if not picked:
+        return AdoptEditsReport(
+            stage="阶段三 · 认领手改", dry_run=dry_run, level=level,
+            adopted=0, skipped=0, planned=0, rows=[],
+            plan_hash_before=str(gate.get("plan_hash") or ""), plan_hash_after="",
+            ledger_path="", official_calls=calls,
+            next_step=("**没有「人工改过」的行** —— 关卡现状与台账一致，没什么可认领的。"
+                       "（⚠ 这只说明**扫描到的那些行**与台账一致；要全表看清用 `evaluate_layout()`。）"),
+            warnings=warns)
+
+    traces = [{"label": str(m.get("label") or ""),
+               "why": [f"现状与台账不符：{'；'.join(m.get('why') or [])}"]} for m in picked]
+
+    if dry_run:
+        _p = _save_user_edits_question(traces, level, "adopt_edits")
+        warns.append("演练：**一个字节都没写**（连 plan / 台账都没改）。")
+        warns.append(_handoff_line(len(traces)))
+        return AdoptEditsReport(
+            stage="阶段三 · 认领手改（演练）", dry_run=True, level=level,
+            adopted=0, skipped=0, planned=len(traces),
+            rows=[{"label": t["label"], "why": t["why"], "status": "would_adopt"} for t in traces],
+            plan_hash_before=str(gate.get("plan_hash") or ""), plan_hash_after="",
+            ledger_path=str(USER_EDITS_PATH), official_calls=calls,
+            next_step=(f"演练：会把 {len(traces)} 行**按关卡现状**写回 plan 与台账（**不动任何 Actor**）。"
+                       "要真做：把上面那份清单交给用户、停下等他打字 → "
+                       "再调 `adopt_user_edits(user_quote=\"他本人的原话\")`。"),
+            warnings=warns)
+
+    quote = _user_edits_gate(traces, level, "adopt_edits", user_quote)
+
+    patch: list[dict] = []
+    skipped: list[str] = []
+    for m in picked:
+        live = m.get("live") if isinstance(m.get("live"), dict) else {}
+        loc = live.get("loc")
+        if not (isinstance(loc, list) and len(loc) == 3):
+            skipped.append(f"{m.get('label')}（**读不到它的位置**）")
+            continue
+        pos_m = [round(float(loc[0]) / 100.0, 3), round(float(loc[1]) / 100.0, 3)]
+        yaw = float(live.get("yaw") or 0.0)
+        st: dict = {"pos": pos_m, "rot_deg": round(yaw, 3)}
+        if str(m.get("kind") or "") == "asset":
+            sc = live.get("scale")
+            if not (isinstance(sc, list) and len(sc) == 3):
+                skipped.append(f"{m.get('label')}（**读不到它的缩放**）")
+                continue
+            sx, sz = float(sc[0]), float(sc[2])
+            st["scale"] = round(sx, 4)
+            if sx and abs(sz / sx - 1.0) > 1e-4:
+                st["scale_z"] = round(sz / sx, 4)
+        else:
+            dim = live.get("size_cm")
+            if not (isinstance(dim, list) and len(dim) == 3):
+                skipped.append(f"{m.get('label')}（**白膜尺寸读不回来** —— 不猜厚度，跳过这一行）")
+                continue
+            st["footprint_m"] = [round(float(dim[0]) / 100.0, 3), round(float(dim[1]) / 100.0, 3)]
+            st["height_m"] = round(float(dim[2]) / 100.0, 3)
+        patch.append({"op": "set", "label": str(m.get("label") or ""), "set": st})
+
+    if not patch:
+        raise ToolError("拒绝认领：**这几行都读不到现状值**（位置 / 缩放 / 白膜尺寸）—— 一个字节都没写。\n"
+                        "· " + "；".join(skipped))
+    if skipped:
+        warns.append("⚠ 这几行**跳过**了（读不到现状值，不猜）：" + "；".join(skipped))
+
+    plan = planning.record_change_request(
+        plan, items=[f"用户手改认领：{len(patch)} 行按关卡现状写回（`adopt_user_edits`）"],
+        by="用户", reason=str(quote))
+    a_rows, b_rows, notes = _apply_plan_patch(plan, patch)
+    new_plan = planning.build_plan(a_rows, b_rows, plan.get("world") or {}, params=plan.get("params"))
+    new_plan = planning.mark_confirmed(new_plan, "用户（手改认领）", str(quote))
+    _pp = new_plan.setdefault("params", {})
+    if isinstance(_pp, dict):
+        _pp["手改认领（2026-10-04）"] = (f"{len(patch)} 行按关卡现状写回；依据 = 用户原话「{quote}」"
+                                        "；⚠ **本次未出图**（用户授权的几何变更）")
+    info = _write_plan(new_plan)
+    new_hash = str((planning.gate_check(new_plan) or {}).get("plan_hash") or "")
+
+    live_by_uid = {str(m.get("uid") or ""): m for m in picked}
+    new_rows: list[dict] = []
+    touched = 0
+    for old in ledger_rows:
+        m = live_by_uid.get(str(old.get("uid") or ""))
+        if not m:
+            new_rows.append(old)
+            continue
+        live = m.get("live") if isinstance(m.get("live"), dict) else {}
+        row = dict(old)
+        if isinstance(live.get("loc"), list) and len(live["loc"]) == 3:
+            row["loc_cm"] = [num(float(x)) for x in live["loc"]]
+        if isinstance(live.get("yaw"), (int, float)):
+            row["yaw"] = num(float(live["yaw"]))
+        if isinstance(live.get("scale"), list) and len(live["scale"]) == 3:
+            row["scale"] = [num(float(x)) for x in live["scale"]]
+        if str(old.get("kind") or "") == "whitebox" and isinstance(live.get("size_cm"), list) \
+                and len(live["size_cm"]) == 3:
+            row["size_cm"] = [num(float(x)) for x in live["size_cm"]]
+        row["readback"] = True
+        row["adopted_edits_at"] = datetime.now(timezone.utc).isoformat()
+        new_rows.append(row)
+        touched += 1
+    ledger_path = _save_build_state(level, new_hash, "adopt_edits", new_rows,
+                                    placement="adopt_edits")
+    if info.get("archived"):
+        warns.append(f"上一版 plan 已留档：{info.get('archived')}")
+    stale_figs = info.get("cleared_figures") or info.get("cleared") or []
+    if stale_figs:
+        warns.append("⚠ 这些旧图**不认新指纹**、已自动移进 `views/archive/`："
+                     + "、".join(str(x) for x in stale_figs)
+                     + "（认领**没有出图** —— 要恢复正常验收就重画两张图）。")
+    warns.append("⚠ **本次是「认领手改」**：几何按**关卡现状**变了 ⇒ 指纹更新、上次确认作废，"
+                 "而**这一次没有出图**。`get_plan().acceptance.state` 会显示「等出图」—— 那是**如实**的。")
+    warns.append("**一个 Actor 都没动**（不摆、不删）；**未存盘** —— 关卡脏不脏由你在 UE 里看。")
+
+    return AdoptEditsReport(
+        stage="阶段三 · 认领手改", dry_run=False, level=level,
+        adopted=touched, skipped=len(skipped), planned=len(patch),
+        rows=[{"label": str(m.get("label") or ""), "why": list(m.get("why") or []),
+               "status": "adopted"} for m in picked],
+        plan_hash_before=str(gate.get("plan_hash") or ""), plan_hash_after=new_hash,
+        ledger_path=ledger_path, official_calls=calls,
+        next_step=(f"认领完成：{touched} 行按关卡现状写回 plan 与台账（**一个 Actor 都没动**）。"
+                   f"plan 新指纹 `{new_hash[:10]}…`。"
+                   "① 现在 plan 与关卡一致了 ⇒ 下次增量**不会**再把手改的摆回去；"
+                   "② ⚠ 这次**没有图**（你授权的）—— 要恢复「图与数据一致」就重画两张图；"
+                   "③ 存不存盘由你在 UE 里决定。"),
+        warnings=warns)
+
+
+# --- 阶段五 · 第 0 步：**从零建材质**（2026-10-04 加 · ⚠ **尚未实测**）---------------------  【模块：surfaces】
+# 「谁消费 / 要什么闸门」先定清楚（AGENTS 的架构原则要求这么接新能力）：
+#   · **谁消费**：`apply_surfaces()` —— 它的"整批拒收"就发生在"材质不存在"上（现场：6 个
+#     `/Game/UEMCP/Materials/M_*` 工程里没有 → 一个都不贴 → 白模）。
+#   · **闸门**：`dry_run` 先列清单（会建哪些路径 / 连哪几个输出 / 用什么表达式类）→
+#     真跑**整批校验**（配置里有一条不合法 ⇒ 一个都不建）→ 建完**逐条读回核对**
+#     （参数在不在 + 输出接上没）→ 落**台账**（我们建了什么，给回滚用）→ **绝不存盘**
+#     （阶段五纪律），报文里明说"还在内存里，切关卡就没了"。
+SURFACE_CREATE_PATH = VIEWS_DIR / "surface_materials_v1.json"
+"""`create_surfaces()` 的台账：**我们建过哪些材质**（路径 / 参数 / 时间）。
+
+⚠ 它存在的唯一理由：**新建的是 UE 资产**，而本阶段绝不存盘 —— 所以必须留一笔"这是谁建的、
+  用什么参数建的"，将来要删/要查才有据可依（与阶段六环境台账同一个道理）。
+⚠ 这是**我们自己的 JSON**（非 UE 资产、非关卡存盘），不违反硬规矩。"""
+
+
+def _surface_creates() -> tuple[dict, str]:
+    """读 `config/surface_materials.json` 的 **`create` 段**（**每次调用都重读**）。
+
+    返回 `(表, 提示)`：提示非空 = 必须带进 `warnings` 的原因（文件没了 / 不是合法 JSON /
+    **没有 `create` 段**）—— **不静默**（与 `_surface_materials()` 同一条纪律）。
+    """
+    if not SURFACE_MATERIALS_PATH.exists():
+        return {}, (f"没找到材质表配置 `{SURFACE_MATERIALS_PATH}` —— **这次一个材质都不会建**。"
+                    "要建就建这个文件、写 `create` 段（形状见该文件的 `_doc`）。")
+    try:
+        doc = json.loads(SURFACE_MATERIALS_PATH.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as exc:
+        return {}, f"材质表读不动 / 不是合法 JSON（{exc}）—— **这次一个材质都不会建**。"
+    if not isinstance(doc, dict):
+        return {}, "材质表的顶层不是对象 —— **这次一个材质都不会建**。"
+    cre = doc.get("create")
+    if cre is None:
+        return {}, ("材质表里**没有 `create` 段** —— 这一版一个材质都不会建"
+                    "（`apply_surfaces` 只能贴**已存在**的材质；要建就按 `_doc` 里的形状加 `create` 段）。")
+    if not isinstance(cre, dict):
+        return {}, ("`create` 段不是对象 —— **这次一个材质都不会建**"
+                    "（正确形状：`\"create\": {\"/Game/你的目录/M_X\": {...}}`）。")
+    return {str(k): v for k, v in cre.items() if isinstance(v, dict)}, ""
+
+
+def _create_plan_item(path: str, spec: dict) -> tuple[dict, str]:
+    """把 `create` 段里的一条翻译成**照做清单**；不合法就返回 `(空, 原因)` —— **不猜**。
+
+    ⚠ 键名必须落在 `MAT_OUTPUTS` 里（= 官方 `EMaterialProperty` 去掉 `MP_` 前缀）——
+      不在里面就**拒收那一条**，而不是猜它该连到哪个输出。
+    ⚠ 值：**4 个数的数组 → 向量参数**（LinearColor）；**数字 → 标量参数**。
+    """
+    if "/" not in path:
+        return {}, f"`{path}` 不是包路径（例：`/Game/UEMCP/Materials/M_Road`）"
+    folder, name = path.rsplit("/", 1)
+    if not path.startswith("/Game/") or not name or not folder:
+        return {}, (f"`{path}` 不是 `/Game/...` 形式的**包路径**"
+                    "（例：`/Game/UEMCP/Materials/M_Road`）")
+    params: list[dict] = []
+    bad: list[str] = []
+    for k, v in spec.items():
+        if str(k).startswith("_"):
+            continue
+        if k not in MAT_OUTPUTS:
+            bad.append(f"`{k}` 不在允许的参数名里（允许：{'、'.join(MAT_OUTPUTS)}）")
+            continue
+        if isinstance(v, bool):
+            bad.append(f"`{k}` 的值是布尔（{v}）—— 布尔请放进 `_flags`（材质开关）")
+        elif isinstance(v, (list, tuple)):
+            if len(v) != 4:
+                bad.append(f"`{k}` 的数组要**4 个数**（LinearColor r/g/b/a），收到 {len(v)} 个")
+            else:
+                try:
+                    params.append({"output": str(k), "kind": "vector",
+                                   "value": [float(x) for x in v]})
+                except (TypeError, ValueError):
+                    bad.append(f"`{k}` 的数组里有非数字：{v!r}")
+        elif isinstance(v, (int, float)):
+            params.append({"output": str(k), "kind": "scalar", "value": float(v)})
+        else:
+            bad.append(f"`{k}` 的值既不是 4 个数的数组、也不是数字（收到 {type(v).__name__}）")
+    if not params:
+        bad.append("**一个参数都没有**（只写 `_flags` / `_note` 建出来的是一块默认灰材质）")
+    if bad:
+        return {}, f"`{path}`：配置不合法 —— " + "；".join(bad)
+    raw_flags = spec.get("_flags")
+    flags = ({str(k): v for k, v in raw_flags.items()} if isinstance(raw_flags, dict) else {})
+    return ({"path": path, "folder": folder, "name": name, "params": params,
+             "flags": flags, "note": str(spec.get("_note") or "")}, "")
+
+
+@mcp.tool()
+async def create_surfaces(
+    ctx: Context[AppContext],
+    only: Annotated[list[str], Field(
+        description=("只建这几个**包路径**（如 `[\"/Game/UEMCP/Materials/M_Road\"]`）；"
+                     "留空 = 建 `create` 段里的全部（**已存在的一律跳过**，幂等）"))] = [],
+    dry_run: Annotated[bool, Field(
+        description=("true = 只算「会建哪些材质 / 连哪几个输出」并逐个 `exists()` 验一遍，"
+                     "**一个字节都不写**（先看一遍再动手用这个）"))] = False,
+) -> CreateSurfacesReport:
+    """
+    【场景⑤ 表面与环境】什么时候用我：材质表指向的材质**还不存在**时（那会让 `apply_surfaces` 整批拒收 → 白模）—— 我按配置把它们建出来。阶段五 · **第 0 步**：把 `config/surface_materials.json` 的 `create` 段里、**当前还不存在**的材质建出来。
+    
+    为什么要有它：`apply_surfaces()` 只能贴**已存在**的材质 —— 现场那 6 个 `/Game/UEMCP/Materials/M_*`
+    工程里没有 → 它逐个 `exists()` 不过 → **整批拒收、一个都不贴**（结果就是白模）。
+    缺的这一半（**建材质**）官方本来就有工具（`MaterialTools`：`create_material` /
+    `add_expression` / `connect_to_output` / `recompile`）—— **缺的是编排**。
+
+    它做什么（一条一条，**顺序不能反**）：
+      ① 读 `create` 段（每次重读，改配置不用改代码、不用重启）；**整批校验**：
+         有任意一条不合法（参数名不在允许集 / 值不是数字或 4 元数组 / 路径不是包路径）⇒
+         **拒收，一个都不建**（与 `apply_surfaces` / `confirm_assets` 同一条纪律）；
+      ② 逐个 `exists()`：**已存在 = 跳过**（幂等，绝不覆盖你已有的材质）；
+      ③ 建：`create_material` → 每个参数 `add_expression`（向量 / 标量参数节点）+
+         `set_properties`（参数名 + 默认值）+ `connect_to_output`（连到 `MP_<键名>`）→
+         `_flags`（`twoSided` / `blendMode` 这类材质开关）→ `recompile`；
+      ④ **读回核对**：`list_parameters`（参数在不在）+ `get_property_input`（输出接上没）——
+         对不上的**原地报出来**（`items[].error`），不掩饰；
+      ⑤ 落台账 `views/surface_materials_v1.json`（**我们建了什么**，给回滚/追查用）。
+
+    ⚠ **只建"空材质 + 几个参数节点"**，不是材质图：要贴图 / 混合 / 蒙版请你在 UE 材质编辑器里做，
+      再把路径填进 `materials` 段（那才是 `apply_surfaces` 用的那张表）。
+    ⚠ **绝不存盘**（阶段五纪律）：新建的材质**只在内存里** —— 切关卡 / 关编辑器就没了，
+      建完请你在 UE 里按 **Ctrl+S**。
+    ⚠ **尚未实测**（2026-10-04 写好）：`parameterName` / `defaultValue` 这两个**表达式属性名**
+      是按官方常规命名写的（见顶部 `MAT_PARAM_*` 常量）—— 真跑若报错，官方原文会带出来，
+      改那两个常量即可，**不用改逻辑**。第一次真跑请先 `dry_run=true`。
+    """
+    warns: list[str] = []
+    calls = 0
+
+    table, note = _surface_creates()
+    if note:
+        warns.append(note)
+
+    plans: list[dict] = []
+    bads: list[str] = []
+    for path in sorted(table):
+        if only and path not in only:
+            continue
+        item, why = _create_plan_item(path, table[path])
+        (bads if why else plans).append(why or item)
+    if bads:
+        raise ToolError(
+            "拒绝建材质：**配置里有不合法的条目** —— 一个都没建：\n· " + "\n· ".join(str(b) for b in bads)
+            + "\n（形状见 `config/surface_materials.json` 的 `_doc`；参数名必须是官方 "
+              "`EMaterialProperty` 去掉 `MP_` 前缀的那个名字。）")
+
+    todo: list[dict] = []
+    already: list[str] = []
+    for it in plans:
+        calls += 1
+        got = await call_official(ctx, "exists", {"path": it["path"]}, toolset=TS_ASSET)
+        (already if bool(got) else todo).append(it["path"] if bool(got) else it)
+
+    if dry_run:
+        return CreateSurfacesReport(
+            stage="阶段五 · 第 0 步（建材质 · 演练）", dry_run=True,
+            planned=len(todo), created=0, already=len(already),
+            items=[CreatedMaterial(path=it["path"], folder=it["folder"], name=it["name"],
+                                   outputs=[p["output"] for p in it["params"]],
+                                   flags=dict(it["flags"]), status="would_create",
+                                   note=str(it["note"])) for it in todo],
+            ledger_path="", official_calls=calls,
+            next_step=(f"演练：会建 {len(todo)} 块材质（已存在 {len(already)} 块，跳过）。"
+                       "要真做就去掉 `dry_run` 重调；⚠ 建完**不会自动存盘**，记得在 UE 里 Ctrl+S。"),
+            warnings=warns + ["演练：**一个字节都没写**（连材质都没建）。"])
+
+    ledger_prev: list[dict] = []
+    try:
+        _prev = json.loads(SURFACE_CREATE_PATH.read_text(encoding="utf-8-sig"))
+        if isinstance(_prev, dict) and isinstance(_prev.get("created"), list):
+            ledger_prev = list(_prev["created"])
+    except (OSError, ValueError):
+        ledger_prev = []
+
+    items: list[CreatedMaterial] = []
+    created = failed = 0
+    for it in todo:
+        errs: list[str] = []
+        ref = ""
+        try:
+            calls += 1
+            got = await call_official(
+                ctx, "create_material",
+                {"folder_path": it["folder"], "asset_name": it["name"]}, toolset=TS_MATERIAL)
+            ref = _ref_path(got)
+            if not ref:
+                raise ToolError("官方没返回材质引用（建失败）")
+            for i, p in enumerate(it["params"]):
+                calls += 1
+                expr = await call_official(ctx, "add_expression", {
+                    "material_or_function": {"refPath": ref},
+                    "expression_class": {"refPath": (MAT_EXPR_VECTOR if p["kind"] == "vector"
+                                                     else MAT_EXPR_SCALAR)},
+                    "x": -400, "y": 180 * i}, toolset=TS_MATERIAL)
+                eref = _ref_path(expr)
+                if not eref:
+                    raise ToolError(f"加参数节点 `{p['output']}` 没返回引用")
+                raw = ({"r": p["value"][0], "g": p["value"][1], "b": p["value"][2], "a": p["value"][3]}
+                       if p["kind"] == "vector" else p["value"])
+                calls += 1
+                await call_official(ctx, "set_properties", {
+                    "instance": {"refPath": eref},
+                    "values": json.dumps({MAT_PARAM_NAME_PROP: p["output"],
+                                          MAT_PARAM_VALUE_PROP: raw})}, toolset=TS_OBJECT)
+                calls += 1
+                await call_official(ctx, "connect_to_output", {
+                    "expression": {"refPath": eref}, "output_name": "",
+                    "material_property": f"MP_{p['output']}"}, toolset=TS_MATERIAL)
+            if it["flags"]:
+                calls += 1
+                await call_official(ctx, "set_properties", {
+                    "instance": {"refPath": ref}, "values": json.dumps(it["flags"])},
+                    toolset=TS_OBJECT)
+            calls += 1
+            await call_official(ctx, "recompile",
+                                {"material_or_function": {"refPath": ref}}, toolset=TS_MATERIAL)
+        except ToolError as exc:
+            errs.append(str(exc))
+        # 读回核对（建失败就不用核了 —— 那一条已经记了原因）
+        if not errs and ref:
+            try:
+                calls += 1
+                got_params = await call_official(
+                    ctx, "list_parameters", {"material": {"refPath": ref}}, toolset=TS_MATINST)
+                have = {str(x.get("name") or "") for x in (got_params or []) if isinstance(x, dict)}
+                miss = [p["output"] for p in it["params"] if p["output"] not in have]
+                if miss:
+                    errs.append("读回：参数**没建出来**（" + "、".join(miss) + "）")
+                for p in it["params"]:
+                    calls += 1
+                    gi = await call_official(ctx, "get_property_input", {
+                        "material": {"refPath": ref},
+                        "material_property": f"MP_{p['output']}"}, toolset=TS_MATERIAL)
+                    wired = bool(isinstance(gi, dict) and _ref_path(gi.get("expression")))
+                    if not wired:
+                        errs.append(f"读回：输出 `MP_{p['output']}` **没接上**")
+            except ToolError as exc:
+                errs.append(f"读回核对失败（{exc}）—— **这一条没核成**（不是没问题）")
+        if it["flags"]:
+            warns.append(f"⚠ 「{it['name']}」的 `_flags`（{it['flags']}）是**指令值、没读回核对**"
+                         "（本版只读回参数与连线；开关对不对请你在 UE 里看一眼）。")
+        items.append(CreatedMaterial(
+            path=it["path"], folder=it["folder"], name=it["name"],
+            outputs=[p["output"] for p in it["params"]], flags=dict(it["flags"]),
+            status=("ok" if not errs else "failed"), error="；".join(errs), note=str(it["note"])))
+        if errs:
+            failed += 1
+        else:
+            created += 1
+
+    ledger_path = ""
+    if not dry_run:
+        try:
+            save_json(SURFACE_CREATE_PATH, {
+                "stage": "阶段五 · 建材质台账（我们自己的文件；记我们建过哪些材质）",
+                "at": datetime.now(timezone.utc).isoformat(),
+                "note": ("`created` = 本工具**建出来**的材质（路径 + 参数 + 开关）。"
+                         "⚠ 它们**只在 UE 内存里**，存不存盘由用户在编辑器里定；"
+                         "要撤掉就在 UE 里删掉这些资产（我们不改资产、也不删资产）。"),
+                "created": ledger_prev + [
+                    {"path": x.path, "outputs": list(x.outputs), "flags": dict(x.flags),
+                     "status": x.status, "at": datetime.now(timezone.utc).isoformat()}
+                    for x in items if x.status == "ok"],
+            })
+            ledger_path = str(SURFACE_CREATE_PATH)
+        except OSError as exc:
+            warns.append(f"⚠ 台账没写成（{exc}）—— 这次**没留下**「建了什么」的记录。")
+
+    if failed:
+        warns.append(f"⚠ 有 {failed} 块**没建成功 / 没核过** —— 逐条原因在 `items[].error` 里（不掩饰）。")
+    warns.append("**全程未存盘**（阶段五纪律）：新建的材质**只在内存里** —— "
+                 "切关卡 / 关编辑器就没了，请在 UE 里按 **Ctrl+S**。")
+    warns.append("⚠ 建出来的是**空材质 + 参数节点**（不是材质图）；"
+                 "要贴到白膜上，得把路径填进 `config/surface_materials.json` 的 **`materials`** 段"
+                 "（键 = `element_key`，值 = 刚建的包路径），再跑 `apply_surfaces()`。")
+
+    return CreateSurfacesReport(
+        stage="阶段五 · 第 0 步（建材质）", dry_run=False,
+        planned=len(todo), created=created, already=len(already), failed=failed,
+        items=items, ledger_path=ledger_path, official_calls=calls,
+        next_step=(
+            (f"建成 {created} 块、失败 {failed} 块、已存在跳过 {len(already)} 块。"
+             "① **先在 UE 里按 Ctrl+S**（不存盘切关卡就白建）；② 把路径填进 "
+             "`config/surface_materials.json` 的 `materials` 段；③ 跑 `apply_surfaces(dry_run=true)` "
+             "看一遍，再去掉 `dry_run` 真贴。")
+            if created else
+            (f"这次没有材质要建（已存在 {len(already)} 块、计划里 0 块）。"
+             "若你要建新的：往 `create` 段里加一条（形状见该文件 `_doc`），再重调本工具。")),
+        warnings=warns,
+    )
+
+
 # --- [完工-06] 工具 2：确认元素清单 ---  【模块：assets】
 # 实测 2026-09-23T10:26:36Z：catalog/elements.json（14 个元素）由它落盘。
 
@@ -5343,8 +6385,9 @@ async def confirm_elements(
     ],
     source_image: Annotated[str, Field(description="参考图路径（留档用）")] = "",
 ) -> ElementList:
-    """记录**用户已确认**的元素清单 —— 阶段一的第一步。
-
+    """
+    【场景② 资产确认】什么时候用我：读完参考图、要落元素清单时 —— 落完**停下等用户逐条确认**。记录**用户已确认**的元素清单 —— 阶段一的第一步。
+    
     为什么要有这一步：用户的要求是"根据上传图片提取所需资产**让用户确认**"。
     把确认结果落盘有两个好处：
       ① 后面 plan_assets() 不用再传一遍关键词，直接读这份清单
@@ -5501,8 +6544,9 @@ async def plan_assets(
         int, Field(ge=1, le=20, description="每个元素最多列几个候选（默认 4）")
     ] = 4,
 ) -> PlanReport:
-    """按名字找资产 → 报告**找到 / 没找到**，并对每个元素给一句要问用户的话。
-
+    """
+    【场景② 资产确认】什么时候用我：元素清单确认之后 —— 我按名字找资产；名字对不上就是**没找到**（不许猜、不许拿别的顶替）。按名字找资产 → 报告**找到 / 没找到**，并对每个元素给一句要问用户的话。
+    
     查两条路（缺一不可）：
       ① **按资产名** —— 官方 find_assets 的常规能力
       ② **按文件夹名** —— ⚠ 官方只匹配资产名、**不匹配文件夹名**。所以哈希名资产
@@ -5761,8 +6805,9 @@ async def rename_assets(
         bool, Field(description="false = 只预览改名前后路径（默认，安全）；true = 真的改")
     ] = False,
 ) -> RenameReport:
-    """把用户指出的资产改成规范名 —— **默认只预览，不真改**。
-
+    """
+    【场景② 资产确认】什么时候用我：用户给了"存在但没被认出"的资产路径时 —— 我改的是**他工程里的资产包路径**，默认只预览。把用户指出的资产改成规范名 —— **默认只预览，不真改**。
+    
     用在阶段一第 5 步：用户说了"存在但你没找到的那个资产在 XX 路径"，就用它改名，
     以后不会再有人认不出它。
 
@@ -6177,8 +7222,9 @@ async def confirm_assets(
         Field(description="用户确认过的「元素 → 资产」对照表（exists 字段由本工具回填）"),
     ],
 ) -> AssetListDelivery:
-    """**阶段一收尾 + 使用**：验证资产是否真的存在 → 实测尺寸 → 落盘 → 签字 → 输出清单。
-
+    """
+    【场景② 资产确认】什么时候用我：资产找齐之后 —— 我逐条 `exists()` 并记清单，落完**停下等用户确认**。**阶段一收尾 + 使用**：验证资产是否真的存在 → 实测尺寸 → 落盘 → 签字 → 输出清单。
+    
     做七件事：
       ① 逐个调官方 `exists()` **验证路径**（不是形式主义，见下）
       ② **实测尺寸**：网格调官方 `get_bounds`，把包围盒 X×Y×Z 与体积**回填进表**
@@ -6352,8 +7398,9 @@ async def get_asset_list(
         Field(ge=1, le=20, description="每个还没落位的元素最多列几个新候选（默认 5）"),
     ] = 5,
 ) -> AssetListStatus:
-    """取当前**权威资产清单**，并判定它**还作不作数**。动任何东西之前先调它。
-    ⚠ **闸的钥匙**（不是可选步骤）：`_session_prereq_guard` 要它（每个 server 进程一次）；它也负责报「这张清单过没过期」。
+    """
+    【场景① 开场先看】什么时候用我：每轮开场 —— 我判"阶段一清单过没过期"；⚠ 清单状态只认**我的返回值**，别自己读 catalog/asset_list.json 下结论。取当前**权威资产清单**，并判定它**还作不作数**。动任何东西之前先调它。
+        ⚠ **闸的钥匙**（不是可选步骤）：`_session_prereq_guard` 要它（每个 server 进程一次）；它也负责报「这张清单过没过期」。
 
     它回答四个问题：
       ① 有没有使用过清单 —— 没有就别往下走，先用 confirm_assets 落一份；
@@ -6405,10 +7452,12 @@ async def get_asset_list(
             has_list=False,
             stale=None,
             missing_elements=elements,
+            stages=_stage_overview(),
             next_step=(
                 "还没有使用过资产清单：先 confirm_elements 记元素、plan_assets 找资产，"
                 "再用 confirm_assets 落一份表（它会顺手给表记上资产库指纹）。"
                 "**在这之前没有任何『权威清单』可用 —— 禁止凭上下文里的旧表干活。**"
+                "⚠ 想先看**现在整体在第几阶段**：本返回里的 `stages`（或 `get_plan().stages`）。"
             ),
             warnings=["catalog/asset_list.json 不存在。"],
         )
@@ -6551,7 +7600,12 @@ async def get_asset_list(
         new_candidates=found,
         coverage_mode=mode,
         official_calls=calls,
-        next_step=next_step,
+        stages=_stage_overview(),
+        next_step=(
+            "**先看 `stages`：现在整体在第几阶段、依据是什么、下一步该调谁**（与 "
+            "`get_plan().stages` 是**同一份数据**）。以下是本阶段（资产清单）内部的下一步 —— "
+            + next_step
+        ),
         warnings=warnings,
     )
 
@@ -6974,7 +8028,7 @@ def _stage2_next_step(plan: dict, acc: PlanAcceptance, empty: bool = False) -> s
             "（先只读地问一遍 → **把问题交给用户、停下等他打字** → 带他的原话再调一次把答复记下来；"
             "官方没有『新建关卡』的工具），⚠ 现在这是**代码闸**：没拿到答复就调 `execute_build()` "
             "会被拒收。"
-            "**第二步是批量搭建**：`generate_build_orders()` 先把放置表翻成指令表"
+            "**第二步是批量搭建**：`execute_build(dry_run=true)` 先把放置表翻成指令表"
             "（米→厘米、补 Z、plane 压成薄 cube），再 `execute_build()` —— 它整批校验"
             "（闸门/指纹/路径 exists/行数）→ 清掉 `UEMCP/` 下的旧 Actor → **按表一次性全落** → "
             "读回 `get_actor_transform` **与白膜组件尺寸**对账。想先看不动手就传 `dry_run=true`。"
@@ -7054,6 +8108,392 @@ def _stage2_next_step(plan: dict, acc: PlanAcceptance, empty: bool = False) -> s
         "现在**没有任何坐标**：先去拿用户上传的图，走完阶段一（提元素 → 用户确认 → "
         "找资产 → 使用清单），再按图规划每件东西的 `pos` 填进来。**别在没图时编坐标。**"
     )
+
+
+# --- 八阶段总览（2026-10-04 加）· **唯一判据**，挂在开场三件上 ----------------------  【模块：state】
+# 由来（用户原话）：「每次开新对话我都会复制 README 第二段，agent 调用那三个工具（开场三件：
+#   official_status() / get_asset_list() / get_plan()）怎么说也得知道现在是第几阶段，不然开新
+#   对话接手搭建不就乱了吗」。
+# 所以：**阶段名以前只散在各工具各自的报文里**（`execute_build` 的 stage=「阶段三 · …」、
+#   `check_build_target` 的「阶段三 · 步骤 1」、`get_plan` 的「阶段二验收」）—— 接手的人只能自己拼。
+#   现在给出一份**机器可读的总览**：八行，每行 = 阶段 / 状态 / 依据 / 下一步。
+#
+# ⚠ **纪律（本项目最忌讳两套口径）**：判据**只写在这一处** —— 别在别处再算一遍。
+# ⚠ **只读、纯离线**：本函数**一个官方工具都不调、不碰关卡**（预检 ⑩ 用 `inspect.getsource`
+#   钉着这一条）。判据一律用**现成产物**（catalog/ 与 views/ 下的文件 + 规划层现成函数）。
+#   ⚠ 所以它**判不出"真值"**：比如阶段③"到底搭得对不对"要对账得调 `evaluate_layout()`
+#     （那个碰 UE），这里只报**我们自己写的台账**怎么说 —— 依据里写明这一点，不许当成现场证据。
+# ⚠ **文件读不到 / 格式不对 ⇒ 那一行写「未开始」或写清读不到，不猜**。
+# ⚠ 全部读不到时**返回的就是八行空态**（不是错误）—— 每次调用都重读，不做缓存
+#   （与 `_surface_materials()` / `_surface_creates()` 同一条纪律：配置与产物改完立刻生效）。
+
+STAGE_NAMES_8: tuple[str, ...] = (
+    "① 资产确认",
+    "② 平面放置规划（含出图 + 用户看图确认）",
+    "③ 资产布局生成（整体搭建）",
+    "④ 微调",
+    "⑤ 表面材质",
+    "⑥ 环境搭建",
+    "⑦ 评估与闭环迭代",
+    "⑧ 导出/交换（按需 · 往后排）",
+)
+"""现行**八阶段**的权威名字（唯一处）—— 总览里那一行的 `name` 就取它。
+
+⚠ 编号口径（2026-10-04 用户拍板）：「四 · 碰撞检测与布局修正」**已作废**，现行是
+  **四 · 微调**；材质/环境/评估三个编号不变；导出/交换从「四」挪到「八」（按需 · 往后排）。"""
+
+STAGE_STATE_NOT_STARTED = "未开始"
+STAGE_STATE_DOING = "进行中"
+STAGE_STATE_DONE = "已完成"
+STAGE_STATE_NEED_USER = "需你确认"
+"""总览那一行的四个状态取值（**不再多造**）—— 状态只是"这一步有没有东西 / 卡在谁那儿"，
+不是质量判定（本项目不替用户判合格：判据错的时候，绿灯比红灯更坏）。"""
+
+
+def _safe_json(path: Path) -> tuple[Any, str]:
+    """读一份状态 JSON，**读不到也不抛** —— 返回 `(数据, 读不到的原因)`。
+
+    与 `load_json()` 的区别只有一条：它把**为什么读不到**留下来（总览那一行的依据要写清楚
+    「文件不在」还是「格式坏了」——两者对人意味着不同的事）。数据读不到时返回 `(None, 原因)`。
+    """
+    if not path.exists():
+        return None, f"{path.name} 不存在"
+    try:
+        return json.loads(path.read_text(encoding="utf-8-sig")), ""
+    except (OSError, ValueError) as exc:
+        return None, f"{path.name} 读不动（{type(exc).__name__}: {exc}）"
+
+
+def _stage_last_at(doc: dict) -> str:
+    """从一份台账里取**最近一次动作的时间**（`at` / `created_at` / `history` 三选一）。
+
+    ⚠ 环境台账写的是 `created_at` + `history[].at`（没有顶层 `at`），搭建台账写的是顶层 `at`
+      —— 两种形状都在用，所以取法写在这一处，别每个阶段自己想一遍。
+    """
+    at = str(doc.get("at") or doc.get("created_at") or "")
+    hist = doc.get("history")
+    if isinstance(hist, list) and hist and isinstance(hist[-1], dict):
+        at = str(hist[-1].get("at") or at)
+    return at
+
+
+def _stage_acceptance_rows() -> tuple[dict, str]:
+    """取**阶段二验收台账**里的微调计数（④那一行的依据）—— 走现成的 `acceptance_view()`。
+
+    ⚠ **不自己读 `views/acceptance.json` 的字段**：`tuned_count` / `tuned_rows_total` 已经由
+      `planning.acceptance_view()` 带出来了（判据只有那一处）。这里只负责"取不到就说取不到"。
+    """
+    plan_mod = _planning_modules()
+    out_json = getattr(plan_mod, "OUT_JSON", None)
+    if out_json is None:
+        return {}, "规划层没有 OUT_JSON —— 微调计数这次没取到（**不是 0 次**，是没读到）"
+    if not out_json.exists():
+        return {}, "views/plan_v1.json 不存在 —— 微调计数这次没取到（**不是 0 次**，是没读到）"
+    try:
+        plan = json.loads(out_json.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as exc:
+        return {}, f"views/plan_v1.json 读不动（{type(exc).__name__}: {exc}）—— 微调计数没读成"
+    try:
+        view = plan_mod.acceptance_view(plan)
+    except Exception as exc:                    # noqa: BLE001 —— 台账读不动不该把读工具带崩
+        return {}, f"验收台账没读成（{type(exc).__name__}: {exc}）"
+    return (view if isinstance(view, dict) else {}), ""
+
+
+def _stage_overview() -> list[dict]:
+    """**「现在整体在第几阶段」的唯一答案** —— 八行，每行 `{no, name, state, evidence, next}`。
+
+    挂在开场三件上：`get_plan()` / `get_asset_list()` 的返回里都带 `stages`（**同一份数据**；
+    两处都调本函数，不各算一遍），`official_status()` 只给一句 `stage_hint`（它是链路诊断，
+    保持轻 —— 判据不搬过去）。
+
+    八行的判据（**全部用现成产物，纯离线、不碰 UE**）：
+      ① `catalog/asset_list.json` 在不在、有几行、几条白膜占位 —— ⚠ 这里只报**存在性**；
+         「过没过期」要调 `get_asset_list()`（它比资产库指纹）才知道。
+      ② `views/plan_v1.json` 两张表的行数 + **现算**的验收状态（`planning.acceptance_state`）；
+         其中 `tuned` 如实写成「微调版 · 这一次没有图」（不是错误、别去修）。
+      ③ `views/build_state_v1.json` 的行数 vs plan 行数、`placement`、`at`，**以及——状态由谁定**：
+         有一份**当版**的 `views/evaluate_v1.json`（`plan_hash` == 当前 plan 指纹）时，
+         **状态与依据由它决定**（它的 `counts` 非零 ⇒ 进行中，并在依据里点名那几个数）；
+         没有当版报告时**退回台账口径**，依据里写明「**真值未核**（要 `evaluate_layout()`）」。
+         ⚠ 这不是两套判据：报告本身就是"关卡现状 vs plan/台账"的判定结果（评估工具写的），
+           这里只是**读它**、不重算。**行数**照旧比 —— 报告说明不了"台账该有几行"。
+      ④ 验收台账里的 `tuned_count` / `tuned_rows_total`（由 `acceptance_view()` 带出）。
+      ⑤ `config/surface_materials.json` 的 `materials` / `create` 键数（用现成的
+         `_surface_materials()` / `_surface_creates()`）+ 建材质台账在不在。
+      ⑥ `views/environment_state_v1.json` 在不在、最近一次动作的时间。
+      ⑦ `views/evaluate_v1.json` 的 `plan_hash` 是不是**当前** plan 的指纹（是 ⇒ 当版）。
+      ⑧ `views/exchange/scene_v1.json` 在不在（按需 —— 这一版没把它编排进流程）。
+
+    ⚠ 任何一行读不到 ⇒ 那一行写「未开始」或写清读不到；**不猜、不拿旧值顶**。
+    """
+    plan_mod = _planning_modules()
+    stages: list[dict] = []
+
+    # ---------- ① 资产确认 ----------
+    assets_doc, assets_why = _safe_json(ASSET_LIST_PATH)
+    rows1 = (assets_doc or {}).get("items") if isinstance(assets_doc, dict) else None
+    rows1 = rows1 if isinstance(rows1, list) else []
+    signed = LIBRARY_PATH.exists()
+    if not isinstance(assets_doc, dict):
+        s1, e1, n1 = STAGE_STATE_NOT_STARTED, f"读不到 catalog/asset_list.json（{assets_why}）", \
+            "先走阶段一：confirm_elements() 记元素 → plan_assets() 找资产 → confirm_assets() 落清单"
+    elif not rows1:
+        s1 = STAGE_STATE_NOT_STARTED
+        e1 = "catalog/asset_list.json 在、但清单里 0 行"
+        n1 = "用 confirm_elements() / plan_assets() / confirm_assets() 把清单落下来"
+    else:
+        ph = sum(1 for r in rows1 if isinstance(r, dict) and r.get("is_placeholder"))
+        s1 = STAGE_STATE_DONE
+        e1 = (f"catalog/asset_list.json：{len(rows1)} 行（其中白膜占位 {ph} 行）；"
+              f"资产库指纹文件{'在' if signed else '**不在**'}。"
+              "⚠ 这只是**存在性** —— 清单**过没过期**要调 get_asset_list() 比资产库指纹才知道")
+        n1 = "清单在。过期没有、还有谁没落位：调 get_asset_list()（它验路径、比指纹）"
+    stages.append({"no": 1, "name": STAGE_NAMES_8[0], "state": s1,
+                   "evidence": e1, "next": n1})
+
+    # ---------- ② 平面放置规划 ----------
+    plan_doc, plan_why = _safe_json(plan_mod.OUT_JSON)
+    n_assets = n_boxes = 0
+    plan_rows = 0
+    plan_ok = isinstance(plan_doc, dict)
+    if plan_ok:
+        n_assets = len([x for x in (plan_doc.get("assets") or []) if isinstance(x, dict)])
+        n_boxes = len([x for x in (plan_doc.get("whiteboxes") or []) if isinstance(x, dict)])
+        plan_rows = n_assets + n_boxes
+    if not plan_ok:
+        s2 = STAGE_STATE_NOT_STARTED
+        e2 = f"读不到 views/plan_v1.json（{plan_why}）"
+        n2 = "按参考图规划每行的 pos / footprint_m，再用 generate_plan() 落盘"
+    elif plan_rows == 0:
+        s2 = STAGE_STATE_NOT_STARTED
+        e2 = "views/plan_v1.json 在、但两张表都空（初始化态：一份坐标都没有）"
+        n2 = "拿到参考图之后规划坐标，再调 generate_plan()"
+    else:
+        try:
+            acc_state = str(plan_mod.acceptance_state(plan_doc))
+            acc_cn = str(plan_mod.ACCEPTANCE_STATES.get(acc_state, acc_state))
+        except Exception as exc:                # noqa: BLE001 —— 状态算不动不该把读工具带崩
+            acc_state, acc_cn = "unknown", f"验收状态没算出来（{type(exc).__name__}: {exc}）"
+        e2 = (f"views/plan_v1.json：资产 {n_assets} 行 + 白膜 {n_boxes} 行；"
+              f"验收状态 {acc_state}（{acc_cn}）")
+        if acc_state == "tuned":
+            s2 = STAGE_STATE_NEED_USER
+            e2 += "。⚠ 这一版是**微调版 · 这一次没有图**（`confirmation.mode=tuned`）—— 那是如实的、不是错误"
+            n2 = "微调版由你自己在 UE 里看。要回到「有图那种验收」：重画两张图 → confirm_plan()"
+        elif acc_state == "accepted":
+            s2 = STAGE_STATE_DONE
+            n2 = "验收已过。若还要改坐标，先 request_plan_change()（它是改动窗口的钥匙）"
+        elif acc_state == "awaiting_user":
+            s2 = STAGE_STATE_NEED_USER
+            n2 = "把 acceptance.figures 里的图**使用成卡片**给用户看，然后停下等他打字（他说行就 confirm_plan()）"
+        elif acc_state == "changes_requested":
+            s2 = STAGE_STATE_DOING
+            n2 = "按用户提的改 pos / 占地 / scale → generate_plan() → 重画图 → 再给他看"
+        else:
+            s2 = STAGE_STATE_DOING
+            n2 = ("看 acceptance.change_set.required_views 画那几张图（每张图内写当前几何指纹），"
+                  "存成 views/plan_v1_overview*.svg / views/plan_v1_elevation*.svg")
+    stages.append({"no": 2, "name": STAGE_NAMES_8[1], "state": s2,
+                   "evidence": e2, "next": n2})
+
+    # ---------- ③ 资产布局生成 ----------
+    # ⚠ **2026-10-04 晚改：以评估报告为准**（用户拍板 —— 我报告的那个「绿得过头」是真的：
+    #   D 侧现场 `views/evaluate_v1.json` 是 `drifted: 26`（26 行全与关卡不符），而搭建台账里
+    #   `ok=false` / `verified=false` **一行都没有** ⇒ 只按台账判会报「已完成」）。
+    #   所以判据分两种，**这不是第二套判据** —— 用的都是现成产物：
+    #     · 有一份**当版**的对账报告（`plan_hash` == 当前 plan 指纹）⇒ 状态与依据**由它决定**
+    #       （它的 `counts` 就是"关卡现状 vs plan/台账"的判定结果，别处不再算一遍）；
+    #     · 没报告 / 报告过期 ⇒ 退回**台账口径**，并在依据里写明「**真值未核**（要 evaluate_layout()）」。
+    #   ⚠ 报告那一维**不覆盖**"行数"这件事：报告说明不了"台账该有几行"，所以行数照旧比，
+    #     报告只决定**状态**与那几个计数 —— 两处各说各的，不重叠。
+    ev_doc, ev_why = _safe_json(EVALUATE_PATH)      # ③ 与 ⑦ 共用这一次读（同一份文件，不读两遍）
+    now_hash = ""
+    if plan_ok:
+        try:
+            now_hash = str(plan_mod.plan_geometry_hash(plan_doc) or "")
+        except Exception:                       # noqa: BLE001 —— 算不出指纹就当对不上
+            now_hash = ""
+    rep_hash = str((ev_doc or {}).get("plan_hash") or "") if isinstance(ev_doc, dict) else ""
+    report_ok3 = bool(isinstance(ev_doc, dict) and now_hash and rep_hash == now_hash)
+    rep_counts = dict((ev_doc or {}).get("counts") or {}) if isinstance(ev_doc, dict) else {}
+    # 状态由报告决定：命中**任何一个非零计数**就算"还有活要干"（包括 `unchecked` = 没比成）。
+    # ⚠ 键与中文名都取自报告自己的词表 `_VERDICT_ORDER` / `_VERDICT_CN`（**不自己造一套**）。
+    rep_hits = [(k, int(rep_counts.get(k) or 0)) for k in _VERDICT_ORDER
+                if int(rep_counts.get(k) or 0) > 0] if report_ok3 else []
+    rep_txt = "；".join(f"{k} {v}（{_VERDICT_CN.get(k, k)}）" for k, v in rep_hits)
+
+    build_doc, build_why = _safe_json(BUILD_STATE_PATH)
+    if not isinstance(build_doc, dict):
+        s3, e3 = STAGE_STATE_NOT_STARTED, f"读不到 views/build_state_v1.json（{build_why}）"
+        n3 = "确认过的规划之后：check_build_target() 问清搭哪张图 → execute_build() 落关卡"
+    else:
+        rows3 = [r for r in (build_doc.get("rows") or []) if isinstance(r, dict)]
+        bad = [r for r in rows3 if r.get("ok") is False or r.get("verified") is False]
+        # 「没比成」不许长得像「没问题」（2026-10-04 那条加固的同一条口径）：
+        #   `readback=false` 的行记的是**指令值**、没从关卡核实过 —— 光看这份台账会以为它对上了。
+        unread3 = [r for r in rows3 if r.get("readback") is False]
+        built_at = str(build_doc.get("at") or "")
+        placement = str(build_doc.get("placement") or "") or "（台账没记 —— 老版台账 / 认领那次）"
+        rows_txt = (f"{len(rows3)} 行（plan 现算 {plan_rows} 行："
+                    f"{'行数对得上' if plan_rows == len(rows3) else '**行数对不上**'}）")
+        if not rows3:
+            s3 = STAGE_STATE_NOT_STARTED
+            e3 = "views/build_state_v1.json 在、但台账里 0 行（还没落过东西）"
+            n3 = "check_build_target() 问清搭哪张图（拿到用户答复）→ execute_build()"
+        elif report_ok3:
+            # 报告说了算（它是唯一回答得了"关卡里现在到底对不对"的那一份）
+            s3 = STAGE_STATE_DOING if rep_hits else STAGE_STATE_DONE
+            e3 = (f"views/build_state_v1.json：{rows_txt}；落位方式 {placement}；"
+                  f"at={built_at or '（没记）'}。**以当版对账报告为准**（"
+                  f"views/evaluate_v1.json：plan_hash 对得上当前 plan、at="
+                  f"{str(ev_doc.get('at') or '（没记）')}、"
+                  f"关卡那一维{'查过' if ev_doc.get('level_checked') else '**没查**（UE 当时连不上）'}）："
+                  + (rep_txt if rep_hits else "全部计数为 0（三方一致、没有要动的行）"))
+            n3 = ("报告里有非零计数：按 evaluate_layout() 报的那几条走"
+                  "（该重摆 → execute_build(dry_run=true) → execute_build()；有人改过 → "
+                  "request_plan_change() → generate_plan(patch=…) → 重画图 → confirm_plan()）"
+                  if rep_hits else
+                  "报告说三方一致 —— 可以往下走（微调 / 贴材质 / 配环境），或 capture_preview() 出图看效果")
+        else:
+            # 没有当版报告 ⇒ 退回台账口径，并**明说真值未核**
+            s3 = STAGE_STATE_DONE if not bad else STAGE_STATE_DOING
+            e3 = (f"views/build_state_v1.json：{rows_txt}；落位方式 {placement}；"
+                  f"at={built_at or '（没记）'}；"
+                  + (f"**{len(bad)} 行 ok/verified = false**（没落成或读回对不上）"
+                     if bad else "没有 ok=false / verified=false 的行")
+                  + (f"；⚠ 另有 {len(unread3)} 行 readback=false（记的是**指令值**、没从关卡核实过）"
+                     if unread3 else "")
+                  + "。⚠ **真值未核**（要 evaluate_layout()）—— "
+                  + ("对账报告过期了（它的 plan_hash 对不上当前 plan 的指纹）"
+                     if isinstance(ev_doc, dict) else f"没有对账报告（{ev_why}）"))
+            n3 = ("台账里有没落成的行：先 evaluate_layout() 看现场，再 execute_build() 补"
+                  if bad else
+                  "改动走 execute_build(only_labels=[…])；**要对真值先 evaluate_layout()**"
+                  "（plan 改过之后必须重新对账，G15 / G16 那两道闸也认这份报告）")
+    n3 += ("　⚠ ③ 只管**整体框架**（有哪些物体 / 大致摆在哪 / 世界与铺装的范围）——"
+           "**整体没问题了才进 ④ 微调**；到 ④ 单个物体想挪/换/调，走 "
+           "`request_plan_change` → `generate_plan(patch=…)` → `execute_build(only_labels=[…])`，"
+           "不画图、不重确认")
+    stages.append({"no": 3, "name": STAGE_NAMES_8[2], "state": s3,
+                   "evidence": e3, "next": n3})
+
+    # ---------- ④ 微调 ----------
+    _av, _av_why = _stage_acceptance_rows()
+    tuned_count = int(_av.get("tuned_count") or 0)
+    tuned_rows = int(_av.get("tuned_rows_total") or 0)
+    if _av_why:
+        s4, e4 = STAGE_STATE_NOT_STARTED, _av_why
+        n4 = "先有确认过的规划（②）才有微调可言；取不到计数时按未开始处理，**不拿 0 当事实**"
+    elif tuned_count:
+        s4 = STAGE_STATE_DOING
+        e4 = (f"验收台账（planning.acceptance_view）：微调 {tuned_count} 次、"
+              f"累计 {tuned_rows} 行；最近一次 {str(_av.get('updated_at') or '')}")
+        n4 = "微调不出图、也不要二次确认 —— 报数字给用户，由他自己在 UE 里看"
+    else:
+        s4, e4 = STAGE_STATE_NOT_STARTED, "验收台账里 tuned_count=0（还没微调过）"
+        n4 = ("要改几行：request_plan_change(items=[…], by=「用户」) 先记原话 → "
+              "generate_plan(patch=[…]) → execute_build(only_labels=[…])")
+    stages.append({"no": 4, "name": STAGE_NAMES_8[3], "state": s4,
+                   "evidence": e4, "next": n4})
+
+    # ---------- ⑤ 表面材质 ----------
+    mat_table, mat_why = _surface_materials()
+    cre_table, cre_why = _surface_creates()
+    n_mat = len(mat_table) if isinstance(mat_table, dict) else 0
+    n_cre = len(cre_table) if isinstance(cre_table, dict) else 0
+    led5, led5_why = _safe_json(SURFACE_CREATE_PATH)
+    made5 = (led5 or {}).get("created") if isinstance(led5, dict) else None
+    made5 = made5 if isinstance(made5, list) else []
+    how5 = ("；".join(x for x in (mat_why, cre_why) if x) if (mat_why or cre_why) else "")
+    if how5:
+        s5, e5 = STAGE_STATE_NOT_STARTED, f"config/surface_materials.json：{how5}"
+        n5 = "先把 materials / create 两段配好（配置读不动时一个元素都不会贴）"
+    elif n_mat or n_cre or made5:
+        s5 = STAGE_STATE_DONE if n_mat else STAGE_STATE_DOING
+        e5 = (f"config/surface_materials.json：materials {n_mat} 个键 / create {n_cre} 个键；"
+              f"建材质台账 {SURFACE_CREATE_PATH.name} "
+              + (f"在（记了 {len(made5)} 块）" if isinstance(led5, dict) else f"不在（{led5_why}）"))
+        n5 = ("create_surfaces() 把缺的材质建出来 → 填进 materials 段 → apply_surfaces() 贴"
+              if n_cre else "apply_surfaces(dry_run=true) 先看一遍，再去掉 dry_run 真贴")
+    else:
+        s5, e5 = STAGE_STATE_NOT_STARTED, (
+            f"config/surface_materials.json：materials 0 个键 / create 0 个键；"
+            f"建材质台账 {SURFACE_CREATE_PATH.name}（{led5_why}）")
+        n5 = "先在配置里给元素填材质路径（或写 create 段），再 create_surfaces() / apply_surfaces()"
+    stages.append({"no": 5, "name": STAGE_NAMES_8[4], "state": s5,
+                   "evidence": e5, "next": n5})
+
+    # ---------- ⑥ 环境搭建 ----------
+    env_doc, env_why = _safe_json(ENV_LEDGER_PATH)
+    if not isinstance(env_doc, dict):
+        s6, e6 = STAGE_STATE_NOT_STARTED, f"读不到 views/environment_state_v1.json（{env_why}）"
+        n6 = "setup_environment(preset=…) 配整套环境（太阳 → 大气 → 天光 → 雾 → 云 → 后处理）"
+    else:
+        env_at = _stage_last_at(env_doc)
+        fac = env_doc.get("factors")
+        n_fac = len(fac) if isinstance(fac, dict) else 0
+        hist = env_doc.get("history") if isinstance(env_doc.get("history"), list) else []
+        last_preset = str((hist[-1] or {}).get("preset") or "") if (hist and isinstance(hist[-1], dict)) else ""
+        if n_fac:
+            s6 = STAGE_STATE_NEED_USER
+            e6 = (f"views/environment_state_v1.json：记了 {n_fac} 个因素的现值；最近一次动作 "
+                  f"{env_at or '（没记）'}（预设 {last_preset or '（没记）'}）。"
+                  "⚠ 本阶段**不出图**，验收方式 = **你自己在 UE 里看**")
+            n6 = "在 UE 里看氛围；不满意就改 config/environments.json 再 setup_environment()（不用改代码、不用重启）"
+        else:
+            s6 = STAGE_STATE_NOT_STARTED
+            e6 = f"views/environment_state_v1.json 在、但 factors 是空的（台账里 0 个因素）"
+            n6 = "setup_environment(preset=…) 配环境（真跑成功会自动存盘 —— 本阶段是唯一允许存盘的阶段）"
+    stages.append({"no": 6, "name": STAGE_NAMES_8[5], "state": s6,
+                   "evidence": e6, "next": n6})
+
+    # ---------- ⑦ 评估与闭环迭代 ----------
+    # ⚠ `ev_doc` / `ev_why` / `now_hash` / `rep_hash` 已在 ③ 那一段读过、算过（同一份文件 —— 不读两遍）。
+    if not isinstance(ev_doc, dict):
+        s7, e7 = STAGE_STATE_NOT_STARTED, f"读不到 views/evaluate_v1.json（{ev_why}）"
+        n7 = "evaluate_layout() 做三方逐行对账（plan ↔ 搭建台账 ↔ 关卡现状）"
+    else:
+        cur = bool(now_hash) and rep_hash == now_hash
+        if cur:
+            s7 = STAGE_STATE_DONE
+            e7 = (f"views/evaluate_v1.json 的 plan_hash = 当前 plan 的指纹（{rep_hash[:10]}…，**当版**）；"
+                  f"at={str(ev_doc.get('at') or '（没记）')}；"
+                  f"关卡那一维{'查过' if ev_doc.get('level_checked') else '**没查**（UE 当时连不上）'}；"
+                  + (f"计数：{rep_txt}" if rep_hits else "全部计数为 0"))
+            n7 = "要出图看效果：capture_preview()；要改布局：request_plan_change() → generate_plan(patch=…) → 重画图 → confirm_plan() → execute_build()"
+        else:
+            s7 = STAGE_STATE_DOING
+            e7 = (f"views/evaluate_v1.json 的 plan_hash（{rep_hash[:10] or '（空）'}…）≠ 当前 plan 的指纹"
+                  f"（{now_hash[:10] or '（算不出）'}…）—— **过期，要重跑**")
+            n7 = "evaluate_layout() 重跑一次（plan 改过之后必须重新对账；G15 / G16 那两道闸也认这份报告）"
+    stages.append({"no": 7, "name": STAGE_NAMES_8[6], "state": s7,
+                   "evidence": e7, "next": n7})
+
+    # ---------- ⑧ 导出/交换（按需） ----------
+    ex_doc, ex_why = _safe_json(EXCHANGE_JSON)
+    if isinstance(ex_doc, dict):
+        st8 = ex_doc.get("stats") if isinstance(ex_doc.get("stats"), dict) else {}
+        s8 = STAGE_STATE_DONE
+        e8 = (f"views/exchange/scene_v1.json 在：{st8.get('objects', '?')} 个对象"
+              f"（资产 {st8.get('assets', '?')} / 白膜 {st8.get('whiteboxes', '?')}）；"
+              f"导出时间 {str(ex_doc.get('exported_at') or '（没记）')}")
+        n8 = "要给 Blender 等 DCC：export_layout() 重导一份；对账用 check_exchange()（只出报告、不改 plan）"
+    else:
+        s8, e8 = STAGE_STATE_NOT_STARTED, f"读不到 views/exchange/scene_v1.json（{ex_why}）"
+        n8 = ("本阶段**按需 · 往后排** —— 这一版没把它编排进流程；要跟别的 DCC 搬同一套布局时才用 "
+              "export_layout()")
+    stages.append({"no": 8, "name": STAGE_NAMES_8[7], "state": s8,
+                   "evidence": e8, "next": n8})
+
+    return stages
+
+
+STAGE_OVERVIEW_NOTE = (
+    "八阶段总览（**唯一判据**在 `main.py::_stage_overview()`；纯离线、不碰 UE）："
+    "每行 = 阶段 / 状态 / **依据（哪个文件、什么值）** / **下一步该调哪个工具**。"
+    "⚠ 「已完成」只说明**那一步有东西了**，不是质量判定；要看**关卡现状的真值**请调 evaluate_layout()。"
+)
 
 
 # --- 阶段二 / 阶段三 共用 · 现场对账报告的**判据与提醒**（2026-10-03 加）------------------  【模块：state】
@@ -7420,8 +8860,9 @@ async def generate_plan(
         )),
     ] = None,
 ) -> PlanResult:
-    """把**平面放置表**落盘成 `views/plan_v1.json` —— 阶段二主工具（记录，不是规划）。
-
+    """
+    【场景③ 规划验收】什么时候用我：要写 / 改平面放置表时（坐标由你规划）—— 已确认过的表要改，先调 `request_plan_change`。把**平面放置表**落盘成 `views/plan_v1.json` —— 阶段二主工具（记录，不是规划）。
+    
     三件事：
       ① 校验并规整：一物一行、每行必须有 `pos` 与 `footprint_m`（米）；
       ② 落盘 + 钉**几何指纹**（除 `confirmation` 外全部内容，`params` 也算进去）
@@ -7641,10 +9082,38 @@ async def generate_plan(
                 "note": "几何未变，沿用上一次确认。",
             })
         elif old_conf.get("confirmed"):
-            warnings.append(
-                "这一版与上一次确认的**不是同一版**：上次确认**已作废**，"
-                "必须重新拿给用户/客户确认。"
-            )
+            # ---------- 第四阶段 · 微调（2026-10-04 用户拍板）----------
+            # 「整体搭建之后的小改」：**不画图、不要二次确认**，但必须有**用户原话** ——
+            # 那句话的来源就是 `request_plan_change()` 记下的改动要求（上面 `_change_request_guard()`
+            # 已经保证了"改已确认的 plan 之前必须先记一条"，所以这里读得到）。
+            # ⚠ 拿不到原话就**照旧按"确认作废"处理**：绝不自己编一句（编了就是伪造人的确认）。
+            _quote = "；".join(str(x) for x in (planning.pending_changes(plan) or []) if str(x).strip())
+            if _quote:
+                _tuned_labels: list[str] = []
+                for _op in (patch or []):
+                    if not isinstance(_op, dict):
+                        continue
+                    _lab = str(_op.get("label") or "")
+                    if not _lab:
+                        _row = _op.get("row")
+                        if isinstance(_row, dict):
+                            _lab = str(_row.get("label") or "")
+                    if _lab:
+                        _tuned_labels.append(_lab)
+                plan = planning.mark_tuned(
+                    plan, _quote,
+                    rows=[{"label": _l, "why": _quote} for _l in _tuned_labels])
+                warnings.append(
+                    "**这一版记成了「微调版」**（第四阶段 · 微调）：几何按用户原话改过、"
+                    "**这一次没有图** —— 依据是 `confirmation.user_quote` + `confirmation.rows`。"
+                    f"改了 {len(_tuned_labels)} 行：" + "、".join(f"「{x}」" for x in _tuned_labels[:8])
+                    + "。落关卡时**只能点名**这几行（`execute_build(only_labels=[…])`）。"
+                    "⚠ 要回「正常验收」（出图那种）：重画两张图 → `confirm_plan()`。")
+            else:
+                warnings.append(
+                    "这一版与上一次确认的**不是同一版**：上次确认**已作废**，"
+                    "必须重新拿给用户/客户确认。"
+                )
 
     # ⚠ **G15：改数据之前必须先看过现场**（2026-10-03 加，用户要求「必须把这个改为硬闸」）——
     #   搭过东西 + 这一版真在改 ⇒ 必须有一份"当版"的 `evaluate_layout()` 报告；
@@ -7747,8 +9216,9 @@ async def get_plan(
         bool, Field(description="true = 连完整计划数据一起带出（默认）；false = 只给闸门状态与摘要")
     ] = True,
 ) -> PlanStatus:
-    """取当前规划几何 + 判定**它还作不作数**。**动第三阶段之前必须先调它。**
-    ⚠ **闸的钥匙**（不是可选步骤）：`_readback_guard` 要它 —— 这一版 plan 写盘之后没调它，`generate_plan` / `execute_build` 一律拒收。
+    """
+    【场景① 开场先看】什么时候用我：每轮开场、以及**每次写完放置表之后**（回读闸）—— ⚠ 状态只认**我这个返回值**，不认"我读过 views/plan_v1.json"。取当前规划几何 + 判定**它还作不作数**。**动第三阶段之前必须先调它。**
+        ⚠ **闸的钥匙**（不是可选步骤）：`_readback_guard` 要它 —— 这一版 plan 写盘之后没调它，`generate_plan` / `execute_build` 一律拒收。
 
     回答三件事：
       ① 有没有算过规划；
@@ -7792,7 +9262,9 @@ async def get_plan(
     if not planning.OUT_JSON.exists():
         return PlanStatus(
             has_plan=False,
+            stages=_stage_overview(),
             next_step=(
+                "先看 `stages`：那里写着现在在第几阶段、依据是什么、下一步该调谁。"
                 "还没算过规划：先 generate_plan() 算一版，再让用户/客户过目确认。"
                 "**没有确认过的规划之前，不许往关卡里摆任何东西。**"
             ),
@@ -7827,7 +9299,7 @@ async def get_plan(
                 f"⚠ 指令表 `{BUILD_ORDERS_PATH.name}` 与当前规划**指纹不一致**（表里 "
                 f"{str(_orders_doc.get('plan_hash') or '(空)')[:10]}… ≠ 当前 "
                 f"{str(gate.plan_hash or '')[:10]}…）—— 它只是留痕件、**不挡搭建**，"
-                "但别拿它当这一版看；要更新就调 `generate_build_orders()`。")
+                "但别拿它当这一版看；要更新就调 `execute_build(dry_run=true)`。")
     # ---------- 阶段二**唯一那条检查**：越界（2026-09-27 用户指令；只报红、不拦）----------
     # 为什么放在"读状态"里也报一遍：`get_plan()` 是开场必调的那一个 —— 越界这种事
     #   不该只在写盘那一次出现（写盘之后谁还回头看那条 warning）。空表态不谈，先跳过。
@@ -7898,7 +9370,7 @@ async def get_plan(
             "**阶段二验收已通过**（台账 `views/acceptance.json` 有留痕）—— 可以进第三阶段了。"
             "⚠ 第三阶段**第一步是只读检查**：先调 `check_build_target()` 问清搭哪儿，"
             "**拿到用户答复之前不许往关卡里放任何东西**；"
-            "第二步是批量搭建：`generate_build_orders()`（翻指令表）→ `execute_build()`"
+            "第二步是批量搭建：`execute_build(dry_run=true)`（翻指令表）→ `execute_build()`"
             "（整批校验 → 清 `UEMCP/` 旧 Actor → 一次性全落 → 读回对账），想先看就传 `dry_run=true`。"
             "⚠ 落关卡前会先过**回读闸**：这一版若还没 `get_plan()` 过，`execute_build` 会拒收 —— "
             "先看一眼再搭。"
@@ -7940,7 +9412,12 @@ async def get_plan(
         acceptance=acceptance,
         plan=plan if include_plan else None,
         drawing=drawing,
-        next_step=_stage2_next_step(plan, acceptance, empty=(status == "initialized")),
+        stages=_stage_overview(),
+        next_step=(
+            "**先看 `stages`：那里写着现在在第几阶段、依据是什么、下一步该调谁**"
+            "（八行：阶段 / 状态 / 依据 / 下一步）。以下是本阶段内部的下一步 —— "
+            + _stage2_next_step(plan, acceptance, empty=(status == "initialized"))
+        ),
         warnings=warnings,
     )
 
@@ -7967,8 +9444,9 @@ async def request_plan_change(
         str, Field(description="为什么改 / 上下文（选填；能记原话就记原话）")
     ] = "",
 ) -> PlanResult:
-    """记下「用户在 **阶段二验收** 提出要改的地方」—— 验收阶段的入口之一。
-
+    """
+    【场景③ 规划验收】什么时候用我：用户提了"哪里要改"、或你自己发现要修时 —— 我是**改动窗口的钥匙**。记下「用户在 **阶段二验收** 提出要改的地方」—— 验收阶段的入口之一。
+    
     用在哪：`get_plan().acceptance.state == "awaiting_user"` 时，你把图**使用成卡片**给用户
     然后停下；他看完说「这里要改」→ 调本工具把**他要改的点**记下来（别只留在对话里）。
 
@@ -8053,8 +9531,9 @@ async def confirm_plan(
             "光有 `confirmed_by` 证明不了有人点过头。**不许自己编**：拿不出原话，就说明你还没问过他。"
         ))],
 ) -> PlanResult:
-    """把「这份规划被确认了」写回 `plan_v1.json`：**谁 / 何时 / 哪一版 / 用户的哪句话**。
-
+    """
+    【场景③ 规划验收】什么时候用我：用户看过图并点头之后 —— 我必须拿到**他的原话**；没图、没原话都不许调我。把「这份规划被确认了」写回 `plan_v1.json`：**谁 / 何时 / 哪一版 / 用户的哪句话**。
+    
     闸门不过就**拒绝确认**（这就是闸门的意义）：
       ① **空规划不许确认**（两张表都空：一份坐标都没有，确认它毫无意义）；
       ② 数据指纹对不上 → `plan_v1.json` 被手改过，与写进去时不一致；
@@ -9338,8 +10817,9 @@ async def setup_environment(
                      "别的阶段（搭场景 / 贴材质 / 出图 / 对账）照旧**一律不存盘**。"
                      "演练（`dry_run=true`）**不存**；存失败会如实报（不算「环境没配好」）。"))] = True,
 ) -> EnvReport:
-    """**阶段六 · 环境搭建**：按时段配**整套环境** —— 不只灯光。
-
+    """
+    【场景⑤ 表面与环境】什么时候用我：布局摆完、要按时段配**整套环境**时 —— 动手前先记现值，可回滚。**阶段六 · 环境搭建**：按时段配**整套环境** —— 不只灯光。
+    
     ⚠ 2026-09-29 用户指令：本阶段定名「**环境搭建**」（早先那句「环境搭建与相机预览」**当天被收回**），
       范围**不只有灯光** —— 天空 / 大气 / 天光 / 高度雾 / 体积云 / 后处理 / 时段，**全都要**。
       ⚠ **本阶段不出图**：出图归**阶段七**（`capture_preview()` 代码保留、归那边用）；
@@ -9927,8 +11407,9 @@ async def capture_preview(
     dry_run: Annotated[bool, Field(
         description="true = 只算机位（站哪儿 / 朝哪 / 会写成哪个文件），**一张都不拍**")] = False,
 ) -> PreviewReport:
-    """**阶段七 · 相机预览**（⚠ 原挂在阶段六，2026-09-29 用户把出图收回后划给阶段七）：
-    按**世界坐标**摆机位出图，构图**不靠图像识别**。
+    """
+    【场景⑥ 导出·对账·出图】什么时候用我：要给人看图时 —— 按世界坐标摆机位出图，**不动用户的视口相机**。**阶段七 · 相机预览**（⚠ 原挂在阶段六，2026-09-29 用户把出图收回后划给阶段七）：
+        按**世界坐标**摆机位出图，构图**不靠图像识别**。
 
     做四件事：
       ① 机位：调用方给了就用给的（`pos_m` / `look_at_m`，**米**）；没给就按 `plan_v1.json` 的
@@ -10138,8 +11619,9 @@ async def evaluate_layout(
     dry_run: Annotated[bool, Field(
         description="true = 只算、**不落盘报告**（`views/evaluate_v1.json` 不写）")] = False,
 ) -> EvaluateReport:
-    """**阶段七 · 落位对账**（只读）：`plan` ↔ 搭建台账 ↔ **关卡现状** 三方逐行比，把差异说清。
-
+    """
+    【场景⑥ 导出·对账·出图】什么时候用我：改放置表之前、落关卡之前、以及"现在到底对不对"时 —— 我三方逐行对账（只读），也是 G15/G16 要的那份**当版报告**。**阶段七 · 落位对账**（只读）：`plan` ↔ 搭建台账 ↔ **关卡现状** 三方逐行比，把差异说清。
+    
     回答的问题就一句：**「现在关卡里的东西，跟当初确认的那一版还对得上吗」**。
 
     比五样（每一样的判据都**复用现有那几处**，不另造一套）：
@@ -10233,9 +11715,13 @@ async def evaluate_layout(
         # ③ 台账 ↔ 关卡：**全表扫**。这台工具就是「看清楚」的那一步；
         #    `execute_build()` 增量只扫"会动的行"是为了省调用，那是它的取舍，不是这里的。
         #    判据与容差全在 `_live_vs_ledger()` 里 —— 不在这里重写一遍。
-        manual, used = await _live_vs_ledger(ctx, ledger_rows, live_set)
+        manual, unreadable, used = await _live_vs_ledger(ctx, ledger_rows, live_set)
         calls += used
         manual_by_uid = {str(m.get("uid") or ""): m for m in manual if str(m.get("uid") or "")}
+        # ⚠ **"没比成"的行也要进判定**（2026-10-04 加固）：引用失效那类已经由上面的
+        #   `drifted` 兜住；这里装的是**读失败 / 白膜尺寸读不回来**那两类 —— 以前它们会
+        #   一路掉到 `ok`（"没命中任何一条"的兜底），于是"没查成"被当成了"没问题"。
+        unread_by_uid = {str(u.get("uid") or ""): u for u in unreadable if str(u.get("uid") or "")}
 
         # ④ 分组：每个涉及的分组读一次（**不递归**），比引用集合 ——
         #    「分组丢了 / 进错分组」只有这么查得出来（根递归清点只能证明"在 UEMCP/ 树下"）。
@@ -10327,6 +11813,11 @@ async def evaluate_layout(
                 if m:
                     v.append("edited")
                     why.extend(list(m.get("why") or []))
+                u = unread_by_uid.get(uid)      # 台账 ↔ 关卡**没比成**（读失败 / 白膜尺寸读不回来）
+                if u:
+                    v.append("unchecked")
+                    why.append(str(u.get("why") or "") +
+                               " —— ⚠ **「没比成」不是「没问题」**")
                 if include_materials and r["kind"] == "whitebox" and r.get("surface_material_hint"):
                     want_m = str(r["surface_material_hint"])
                     got_m, note, used = await _surface_read_row(ctx, actor)
@@ -10406,7 +11897,7 @@ async def evaluate_layout(
         fixes.append(
             f"**该重摆的 {_re} 行**（没搭过 {counts.get('never_built', 0)} / plan 改过 "
             f"{counts.get('plan_changed', 0)} / 关卡里没了 {counts.get('drifted', 0)}）："
-            "`generate_build_orders()` → `execute_build()`（默认就是**增量**，只动这几行）")
+            "`execute_build(dry_run=true)` → `execute_build()`（默认就是**增量**，只动这几行）")
     if counts.get("edited", 0):
         fixes.append(
             f"**有人改过的 {counts['edited']} 行**：两条路 —— ①**保住他的改动**（推荐）：把它写回阶段二"

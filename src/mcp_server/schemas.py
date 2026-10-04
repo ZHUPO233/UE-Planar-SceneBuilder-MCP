@@ -33,6 +33,14 @@ class OfficialStatus(BaseModel):
     protocol_version: str | None = Field(default=None, description="协商出的 MCP 协议版本")
     toolset_count: int = Field(default=0, description="官方一共有多少个工具集")
     error: str | None = Field(default=None, description="连不上时的错误原文")
+    stage_hint: str = Field(
+        default="",
+        description=(
+            "**阶段总览去哪看**（2026-10-04 加）：本工具是链路诊断，**保持轻** —— 判据不搬到这里。"
+            "要看「现在整体在第几阶段（八阶段 + 依据 + 下一步）」请调 `get_plan().stages`"
+            "（或 `get_asset_list().stages`，同一份数据）"
+        ),
+    )
 
 
 class BuildTargetCheck(BaseModel):
@@ -165,6 +173,18 @@ class BuildReport(BaseModel):
     groups: dict = Field(default_factory=dict, description="各 outliner 分组各落了几个")
     rows: list[BuildRowResult] = Field(default_factory=list, description="逐行结果（含官方返回的 Actor 引用）")
     official_calls: int = Field(default=0, description="这次一共调了官方几次（留痕，方便复核）")
+    placement: str = Field(
+        default="",
+        description=("**落位走的是哪条路**（2026-10-04 加）：`batch` = 官方脚本批处理"
+                     "（`ProgrammaticToolset.execute_tool_script`，一次编排层调用落完整批）；"
+                     "`per_row` = 逐行老路（一行一次调用）；`batch_failed` = 脚本通道**整体失败**"
+                     "—— 那时 `placed=0` 的含义是「**没拿到结果**」，**不是**「一行都没落成」，"
+                     "而且**没写台账**（`ledger_written=false`），先 `evaluate_layout()` 看现场"))
+    inner_calls: int = Field(
+        default=0,
+        description=("脚本内部**实际执行**了几次官方工具调用（只有 `placement=batch` 时非 0）。"
+                     "⚠ 与 `official_calls`（编排层→官方的**往返**次数）是两个数，别混："
+                     "批处理省的是往返与上下文，引擎那边的活一样多"))
     next_step: str = Field(description="下一步做什么")
     warnings: list[str] = Field(default_factory=list, description="要提醒的坑（不藏着）")
 
@@ -603,6 +623,18 @@ class AssetListStatus(BaseModel):
     )
     next_step: str = Field(default="", description="下一步做什么")
     warnings: list[str] = Field(default_factory=list, description="要提醒的坑（不藏着）")
+    stages: list[dict] = Field(
+        default_factory=list,
+        description=(
+            "**八阶段总览**（2026-10-04 加；与 `get_plan().stages` **同一份数据** —— 两处都调 "
+            "`main.py::_stage_overview()`，不各算一遍）：8 条，每条 "
+            "`{no: 1..8, name: 阶段名, state: 未开始/进行中/已完成/需你确认, "
+            "evidence: 依据（哪个文件、什么值）, next: 下一步该调哪个工具}`。"
+            "⚠ 判据**纯离线、不碰 UE**（所以它报的是**现成产物**怎么说，不是关卡的真值 —— "
+            "要看真值调 `evaluate_layout()`）；**但阶段③有一份当版对账报告时，状态就直接由它决定**；"
+            "读不到的产物那一行写「未开始」或写清读不到，不猜"
+        ),
+    )
 
 
 class PlanGate(BaseModel):
@@ -780,6 +812,20 @@ class PlanStatus(BaseModel):
     )
     next_step: str = Field(default="", description="下一步做什么")
     warnings: list[str] = Field(default_factory=list, description="要提醒的坑")
+    stages: list[dict] = Field(
+        default_factory=list,
+        description=(
+            "**八阶段总览**（2026-10-04 加）：接手一轮**先看这里** —— 8 条，每条 "
+            "`{no: 1..8, name: 阶段名, state: 未开始/进行中/已完成/需你确认, "
+            "evidence: 依据（哪个文件、什么值）, next: 下一步该调哪个工具}`，"
+            "答案就是「**现在整体在第几阶段**」。判据在 `main.py::_stage_overview()` **唯一一处**"
+            "（纯离线、不碰 UE —— `get_asset_list().stages` 是**同一份数据**）。"
+            "⚠ 它报的是**现成产物**怎么说，不是关卡的真值（真值要 `evaluate_layout()`）——"
+            "但**有一份当版对账报告时，阶段③的状态就直接由它决定**（报告说有几行要动，就是进行中）；"
+            "没有当版报告才退回台账口径，并在依据里写明「真值未核」。"
+            "读不到的产物那一行写「未开始」或写清读不到，不猜"
+        ),
+    )
 
 
 class SurfaceRowResult(BaseModel):
@@ -816,6 +862,62 @@ class SurfaceReport(BaseModel):
         default=0, description="资产行**没碰**几个（它们自带材质）"
     )
     rows: list[SurfaceRowResult] = Field(default_factory=list, description="逐行结果")
+    official_calls: int = Field(default=0, description="这次调了官方几次（留痕，方便复核）")
+    next_step: str = Field(default="", description="下一步做什么")
+    warnings: list[str] = Field(default_factory=list, description="要提醒的坑（不藏着）")
+
+
+class CreatedMaterial(BaseModel):
+    """**建出来的一块材质**（阶段五 · 第 0 步 `create_surfaces` 的逐条结果）。"""
+
+    path: str = Field(description="包路径（例 `/Game/UEMCP/Materials/M_Road`）")
+    folder: str = Field(default="", description="它建在哪个目录（官方 `create_material` 的 `folder_path`）")
+    name: str = Field(default="", description="资产名")
+    outputs: list[str] = Field(default_factory=list, description="连了哪几个材质输出（= 建了哪几个参数节点）")
+    flags: dict = Field(default_factory=dict, description="材质自身开关（`_flags`：twoSided / blendMode）")
+    status: str = Field(default="", description="`would_create`（演练）/ `ok` / `failed`")
+    error: str = Field(default="", description="没成功 / 读回对不上时，差在哪（官方原文）")
+    note: str = Field(default="", description="配置里 `_note` 的原样带出（给人看的）")
+
+
+class AdoptEditsReport(BaseModel):
+    """**阶段三 · 认领手改**（`adopt_user_edits`）的执行报告。
+
+    ⚠ 它把「人工改过」的那几行按**关卡现状**写回 plan 与台账（**不摆 Actor、不出图**）——
+    值**从关卡来**，不是从 plan 纸面来。⚠ 认领会更新几何指纹、让上次确认作废，而**这次没有图**：
+    `get_plan().acceptance.state` 之后会显示「等出图」（那是**如实**的）。
+    """
+
+    stage: str = Field(description="阶段名")
+    dry_run: bool = Field(default=False, description="true = 只读现状 + 列清单 + 留痕，**一个字节都没写**")
+    level: str = Field(default="", description="在哪张图上认领的")
+    planned: int = Field(default=0, description="这次要认领几行")
+    adopted: int = Field(default=0, description="真写回 plan + 台账了几行")
+    skipped: int = Field(default=0, description="读不到现状值、**跳过**了几行（不猜）")
+    rows: list[dict] = Field(default_factory=list, description="逐行：label / 为什么算人工改过 / 状态")
+    plan_hash_before: str = Field(default="", description="认领前的几何指纹")
+    plan_hash_after: str = Field(default="", description="认领后的几何指纹（变了 ⇒ 上次确认作废）")
+    ledger_path: str = Field(default="", description="搭建台账路径（那几行已改成**实测值**）")
+    official_calls: int = Field(default=0, description="这次调了官方几次（留痕，方便复核）")
+    next_step: str = Field(default="", description="下一步做什么")
+    warnings: list[str] = Field(default_factory=list, description="要提醒的坑（不藏着）")
+
+
+class CreateSurfacesReport(BaseModel):
+    """**阶段五 · 第 0 步**（建材质）的执行报告。
+
+    ⚠ 它**绝不存盘**（阶段五纪律）：新建的材质只在 UE 内存里 —— 报文里会明说"记得 Ctrl+S"。
+    ⚠ 它**绝不覆盖**已有材质：`exists()` 为真的一律跳过（幂等）。
+    """
+
+    stage: str = Field(description="阶段名")
+    dry_run: bool = Field(default=False, description="true = 只算 + 逐个 `exists()` 验，**一个都没建**")
+    planned: int = Field(default=0, description="这次计划建几块（已存在的不算）")
+    created: int = Field(default=0, description="真建成了几块")
+    already: int = Field(default=0, description="已存在、跳过几块（幂等）")
+    failed: int = Field(default=0, description="几块没成 / 没核过（看 items 里的 error）")
+    items: list[CreatedMaterial] = Field(default_factory=list, description="逐条结果")
+    ledger_path: str = Field(default="", description="建材质台账（我们建了什么，给回滚/追查用）")
     official_calls: int = Field(default=0, description="这次调了官方几次（留痕，方便复核）")
     next_step: str = Field(default="", description="下一步做什么")
     warnings: list[str] = Field(default_factory=list, description="要提醒的坑（不藏着）")

@@ -838,6 +838,97 @@ def mark_confirmed(plan: dict, who: str, user_quote: str = "") -> dict:
     return out
 
 
+def mark_tuned(plan: dict, user_quote: str, rows: list[dict] | None = None) -> dict:
+    """返回一份**带「微调版确认」信息的新 plan**（不改传入的那个对象）—— **第四阶段 · 微调**用。
+
+    用在哪（阶段八之前的第 4 个阶段）：**整体搭建之后**用户说「把电线杆挪近一点」这类**小改** ——
+    不画图、不二次确认（阶段二那套"两张图 + confirm_plan"只属于前三阶段），
+    但**改的是同一份 plan_v1.json**，所以必须留痕：谁让改的、改了哪几行、为什么。
+
+    ⚠ **它不画图、也不检查图**（这是第四阶段与阶段二验收的**唯一区别**）——
+      `acceptance_state()` 见到 `mode == "tuned"` 就直接返回 `"tuned"`，
+      **不走"图认不认这份数据"那条路**（那次没有图，如实记着）。
+    ⚠ `plan_hash` 写的是**改完之后**这一版的指纹（照抄 `mark_confirmed()` 的口径：
+      先 `dict(plan)` 拷出 `out`、再用 `plan_geometry_hash(plan)` 算 ——
+      指纹覆盖的是**除 confirmation 外的全部内容**，所以改完几何后算它才作数）。
+    ⚠ `user_quote` 为空 = **没有凭据**（与 `confirm_plan` 同一条纪律：拿不出原话就说明没问过人）——
+      那种情况**本函数拒收**（不动传进来的对象、**一个字节都不写**），
+      由调用方把「先去 `request_plan_change()` 记下用户原话」摆给用户。
+    ⚠ `rows` = **改了哪几行 / 为什么**（`[{"label": …, "why": …}, …]`）：`label` 与
+      `plan_v1.json` 里的一致，`why` 能记用户原话就记原话。**只留痕，不做校验**
+      （它不参与几何指纹，也不是闸门；目的是台账事后答得了「用户说了什么 ↔ 数据变成什么」）。
+
+    落盘路径照旧是 `write_plan()`（本函数只造对象、**不写盘**）——
+    它会自动留档上一版、并清掉不认新指纹的旧图（微调版**本来就没有图**）。
+    """
+    if not str(user_quote or "").strip():
+        raise ValueError(
+            "微调版留痕**必须有用户原话**（`user_quote`）—— 拿不出原话就说明还没问过他："
+            "先 `request_plan_change(items=[…], by=用户, reason=原话)` 把「要改什么 / 谁要的」记下来，"
+            "再改 `pos` / `footprint_m` / `scale`，最后带他的原话回来。")
+    out = dict(plan)
+    changed_rows: list[dict] = []
+    for item in (rows or []):
+        if not isinstance(item, dict):
+            continue
+        changed_rows.append({
+            "label": str(item.get("label") or ""),
+            "why": str(item.get("why") or ""),
+        })
+    out["confirmation"] = {
+        **(plan.get("confirmation", {}) or {}),
+        "required": True,
+        "confirmed": True,
+        # `mode` 是"这是哪一种确认"的唯一判据 —— `acceptance_state()` 见到它就直接给 `tuned`。
+        "mode": "tuned",
+        "confirmed_by": "用户（微调）",
+        "confirmed_at": _now(),
+        "user_quote": str(user_quote or ""),
+        "rows": changed_rows,
+        "plan_hash": plan_geometry_hash(plan),
+        "note": ("微调版确认（第四阶段 · 微调）：几何已按用户原话改过，"
+                 "**这一次没有图** —— 依据是 `user_quote` 与 `rows`。"
+                 "几何一变，指纹就对不上，本次留痕自动作废。"),
+    }
+    # 老文件里可能带着 params_hash（上一版机制的残留）—— 与 `mark_confirmed()` 同样顺手清掉。
+    out["confirmation"].pop("params_hash", None)
+    # ⚠ 台账侧同一轮收口（与 `confirm_plan()` → `record_acceptance()` 对齐，**只多这一处**）：
+    #   ① 关掉「改动窗口」（`record_change_request()` 打开的那个）—— 不关的话下一轮微调会被
+    #      `_change_request_guard()` 拒收（它会说"台账里没有记录"，而用户明明刚说过原话）；
+    #   ② 把**这一版的逐行几何签名**记成新基线 —— 不记的话 `change_set()` 会拿**微调之前**的
+    #      基线去比，把这一轮"改过哪几行"算错（图有没有是另一回事，基线是给下一次算差异用的）。
+    # ⚠ 这里传的是 **`out`**（不是入参 `plan`）：`plan_geometry_hash()` **排除 `confirmation`**，
+    #   两者算出的指纹本来是同一个；但 `out` 才是"改完之后"的那一份 —— 别给它留出第二种读法。
+    #   ⚠ 这一句会把**基线**更新成"微调之后"那一版 ⇒ 同一次写入里 `write_plan()` 再算
+    #     `change_set()` 就会得到"没有改动"（它拿新基线比新数据）。**这不是丢信息**：
+    #     这一轮改的是哪几行记在 `confirmation.rows` 与下面的 `tuned_history` 里（两处都在）。
+    record_acceptance(out, "用户（微调）", user_quote=str(user_quote or ""),
+                      figure="", figure_age_s=None)
+    # ⚠ **累计微调计数：只报数、不设闸**（2026-10-04 用户拍板「按需」）——
+    #   微调一次次累积下去，plan 与"用户当初看过的那张图"会越差越远；这条数就是拿来让他
+    #   **按需**决定"要不要回一次全图"的依据。**不设自动阈值**（那是替他做决定）。
+    #   记账在验收台账里（`views/acceptance.json`，不进几何指纹）。
+    try:
+        _acc = load_acceptance()
+        _hist = [e for e in (_acc.get("tuned_history") or []) if isinstance(e, dict)]
+        _hist.append({
+            "at": out["confirmation"]["confirmed_at"],
+            "plan_hash": out["confirmation"]["plan_hash"],
+            "rows": [r["label"] for r in changed_rows if r["label"]],
+            "user_quote": str(user_quote or ""),
+        })
+        _acc["tuned_history"] = _hist
+        _acc["tuned_count"] = len(_hist)
+        _acc["tuned_rows_total"] = int(_acc.get("tuned_rows_total") or 0) + len(
+            [r for r in changed_rows if r["label"]])
+        _acc["tuned_note"] = ("微调累计（**只报数、不设闸**）：次数与行数在这里累加 —— "
+                              "要不要为它回一次全图验收，由用户按需决定，代码不替他定阈值。")
+        save_acceptance(_acc)
+    except OSError:
+        pass                                  # 台账写不动不该把这一版微调整个搞失败（它已经过了闸）
+    return out
+
+
 def figure_row_labels(plan: dict) -> list[str]:
     """放置表里**每一行**的 `label`（已有资产在前、白膜在后，与数据同序）。
 
@@ -1505,6 +1596,13 @@ ACCEPTANCE_STATES: dict[str, str] = {
     "awaiting_user": "等待用户看图确认：图与数据一致，可以使用给用户了",
     "changes_requested": "用户提了要改的地方：等改参数 → 重落盘 → 重画图",
     "accepted": "验收通过：闸门已开，可以进第三阶段",
+    # ⚠ 2026-10-04（第四阶段 · 微调）：`tuned` **不是阶段二验收的一种状态** —— 它说的是
+    #   "这一版是**整体搭建之后按用户原话小改**过的"。与 `accepted` 的关键区别只有一条：
+    #   **这一次没有图**（阶段二的"两张图 + 用户看图点头"只属于前三阶段）——
+    #   依据是 `confirmation.user_quote`（用户原话）+ `confirmation.rows`（改了哪几行、为什么）。
+    #   验收方式 = 用户在 UE 里自己看；agent 要把**数字**报出来（例：`Y −33.0 → −32.0`）。
+    "tuned": ("微调版：几何已按用户原话改过、**这一次没有图**（如实）—— "
+              "可以走第四阶段的点名微调"),
 }
 
 
@@ -1637,6 +1735,11 @@ def acceptance_state(plan: dict, acc: dict | None = None,
     """现算当前验收状态（**唯一判据**）。只读、不写盘。
 
     判定顺序（先到先算）：
+      ⓪ **微调版**（`confirmation.mode == "tuned"`）→ `tuned`（第四阶段 · 微调）
+         —— **放在最前面判**，因为它是**唯一一种"没有图也算数"的确认**：
+         `mark_tuned()` 会同时写 `confirmed=True`，若不先拦下来，下面第 ② 条会直接把它
+         算成 `accepted`（"闸门已开"）—— 那等于**替它假装有图**，而这一版是如实没有图的。
+         它**不走**下面"图认不认这份数据"那条路（`figure_check()` 会报"没有认账的图"）。
       ① 两张表都空 → `not_started`（没有坐标可看，谈不上验收）
       ② `confirmation.confirmed` → `accepted`（闸门已开）
       ③ 这一版几何上**最后一条事件**是"要改" → `changes_requested`
@@ -1653,6 +1756,11 @@ def acceptance_state(plan: dict, acc: dict | None = None,
     """
     if not (plan.get("assets") or plan.get("whiteboxes")):
         return "not_started"
+    # ⚠ ⓪ **微调版最先判**（第四阶段 · 微调，2026-10-04 加）：`mode == "tuned"` 就直接收工 ——
+    #   别往下走。它的 `confirmation.confirmed` 也是 true，落到第 ② 条会被算成 `accepted`
+    #   （那会**替它假装有图**）；而它的确**没有图**（本轮不画图、也不要求补图）。
+    if str((plan.get("confirmation") or {}).get("mode") or "") == "tuned":
+        return "tuned"
     if bool((plan.get("confirmation") or {}).get("confirmed")):
         return "accepted"
     ledger = acc if isinstance(acc, dict) else load_acceptance()
@@ -1820,6 +1928,10 @@ def acceptance_view(plan: dict, tail: int = 8) -> dict:
         "awaiting_readback": pending_readback(acc),
         "updated_at": acc.get("updated_at", ""),
         "ledger_path": str(ACCEPTANCE_PATH),
+        # 累计微调（第四阶段）—— **只报数、不设闸**：要不要为它回一次全图，由用户按需决定。
+        "tuned_count": int(acc.get("tuned_count") or 0),
+        "tuned_rows_total": int(acc.get("tuned_rows_total") or 0),
+        "tuned_note": str(acc.get("tuned_note") or ""),
         "history": [e for e in (acc.get("events") or [])
                     if isinstance(e, dict)][-tail:],
     }

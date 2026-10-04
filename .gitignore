@@ -1,0 +1,98 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# IDE / 编辑器
+.vs/
+
+# 运行时状态：server 写出来的清单文件。
+# ⚠ 2026-09-23 修正：**不能整个 catalog/ 一刀切忽略** ——
+#   elements.json / asset_list.json 是**人的确认结果**（签字），
+#   重新生成 = 重新找用户确认一遍，**不是无损再生**。
+#   原先把整个目录当"可再生的运行时状态"忽略掉，等于把唯一一份签过字的交付物
+#   放在版本控制之外。所以改成：目录默认忽略，只把这三份放出来。
+#   （library_snapshot.json 本身可再生，但它和清单是同一个签字整体，一起入库。）
+catalog/*
+!catalog/elements.json
+!catalog/asset_list.json
+!catalog/library_snapshot.json
+# ⚠ 2026-10-04 补：`catalog/README.md` 是**目录说明**（告诉人这三份是什么、别手改），
+#   不是运行时产物 —— 与 `views/README.md` 同等对待，**要入库**。
+#   由来：远端 `origin/main` 一直有这份，本地被上面那条 `catalog/*` 挡着，两边对不上。
+!catalog/README.md
+
+# 手工备份目录：check_tools.py 已内置运行时快照 / 还原，这些是冗余的，不入库。
+catalog.bak-*/
+
+# 交付 / 打包 / 备份产物：都是"工作区当前状态"的副本，别塞进版本历史（各自 170~240 KB）。
+#   - backup-<UTC时间戳>/  = 初始化前手做的保命备份（catalog + views + archive 的副本）
+#   - *.zip                = 给别的 AI/环境用的整包（MCPdoubao.zip / MCPdsh.zip）
+backup-*/
+*.zip
+
+# views/ 分三类，别一刀切：
+#   - reference_*.jpg                 = **原始参考图（输入）**，要入库
+#   - plan_v1.json / plan_wire_v1.png = 当前链路产物，**它是闸门，必须能追溯**，要入库
+#   - 其余（探索期截图、回读 JSON、缩略图、归档目录）= **产物**，不入库
+#     ⚠ 2026-09-23 修正：原先把 overview_01.png / ref_view_01.png /
+#       reference_views.json / Material_00X.png 也叫"原始参考图、要入库"，
+#       但那几个是**关卡渲染截图和推导出的相机数据**（产物），不是参考图。
+views/*_20*.png
+views/*_20*.json
+views/**/_*.png
+views/overview_01.png
+views/ref_view_01.png
+views/reference_views.json
+views/thumbs/
+# ⚠ 2026-09-26 补：上面那几条是按**文件名**挑的，管不住后来新增的两类东西 ——
+#   `views/ref_<批次>/`（参考图的切片，实测 4 批共 ~36 MB）与 `diag_* / stage3_viewport*`
+#   （探索期截图，~3.4 MB）。按本文件第 36-39 行写的分类口径，这两类都是**产物**，不入库。
+views/ref_*/
+views/ref_*.jpg
+views/diag_*.png
+views/stage3_viewport*.png
+# ⚠ 2026-10-03 补：`views/preview/` = `capture_preview`（阶段七）每次出图写下的预览 PNG。
+#   它是**产物**（能重新出图），按上面 36-39 行的分类口径**不入库**。
+#   为什么以前没挡住：这个目录 2026-09-29 才加进来，而上面那几条是按**文件名**挑的 ——
+#   于是它**每出一张图就往版本库里塞 ~1 MB**（实测已攒到 31 MB / 26 张）。图留在盘上看，别进历史。
+views/preview/
+# 归档目录只入库 README（说明它是什么），图不入库 —— 那 30 MB 截图留在盘上。
+views/_archive_pre_geometry/*
+!views/_archive_pre_geometry/README.md
+
+# views/archive/（阶段二每一版 plan_v1.json 的留档；2026-09-24 用户口径：**草稿不入库**）
+#   - plan_v1_<时间戳>_confirmed.json = **用户点头过的那一版**，要入库
+#     （"我们现在搭的，是不是当初确认的那一版"—— 回答这个问题就靠它）
+#   - plan_v1_<时间戳>_draft.json     = 中间草稿，不入库（每改一次坐标就多一份，别塞进历史）
+#   - 被自动清走的旧图（*.svg / *.png …）= 产物，不入库
+views/archive/*
+!views/archive/*_confirmed.json
+
+# --- 客户端 MCP 配置：**全是本机生成物**（setup.ps1 现场写，含本机绝对路径 / 各家专有文件名）-----
+# 一律不入库；仓库里只提交一份通用模板 `mcp.json.example`（它的 `_doc` 写明各家读哪个文件 / 键名）。
+# ⚠ 2026-09-29 修正：原先**只有** `.trae/mcp.json` 被提交进了库 —— 于是仓库里躺着一份"只有 Trae 能用"
+#   的配置（用户原话：「我要通用的，不是只有他 trae 能用」）。已用 `git rm --cached` 移出，并在此挡住。
+/mcp.json
+/connect-config.json
+/.trae/
+/.cursor/
+/.vscode/
+# setup.ps1 会先备份它要改的配置（`<配置>.bak-<时间戳>`），那些备份同样不入库
+*.bak-*
+
+# --- 2026-10-04：本机运行状态（只在本机、不进库；发布包也不含）-----------------
+# 这些是"你自己的关卡/场景跑出来的状态"，不是源码：远端仓库与发布包都不带它们。
+catalog/*.json
+!catalog/README.md
+views/*.json
+views/*.svg
+views/archive/
+views/exchange/
+views/preview/

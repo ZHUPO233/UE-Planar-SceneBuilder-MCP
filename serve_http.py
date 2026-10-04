@@ -38,7 +38,7 @@ import mcp_server.main as server  # noqa: E402  —— 复用同一套工具定�
 def main() -> int:
     """起 HTTP 服务；Ctrl+C 停。返回进程退出码。"""
     ap = argparse.ArgumentParser(
-        description="把 UEMCP-SceneLayout 以 Streamable HTTP 起起来（给只认 URL 的客户端用）")
+        description="把 UEPLANE-SceneLayout 以 Streamable HTTP 起起来（给只认 URL 的客户端用）")
     ap.add_argument("--host", default="127.0.0.1",
                     help="监听地址（默认只绑本机；要给别人连才改成 0.0.0.0，且务必先想清楚鉴权）")
     ap.add_argument("--port", type=int, default=8770,
