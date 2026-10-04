@@ -13,7 +13,7 @@
 
 **最后一次动作**：通用 stdio 客户端**重启客户端**；Trae 打开「**启用项目级 MCP**」；Cursor 重载窗口；**VS Code 重载窗口**；DSH 把 `connect-config.json` 里 stdio 那段填进 MCP 设置并重启会话。⚠ 各家文件名与键名不一样（VS Code 那份的根键是 `servers`），一份文件通吃做不到。
 
-**验证**：让 agent 调 `get_plan()`，返回 `status` 就说明链路通了；连上应有 **19 个工具**。⚠ **没开 UE 时**只有离线工具能用；要「找资产 / 验路径 / 往关卡里摆 / 落位对账」必须有 UE 编辑器 + 官方 Unreal MCP 在 `127.0.0.1:8000`（⚠ `evaluate_layout` 连不上时**不报错**：它只出 `plan ↔ 台账` 那半，并在 `warnings` 里点名"关卡那一维没查"）。
+**验证**：让 agent 调 `get_plan()`，返回 `status` 就说明链路通了；连上应有 **20 个工具**。⚠ **没开 UE 时**只有离线工具能用；要「找资产 / 验路径 / 往关卡里摆 / 落位对账」必须有 UE 编辑器 + 官方 Unreal MCP 在 `127.0.0.1:8000`（⚠ `evaluate_layout` 连不上时**不报错**：它只出 `plan ↔ 台账` 那半，并在 `warnings` 里点名"关卡那一维没查"）。
 
 **包里没有**（故意的）：`.venv`、`.git`、`views/archive/`、参考图、**以及任何客户端成品配置**（`mcp.json` / `.trae/` / `.cursor/` / `.vscode/` / `connect-config.json`）。根 `mcp.json` 必须写接收方的绝对路径，所以由 `setup.ps1` 现场生成；仓库里只有 `mcp.json.example` 模板。
 ⚠ 也**没有** `.gitignore` / `.gitattributes`（它们只服务版本控制、**与运行无关**）—— 代价是这份副本**没有忽略规则**，放进 git 前你得自己排一下（仓库里那两份可照抄）。

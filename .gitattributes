@@ -1,0 +1,12 @@
+# 统一换行符：仓库内一律 LF，工作区也检出成 LF。
+#
+# 为什么需要：Windows 上 core.autocrlf=true 会在 checkout 时把 LF 换成 CRLF，
+#   于是工作区文件的字节会随"什么时候 checkout 的"而变。本项目对文件字节敏感 ——
+#   config/plan_params.json 的 _meta 明确要求 UTF-8 无 BOM，换行符是同一类问题。
+#   .gitattributes 的 eol 设置**优先于** core.autocrlf，所以这一行就够。
+* text=auto eol=lf
+
+# 图片是二进制，别让 git 去动它的字节。
+# （text=auto 本来就认得出，写明白是为了以后加了大图也不会误判成文本。）
+*.png binary
+*.jpg binary

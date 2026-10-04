@@ -47,6 +47,10 @@ MAIN_PY = ROOT / "src" / "mcp_server" / "main.py"
 #   要在 Blender / UE 之间搬同一套布局）→ 新增 `export_layout`（导出）+ `check_exchange`
 #   （回读对账，只出报告、不改 plan）—— 14 → **16** 个。
 #   ⚠ `tests/check_tools.py` 里那份名单必须与这里逐字一致（本次已同步）。
+#   ⚠ **2026-10-04：阶段数从七个改成八个** —— 插入「**四 · 微调**」（**不新造工具**：复用
+#   `request_plan_change` / `generate_plan(patch)` / `execute_build(only_labels)`）；上面那两个
+#   导出/交换的工具**从「四」挪到「八」**（**按需 · 往后排**，这一版没把它编排进流程）。
+#   **工具面一个都没动，总数仍是 20**。
 # ⚠ 2026-09-29：阶段六**按用户指令扩范围**（不只有灯光 —— 天空/大气/天光/雾/云/后处理/时段
 #   全都要）→ 新增 `setup_environment`（配整套环境：读现值台账 → 幂等 → 写 → 读回核对 →
 #   可回滚、绝不存盘）+ `capture_preview`（按世界坐标摆机位出图，PNG 落 views/preview/，
@@ -57,11 +61,23 @@ MAIN_PY = ROOT / "src" / "mcp_server" / "main.py"
 #   plan ↔ 搭建台账 ↔ 关卡现状，**只读**、不碰关卡、不改 plan）→ **19 个**。
 #   ⚠ 闭环**不新造工具**（用户拍板的 A 案）：`request_plan_change` → `generate_plan(patch=…)`
 #     → 重画图 → `confirm_plan` → `execute_build()`（增量）这条链早就通了。
+# ⚠ 2026-10-04：阶段五加**第 0 步** —— `create_surfaces`（缺的材质从零建出来；官方
+#   `MaterialTools` 本来就有 create_material / add_expression / connect_to_output / recompile，
+#   缺的是编排）→ **20 个**。⚠ 该工具**尚未实测**，第一次真跑请先 `dry_run=true`。
+# ⚠ 2026-10-04（第二批）：阶段三加 `adopt_user_edits`（**认领手改**：把"人工改过"的那几行按
+#   关卡现状写回 plan 与台账，**不摆 Actor、不重画图、不走阶段二循环**）→ **21 个**。
+#   ⚠ 该工具**尚未实测**，第一次真跑请先 `dry_run=true`。
+# ⚠ 2026-10-04（第三批 · 合并）：`generate_build_orders` **从工具面撤掉**（用户拍板
+#   「那就一个吧」）—— 它是**纯翻译件**（plan → 指令表），不参与任何闸门，却和
+#   `execute_build` 读同一份 plan、复用同一条 `_compose_build_rows()` 口径。
+#   现在它是 `main.py` 里的**内部件** `_orders_snapshot()`，由 `execute_build(dry_run=true)`
+#   顺手落一份留痕件（`views/build_orders_v1.json`）—— **21 → 20 个**。
 EXPECTED_TOOLS = [
+    "adopt_user_edits",
     "apply_surfaces", "capture_preview",
     "check_build_target", "check_exchange", "confirm_assets", "confirm_elements",
-    "confirm_plan", "evaluate_layout", "execute_build", "export_layout",
-    "generate_build_orders", "generate_plan",
+    "confirm_plan", "create_surfaces", "evaluate_layout", "execute_build", "export_layout",
+    "generate_plan",
     "get_asset_list", "get_plan",
     "official_status", "plan_assets", "rename_assets",
     "request_plan_change", "setup_environment",
@@ -190,6 +206,225 @@ def main() -> int:
     except BaseException as exc:
         check("④ / ⑤ 阶段二装配、形状校验与闸门指纹能跑通", False,
               f"{type(exc).__name__}: {exc}")
+
+    # --- ⑥ 阶段三「官方脚本批处理」通道（2026-10-04 加 · ⚠ **真跑尚未实测**）---
+    # 为什么预检要管它：这一段是**唯一**能把"落位"整批做完的路径，而它有两个静默失效的坑：
+    #   ① `batch` 参数要是被谁改没了 / 改了默认值，行为会**悄悄**退回逐行（报文里看得出来，但没人会天天看）；
+    #   ② 脚本是**拼字符串**拼出来的（payload 走两层 `json.dumps`）——拼坏了只有真跑时才炸，
+    #      那时关卡里可能已经落了一半。所以这里**只验能离线验的东西**：
+    #      脚本是合法 Python、且它内嵌的 payload 能原样解回来（中文 label 也要能穿过去）。
+    # ⚠ **不调任何官方工具**：只 `exec` 脚本的**模块体**（`run()` 不被调用），碰不到 UE。
+    try:
+        import inspect as _inspect
+        try:
+            _params = _inspect.signature(mod["execute_build"]).parameters
+            has_batch = "batch" in _params
+            batch_default = _params["batch"].default if has_batch else None
+        except (TypeError, ValueError):               # 装饰器万一不返回可自省的函数 → 退回读源码
+            _src = MAIN_PY.read_text(encoding="utf-8")
+            has_batch = "    batch: Annotated[bool, Field(" in _src
+            batch_default = True if has_batch else None
+
+        fake = [{
+            "uid": "ground|假地基", "index": 1, "kind": "whitebox", "label": "假地基",
+            "loc_cm": [0.0, 0.0, 5.0], "rot": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+            "scale": [1.0, 1.0, 1.0], "size_cm": [100.0, 100.0, 20.0],
+            "folder": "UEMCP/ground", "name": "fake_ground",
+        }]
+        script = mod["_batch_place_script"](fake)
+        env: dict = {}
+        exec(script, env)                             # noqa: S102 —— 只跑模块体，`run()` 不调
+        payload = env.get("PAYLOAD")
+        ok_payload = (isinstance(payload, list) and len(payload) == 1
+                      and payload[0].get("uid") == "ground|假地基"      # 中文穿得过去
+                      and payload[0].get("size_cm") == [100.0, 100.0, 20.0])
+        ok_calls = all(s in script for s in (
+            ".add_to_scene_from_asset", ".add_to_scene_from_class", ".add_cube",
+            ".set_actor_folder")) and "def run()" in script
+
+        # ⚠ **2026-10-04 加：把 `run()` 也在一套假工具上真跑一遍** —— 这一步是"第一次真跑翻车"
+        #   那次的**回归检查**。事故经过（实测原件：D 侧 `views/archive/build_state_20261004T090954Z.json`）：
+        #   白膜行原来写 `got = {"refPath": spawned}` 再 `actor = _ref(got)`，而 `_ref()` **只认
+        #   `returnValue`** ⇒ `actor` 恒为空 ⇒ 抛 `no actor ref` ⇒ **`set_actor_folder` 从未被调到**
+        #   （那次台账 `inner_calls=2` = 只调了 spawn + add_cube；Actor 建出来了、引用丢了 ⇒ 永久游离）。
+        #   所以这里断言四件事：① spawn 被调；② `add_cube` 被调；③ **`set_actor_folder` 被调**；
+        #   ④ 那一行回的 `actor` **非空**且 `ok=True`。⚠ **全离线**（假 `execute_tool`，不碰 UE）。
+        import json as _json
+        calls: list[str] = []
+
+        def _fake_execute_tool(tool: str, args: str):
+            calls.append(str(tool).rsplit(".", 1)[-1])
+            _json.loads(args)                          # 参数必须仍是合法 JSON（拼坏了要当场炸）
+            if str(tool).endswith("add_to_scene_from_class"):
+                return {"returnValue": {"refPath": "/Game/Fake.Fake:PersistentLevel.Actor_9"}}
+            if str(tool).endswith("add_cube"):
+                return {"returnValue": {"refPath": "/Game/Fake.Fake:PersistentLevel.Actor_9.cube"}}
+            return {"returnValue": None}
+
+        env["execute_tool"] = _fake_execute_tool
+        _res = env["run"]()
+        _row0 = ((_res or {}).get("rows") or [{}])[0]
+        ok_row_logic = (calls[:3] == ["add_to_scene_from_class", "add_cube", "set_actor_folder"]
+                        and bool(_row0.get("actor")) and bool(_row0.get("ok"))
+                        and bool(_row0.get("folder_ok")))
+        check("⑥ 阶段三批处理通道：`batch` 参数在（默认 true）+ 脚本能编出来、payload 能解回来"
+              " + **白膜行三步都走到、引用没丢**（回归 2026-10-04 那次真跑事故）",
+              bool(has_batch and batch_default is True and ok_payload and ok_calls and ok_row_logic),
+              f"has_batch={has_batch} default={batch_default!r} payload_ok={ok_payload} "
+              f"tools_ok={ok_calls} calls={calls[:4]} row0={_row0}")
+    except BaseException as exc:                      # noqa: BLE001
+        check("⑥ 阶段三批处理通道：`batch` 参数在（默认 true）+ 脚本能编出来、payload 能解回来"
+              " + **白膜行三步都走到、引用没丢**（回归 2026-10-04 那次真跑事故）",
+              False, f"{type(exc).__name__}: {exc}")
+
+    # --- ⑦ 两处加固（**不写任何状态文件、不调官方**）---
+    # ⚠ 2026-10-04 改：`_answer_code` **已按用户指令撤掉**（「把这个什么码删掉，太离谱了」），
+    #   所以这里不再验它 —— 改成验**它真的没了**（防止哪天又被加回来）+ `_live_vs_ledger` 三元组。
+    # ① 应答码必须**不存在**（撤了就撤干净：函数没了、留痕也不再写 `answer_code` 字段）；
+    # ② `_live_vs_ledger` 的返回值必须是**三元组**：第二个是「没比成的行」。
+    #    以前是两元组，于是"引用失效 / 读失败 / 白膜尺寸读不回来"那几行被**静默跳过** ——
+    #    "没查到"与"查了没问题"在报文里长得一样。这条断言就是防它被改回去。
+    try:
+        ok_code = ("_answer_code" not in mod)
+        import inspect as _inspect2
+        _gate_src = _inspect2.getsource(mod["_user_edits_gate"])
+        ok_gate = ("answer_code" not in _gate_src)          # 闸里不再读码
+        _ret = _inspect2.signature(mod["_live_vs_ledger"]).return_annotation
+        ok_ret = (getattr(_ret, "__origin__", None) is tuple
+                  and len(getattr(_ret, "__args__", ())) == 3)
+        check("⑦ 应答码已撤干净（函数不在 + 闸不读码）+ `_live_vs_ledger` 回三元组（含「没比成」那一维）",
+              bool(ok_code and ok_gate and ok_ret),
+              f"ok_code={ok_code} ok_gate={ok_gate} return={_ret} ok_ret={ok_ret}")
+    except BaseException as exc:                      # noqa: BLE001
+        check("⑦ 应答码已撤干净（函数不在 + 闸不读码）+ `_live_vs_ledger` 回三元组（含「没比成」那一维）",
+              False, f"{type(exc).__name__}: {exc}")
+
+    # --- ⑧ 阶段五第 0 步「建材质」的**离线**部分（2026-10-04 加 · ⚠ 真跑尚未实测）---
+    # 只验"读表 + 配置翻译"这两件**不碰 UE** 的事：
+    #   · `_surface_creates()` 能把 `config/surface_materials.json` 的 `create` 段读出来；
+    #   · 一条合法配置能翻译成"建哪几个参数节点、连哪几个输出"；
+    #   · 一条**非法**配置（参数名不在允许集 / 值既不是数字也不是 4 元数组）**必须被拒**。
+    # ⚠ 真跑（create_material / add_expression / connect_to_output 的属性名）**不敢在这里验** ——
+    #   那要 UE 在线，而且那几个属性名**尚未实测**（见 main.py 顶部 MAT_PARAM_* 常量的说明）。
+    try:
+        _tbl, _tbl_note = mod["_surface_creates"]()
+        _ok_tbl = isinstance(_tbl, dict)
+        _item, _why = mod["_create_plan_item"](
+            "/Game/Preflight/M_Road", {"BaseColor": [0.1, 0.1, 0.12, 1.0], "Roughness": 0.9})
+        _ok_item = (not _why and isinstance(_item, dict)
+                    and [p["kind"] for p in _item["params"]] == ["vector", "scalar"]
+                    and _item["folder"] == "/Game/Preflight" and _item["name"] == "M_Road")
+        _, _why_bad = mod["_create_plan_item"]("/Game/Preflight/M_Bad", {"NotAnOutput": 1.0})
+        _ok_bad = bool(_why_bad)
+        _, _why_bad2 = mod["_create_plan_item"]("/Game/Preflight/M_Bad2", {"BaseColor": [0.1, 0.2]})
+        _ok_bad2 = bool(_why_bad2)
+        check("⑧ 建材质：`create` 段读得出 + 合法配置翻译得对 + 非法配置被拒（真跑尚未实测）",
+              bool(_ok_tbl and _ok_item and _ok_bad and _ok_bad2),
+              f"table_ok={_ok_tbl} note={_tbl_note!r} item_ok={_ok_item} why={_why!r} "
+              f"bad_ok={_ok_bad} bad2_ok={_ok_bad2}")
+    except BaseException as exc:                      # noqa: BLE001
+        check("⑧ 建材质：`create` 段读得出 + 合法配置翻译得对 + 非法配置被拒（真跑尚未实测）",
+              False, f"{type(exc).__name__}: {exc}")
+
+    # --- ⑨ 阶段四「微调」的状态机（2026-10-04 加 · **纯离线、不碰 UE、不写盘**）---
+    # 为什么必须在这里钉住（这一条是**回归靶子**）：
+    #   · `mark_tuned()` 写的 `plan_hash` 必须是**改完之后**那一版的指纹 —— 写错的话，微调版会在
+    #     `execute_build` 的"几何指纹对不上"那一关被拒（fail-closed，但用户会觉得工具坏了）；
+    #   · `acceptance_state()` 必须**先**认 `confirmation.mode == "tuned"` 直接回 `tuned`，
+    #     否则它会走"图认不认这份数据"那条路 → 微调版永远显示"等出图" → `execute_build` 拒收；
+    #   · `ACCEPTANCE_STATES` 里得有 `tuned` 的中文说明（`get_plan` 直接展示它）。
+    # ⚠ 只调**规划层的纯函数**（`planning`），不碰 `main.py` 的工具、不调官方、不落盘：
+    #   这里构造的假 plan 只在内存里，`mark_tuned` 会顺手写验收台账 —— 所以先记下原文件的
+    #   字节内容，验完**原样写回**（不留痕、不改用户数据）。
+    _acc_path = None
+    try:
+        import json as _json3
+        _pl = mod["_planning_modules"]()             # 规划层：与工具面**同一个**模块对象
+        _acc_path = _pl.ACCEPTANCE_PATH
+        _acc_before = _acc_path.read_bytes() if _acc_path.exists() else None
+        _fake = {
+            "unit": "m", "world": {"center": [0.0, 0.0], "size": [10.0, 10.0]},
+            "assets": [],
+            "whiteboxes": [{"element_key": "road", "label": "沥青车行道", "shape": "cube",
+                            "height_m": 0.15, "pos": [0.0, 0.0], "footprint_m": [10.0, 4.0],
+                            "rot_deg": 0.0, "size_source": "预估（参考图目测，待核实）"}],
+            "confirmation": {"required": True, "confirmed": True, "mode": "tuned",
+                             "confirmed_by": "用户（微调）", "confirmed_at": "t",
+                             "user_quote": "把电线杆挪近一点", "rows": [], "plan_hash": "x"},
+        }
+        _ok_state = (_pl.acceptance_state(_fake) == "tuned"
+                     and "tuned" in _pl.ACCEPTANCE_STATES
+                     and bool(_pl.ACCEPTANCE_STATES["tuned"]))
+        _tuned_plan = _pl.mark_tuned(
+            {k: v for k, v in _fake.items() if k != "confirmation"},
+            "把电线杆挪近一点", rows=[{"label": "沥青车行道", "why": "挪近 1 m"}])
+        _ok_hash = (str(_tuned_plan["confirmation"]["plan_hash"])
+                    == str(_pl.plan_geometry_hash(_tuned_plan)))
+        _ok_quote = bool(str(_tuned_plan["confirmation"].get("user_quote") or "").strip())
+        _ok_rows = [r.get("label") for r in (_tuned_plan["confirmation"].get("rows") or [])] \
+            == ["沥青车行道"]
+        # 没原话必须**拒收**（与 confirm_plan 同一条纪律：拿不出原话 = 没问过人）
+        try:
+            _pl.mark_tuned({"whiteboxes": [], "assets": []}, "   ")
+            _ok_noquote = False
+        except ValueError:
+            _ok_noquote = True
+        check("⑨ 微调：`mark_tuned` 指纹对得上 + 认 `tuned` 状态 + 留痕（原话/行）+ **没原话拒收**",
+              bool(_ok_state and _ok_hash and _ok_quote and _ok_rows and _ok_noquote),
+              f"state_ok={_ok_state} hash_ok={_ok_hash} quote_ok={_ok_quote} "
+              f"rows_ok={_ok_rows} noquote_ok={_ok_noquote}")
+    except BaseException as exc:                      # noqa: BLE001
+        check("⑨ 微调：`mark_tuned` 指纹对得上 + 认 `tuned` 状态 + 留痕（原话/行）+ **没原话拒收**",
+              False, f"{type(exc).__name__}: {exc}")
+    finally:
+        # 把验收台账**原样写回**（上面那次 `mark_tuned` 会动它）—— 预检不许留下自己的痕迹。
+        try:
+            if _acc_path is not None:
+                if _acc_before is None:
+                    _acc_path.unlink(missing_ok=True)
+                else:
+                    _acc_path.write_bytes(_acc_before)
+        except OSError:
+            pass
+
+    # --- ⑩ 八阶段总览 `_stage_overview()`（2026-10-04 加 · **纯离线**）---
+    # 为什么要有它：阶段名以前只散在各工具各自的报文里，**没有一处回答得了「我现在整体在第几
+    #   阶段」** —— 接手的人（新对话 / 换 agent）只能自己拼。现在唯一判据在
+    #   `main.py::_stage_overview()`，由 `get_plan()` / `get_asset_list()` 的 `stages` 带出。
+    # ⚠ 这里断言的是**结构**，不是内容：
+    #   · 正好 8 条、`no` 是 1..8 不缺不重；
+    #   · 每条都带 `name` / `state` / `evidence` / `next` 四个键（且都不是 None）；
+    #   · **不调用任何官方工具**（用 `inspect.getsource` 断言函数体里不含 `call_official`）——
+    #     它必须能在 UE 没开的时候照样回答（get_plan 是"开场必调、完全不碰 UE"的那一个）。
+    # ⚠ **磁盘上缺文件不算失败**：缺文件是正常状态，那一行应当写「未开始」（断言的是结构）。
+    try:
+        import inspect as _inspect3
+        # 先把「唯一判据」钉住：函数体里不许出现官方调用（也不许出现在它两个辅助件里）
+        _ov_src = _inspect3.getsource(mod["_stage_overview"])
+        _aux_src = (_inspect3.getsource(mod["_safe_json"])
+                    + _inspect3.getsource(mod["_stage_acceptance_rows"])
+                    + _inspect3.getsource(mod["_stage_last_at"]))
+        ok_offline = ("call_official" not in _ov_src) and ("call_official" not in _aux_src)
+
+        _stages = mod["_stage_overview"]()
+        _need = ("name", "state", "evidence", "next")
+        ok_rows = (isinstance(_stages, list) and len(_stages) == 8)
+        ok_no = ok_rows and ([s.get("no") for s in _stages] == list(range(1, 9)))
+        ok_keys = ok_rows and all(
+            isinstance(s, dict)
+            and all(k in s and s.get(k) not in (None, "") for k in _need)
+            for s in _stages
+        )
+        # 状态取值只允许那四个（不许悄悄多造一种 —— 多一种就意味着别处在替它判断）
+        _ok_states = {"未开始", "进行中", "已完成", "需你确认"}
+        ok_state = ok_rows and all(s.get("state") in _ok_states for s in _stages)
+        check("⑩ 八阶段总览：正好 8 条 / 编号 1..8 / 四个键齐 / 状态取值合法 / **不调官方工具**",
+              bool(ok_offline and ok_rows and ok_no and ok_keys and ok_state),
+              f"offline={ok_offline} rows={len(_stages) if isinstance(_stages, list) else _stages!r} "
+              f"no_ok={ok_no} keys_ok={ok_keys} state_ok={ok_state}")
+    except BaseException as exc:                      # noqa: BLE001
+        check("⑩ 八阶段总览：正好 8 条 / 编号 1..8 / 四个键齐 / 状态取值合法 / **不调官方工具**",
+              False, f"{type(exc).__name__}: {exc}")
 
     print()
     if FAILED:

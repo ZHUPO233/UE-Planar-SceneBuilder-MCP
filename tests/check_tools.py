@@ -89,6 +89,10 @@ async def test_pure() -> None:
     # ⚠ 2026-09-27（晚）：阶段五第 1 步 `apply_surfaces`（给白膜贴表面材质）→ **14 个**
     # ⚠ 2026-09-27（晚二）：第四阶段**不跳了**，实现成导出/交换 → `export_layout` + `check_exchange`
     #   → **16 个**（与 tests/preflight.py 的 EXPECTED_TOOLS 必须一致）。
+    #   ⚠ **2026-10-04：阶段数从七个改成八个** —— 插入「**四 · 微调**」（**不新造工具**：复用
+    #   `request_plan_change` / `generate_plan(patch)` / `execute_build(only_labels)`），
+    #   上面那两个导出/交换的工具**从「四」挪到「八」**（**按需 · 往后排**，这一版没编排进流程）
+    #   —— **工具面一个都没动，总数仍是 20**。
     # ⚠ 2026-09-29：阶段六扩范围（不只有灯光：天空/大气/天光/雾/云/后处理/时段）→
     #   `setup_environment` + `capture_preview` → **18 个**（与 tests/preflight.py 的
     #   EXPECTED_TOOLS 必须一致）。⚠ 阶段六最终定名「环境搭建」，出图归**阶段七** ——
@@ -96,19 +100,27 @@ async def test_pure() -> None:
     # ⚠ 2026-09-30：阶段七只加「评估」这一个工具 —— `evaluate_layout`（落位对账：
     #   plan ↔ 搭建台账 ↔ 关卡现状，只读、不碰关卡、不改 plan）→ **19 个**
     #   （与 tests/preflight.py 的 EXPECTED_TOOLS 必须一致）。闭环**不新造工具**。
+    # ⚠ 2026-10-04：阶段五加**第 0 步** `create_surfaces`（缺的材质从零建）→ **20 个**
+    #   （与 tests/preflight.py 的 EXPECTED_TOOLS 必须一致）。
+    # ⚠ 2026-10-04（第三批 · 合并）：`generate_build_orders` 从工具面撤掉（纯翻译件、不参与闸门）
+    #   —— 内核改成内部件 `_orders_snapshot()`，由 `execute_build(dry_run=true)` 顺手落留痕件
+    #   → **20 个**（与 tests/preflight.py 的 EXPECTED_TOOLS 必须一致）。
     result = M.mcp.list_tools()
     if asyncio.iscoroutine(result):
         result = await result
     tools = getattr(result, "tools", result)
     names = sorted(t.name for t in tools)
     check(
-        "只注册了 19 个工具（阶段一 4 + 取清单 1 + 阶段二 4 + 阶段三 3 + 阶段四 2 + 阶段五 1 + "
+        "只注册了 20 个工具（阶段一 4 + 取清单 1 + 阶段二 4 + 阶段三 3（`check_build_target` / "
+        "`adopt_user_edits` / `execute_build`）+ 阶段四（微调）0（**不新造工具**：复用 `request_plan_change` / "
+        "`generate_plan(patch)` / `execute_build(only_labels)`）+ 阶段五 2 + "
         "阶段六 1（`setup_environment`）+ 阶段七 2（`capture_preview`，原挂在阶段六；"
-        "`evaluate_layout`）+ 自检 1）",
-        names == ["apply_surfaces", "capture_preview",
+        "`evaluate_layout`）+ 阶段八 2（导出/交换 · 按需 · 往后排：`export_layout` / `check_exchange`，"
+        "原来记在阶段四）+ 自检 1）",
+        names == ["adopt_user_edits", "apply_surfaces", "capture_preview",
                   "check_build_target", "check_exchange", "confirm_assets", "confirm_elements",
-                  "confirm_plan", "evaluate_layout", "execute_build", "export_layout",
-                  "generate_build_orders", "generate_plan",
+                  "confirm_plan", "create_surfaces", "evaluate_layout", "execute_build",
+                  "export_layout", "generate_plan",
                   "get_asset_list", "get_plan",
                   "official_status", "plan_assets", "rename_assets",
                   "request_plan_change", "setup_environment"],
