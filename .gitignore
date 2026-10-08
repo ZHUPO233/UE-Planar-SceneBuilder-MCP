@@ -96,3 +96,5 @@ views/*.svg
 views/archive/
 views/exchange/
 views/preview/
+# --- 2026-10-08（V1.0.0 发版）：开发过程留档不收（用户指令「不要包含开发日志和杂七杂八的东西」）
+docs/archive/

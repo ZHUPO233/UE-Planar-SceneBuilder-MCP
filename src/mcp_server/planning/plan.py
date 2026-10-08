@@ -153,16 +153,27 @@ def load_json(path: Path):
 def active_plan_path() -> Path:
     """**现在算数的那份 plan 是哪个文件** —— 全工程读写 plan 的唯一咽喉。
 
-    口径就一句话：`views/plan_v2.json` **在、且能解析** ⇒ 它（纪元 2）；否则 `views/plan_v1.json`。
+    口径一句话：**`plan_v2.json` 在 ⇒ 就它一份；不在 ⇒ 纪元 1 的 `plan_v1.json`**。
 
-    ⚠ **「能解析」是判据的一部分**（2026-10-04）：v2 文件在、但读不动（半截写入 / 手改坏）时
-      **退回 v1** —— 而不是拿一份读不出来的东西当"没有"。这种状态（`PLAN_V2_PATH.exists()`
-      为真而活动目标不是它）**是坏了**：`generate_plan` 会拿这条**拒收**（防手滑把新改动
-      写进已冻结的 v1），不会静默降级。
+    ⚠ 判据只有**"那个文件在不在"**这一条 —— **没有"能不能解析"这一层**（2026-10-07 拆的就是它）。
+
+    ⚠ **拆掉的是哪条**（用户原话：「进入纪元 2 后，V1 要不直接删除得了，以后增删改查都靠 V2」，
+      以及「别结束了前三阶段后面又**失忆用 V1** 而忘记只允许使用 V2」）：
+      原来这里写的是"v2 在、**且能解析** ⇒ v2；否则退回 `views/plan_v1.json`"。那条回退有两个害处：
+      ① **"v2 被写坏"会静默退回 v1** —— 表现为"看起来没有规划"或"拿着一份旧表继续干"，
+         **坏状态长得像好状态**（本项目最忌的一条）；
+      ② 它给"失忆用 V1"留了一条路 —— 而 V1 是已冻结、只读的那一份，拿它当权威就是错的。
+      **现在只要 `plan_v2.json` 在，就永远是它**，读不动也不拿任何东西顶替
+      （`active_plan()` 按"没有规划"说话，各闸自己拒收、如实报）。
+
+    ⚠ **保留的"v2 不在 ⇒ v1"不是回退，是纪元 1 的正常目标**：从零搭建时磁盘上本来就没有
+      `plan_v2.json` —— 阶段二写的就是 `plan_v1.json`，阶段三搭的也是它，换纪元那一步
+      （`execute_build(confirm_stage3=…)`）再把整表照抄进 v2。**把这一支也砍掉会砸掉从零搭建**：
+      阶段二会把 plan 直接写进 `plan_v2.json` ⇒ 换纪元闸的出生条件①（"`plan_v2.json` 不存在"，
+      `main.py::_promote_epoch2`）**永远不成立** ⇒ `confirm_stage3` 从此对新工程一律拒收。
+      两句话的分界：**"v2 在 ⇒ 只认 v2"（防失忆用 V1）；"v2 不在 ⇒ 才轮到 v1"（从零搭建）**。
     """
-    if PLAN_V2_PATH.exists() and load_json(PLAN_V2_PATH) is not None:
-        return PLAN_V2_PATH
-    return OUT_JSON
+    return PLAN_V2_PATH if PLAN_V2_PATH.exists() else OUT_JSON
 
 
 def active_plan() -> dict:
@@ -170,18 +181,21 @@ def active_plan() -> dict:
 
     ⚠ **读不动按「没有」处理、不猜**：返回空 dict（调用方按"没有规划"说话）；
       不拿上一版、也不拿另一份顶替 —— 那正是硬规则 6「预估值不许伪装成实测值」的同一条纪律。
+      ⚠ 2026-10-07 起**"v2 读不动"不再退回 v1**（那条回退已拆，见 `active_plan_path()`）。
     """
     doc = load_json(active_plan_path())
     return doc if isinstance(doc, dict) else {}
 
 
 def active_epoch() -> int:
-    """当前纪元：**2** = 已换血（`plan_v2.json` 在接管）；**1** = 还在阶段二那一版。
+    """当前纪元：**`views/plan_v2.json` 在 = 2，不在 = 1**（与 `active_plan_path()` **同一条判据**）。
 
-    ⚠ 判据只有一条：`active_plan_path()` 指向谁 —— **不读文件里的任何标记**
-      （`confirmation.epoch` 那种标记是留给人看的留痕，不是判据；两处判据迟早分叉）。
+    ⚠ **不读文件里的任何标记**（`confirmation.epoch` 那种是留给人看的留痕，不是判据 —— 两处判据迟早分叉）。
+    ⚠ 为什么用 `exists()` 而不是"`active_plan_path()` 指向谁"：**两份都不在**时咽喉会指向 v1 那条
+      路径（见那里的说明）—— 而那种状态**就是纪元 1**（还没搭），`exists()` 给出的正是它；
+      "v2 在"时两种算法又必然一致。⇒ 写成 `exists()` **少一层推理**，也不容易与咽喉分叉。
     """
-    return 2 if active_plan_path() == PLAN_V2_PATH else 1
+    return 2 if PLAN_V2_PATH.exists() else 1
 
 
 def _epoch_of_path(path: Path) -> int:
@@ -283,10 +297,13 @@ def bounds_check(plan: dict) -> dict:
       的说明 —— 硬（实体，四角必须在界内）/ 软（铺装，允许贴边、不许超出）/ 豁免（`ground`
       自己就是边界）。**表里没有的一律按硬的算**（宁可严）。
 
-    ⚠ 判据把 `footprint_m` 当**世界轴对齐尺寸**（`rot_deg` **不叠**）：plan 的 `params`
-      写明"已有资产占地 = 阶段一实测包围盒 × scale，`footprint_m` 是**旋转之后的世界 X / Y
-      占地**" —— 再叠一次 rot 就是转两遍。**代价照实说**：若某行 `rot_deg != 0` 而它的
-      `footprint_m` 其实是**未旋转**的尺寸，这一条会**少报**（宁可少报，不假报）。
+    ⚠ **判据把 `footprint_m` 当"物体自身的 [宽, 深]"用，并**按 `rot_deg` 把四角转过去**
+      （2026-10-07 修）：它与 `_compose_build_rows()` 交给 cube 的 `size_cm` **同源**，
+      `rot_deg` 就是那之后绕 Z 的 yaw ⇒ 世界占地 = 旋转后的那个矩形。
+      ⚠ 原来这里**不叠 `rot_deg`**，理由是"plan 的 `params` 写明 footprint 是旋转之后的世界
+      X / Y 占地，再叠一次就是转两遍" —— 那句**已核不成立**：本版 plan 的 `params` 里没有这句，
+      而 AGENTS / 本文件都把 `footprint_m` 记作 `[宽, 深]`（物体自身的）。
+      代价也实测出来了：**转过 90° 的行会假报越界**（22×70 的路 rot 90 ⇒ 假报 8.00 m）。
 
     返回 `{"ok", "total", "outside": [{"label","kind","element_key","tier","tier_cn","why","over_m"}],
     "by_tier", "criteria", "note"}` —— 纯读。
@@ -320,7 +337,17 @@ def bounds_check(plan: dict) -> dict:
         why: list[str] = []
         if not (x0 <= cx <= x1 and y0 <= cy <= y1):
             why.append(f"中心 ({cx:g}, {cy:g}) 已在界外")
-        corners = rect_corners((cx, cy), (w, d), 0.0)
+        # ⚠ **2026-10-07 修：四角要按 `rot_deg` 转过去再比**。
+        #   `footprint_m` 是 `[宽, 深]` —— **物体自身坐标系**里的尺寸（与 `_compose_build_rows()`
+        #   交给 cube 的 `size_cm` 同源），`rot_deg` 是那之后绕 Z 的 yaw。
+        #   原来这里硬写 `0.0`（= 当世界轴对齐尺寸用），于是**转过 90° 的行会假报越界**：
+        #   实测「沥青车行道（主路）」22×70、rot 90 ⇒ 报「出界 8.00 m」，
+        #   而它建成后世界占地是 **70×22**（沿 X 贯通 70 m、宽 22 m），**完全在界内**。
+        #   ⚠ 那句"plan 的 params 写明 footprint 是旋转之后的世界 X/Y 占地"**已核不成立**：
+        #     本版 plan 的 `params` 里没有这句（是旧版残留的说法），而 AGENTS / 本文件都写着
+        #     `footprint_m` = `[宽, 深]`（物体自身的）—— 所以叠 rot 才是对的，不是"转两遍"。
+        rot = float(r.get("rot_deg") or 0.0)
+        corners = rect_corners((cx, cy), (w, d), rot)
         if not rect_inside_bounds(corners, bounds):
             if not why:
                 why.append("占地四角出界（中心仍在界内）")
@@ -332,7 +359,8 @@ def bounds_check(plan: dict) -> dict:
         over = 0.0
         for px, py in list(corners) + [(cx, cy)]:
             over = max(over, x0 - px, px - x1, y0 - py, py - y1, 0.0)
-        why.append(f"越界 {over:.2f} m（占地 {w:g}×{d:g} m）")
+        why.append(f"越界 {over:.2f} m（占地 {w:g}×{d:g} m"
+                   + (f"，已按 rot {rot:g}° 转" if abs(rot) > 1e-9 else "") + "）")
         outside.append({
             "label": label, "kind": kind, "element_key": element_key,
             "tier": tier, "tier_cn": BOUNDS_TIER_CN.get(tier, tier),
@@ -357,8 +385,8 @@ def bounds_check(plan: dict) -> dict:
                      "以及**表里没有的一切 element_key**）四角必须都在界内；"
                      "**软·铺装**（road / sidewalk / path / grass）允许贴边、不许超出；"
                      "**豁免·边界元素**（ground）它自己就是世界边界，压线合法（超出仍报）。"
-                     "判的是物体**中心**与**占地四角**（`footprint_m` 当世界轴对齐尺寸用，"
-                     "**不叠 `rot_deg`**）。"),
+                     "判的是物体**中心**与**占地四角**（`footprint_m` 是物体自身的 [宽, 深]，"
+                     "**按 `rot_deg` 转过之后**再比世界边界 —— 2026-10-07 修）。"),
         "note": ("⚠ 只报红、不拦；结果**不写进 plan**（不碰几何指纹）。"
                  "⚠ 越界的物理含义：`world.bounds` = **世界地基的范围**，"
                  "跑到外面 = 悬空 / 穿帮。"),
@@ -652,17 +680,26 @@ def _norm_placement(raw: dict) -> dict:
         "rot_deg": float(raw.get("rot_deg") or 0.0),
         "note": str(raw.get("note") or ""),
     }
-    # `z_m`（可选，米）= 这一行的**中心绝对标高** —— 不给就按阶段三的竖直口径推
-    #   （`main.py` 的 `WHITEBOX_VERTICAL` / `GROUND_Z_M` / `ASSET_PIVOT_LIFT_CM`）。
-    # 为什么加它（2026-09-30 用户拍板 D 案）：白膜的竖直位置**原本只由代码口径算**
-    #   （`ground: ("top", GROUND_Z_M)`），于是"用户把世界地基手动挪低 10 cm"这件事
-    #   **在 plan 里表达不出来** —— 写不回 plan，下一轮增量还会按口径把它拉回去。
+    # `z_m`（**必填**，米）= 这一行的**底面绝对标高** —— 2026-10-08 起**每行都要写**
+    #   （用户指令：「关于竖直我之前就说了改位置表结构你说不用，现在又来问我，
+    #   赶紧改位置表结构增加Z」）：
+    #   **Z 只从这一行取**，阶段三**不再**按 `element_key` 查表推（那张 `WHITEBOX_VERTICAL` 已删）。
+    # 语义 = **底面标高**（2026-10-07 用户定案 B）：资产行与白膜行**同一个量**，
+    #   "中心 / 原点"由阶段三从它推出来（`_compose_build_rows()`）。
+    #   ⚠ 本文件**不做任何 Z 换算**（只存这个数）—— 推 Z 的地方只有阶段三那一处。
     #   ⚠ 它是**几何**（进指纹、进逐行签名），不是说明文字。
-    if raw.get("z_m") is not None:
-        try:
-            item["z_m"] = float(raw["z_m"])
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"{key!r} 的 z_m 不是数字：{raw.get('z_m')!r}") from exc
+    # 参照值（填的时候对表用）：路面上的 0.00、站在两侧地面上的 0.15、人行道底面贴路面 0.00、
+    #   世界地基 −0.05（顶面 0.15、厚 0.20）、车行道 −0.15（顶面 0、厚 0.15）。
+    if raw.get("z_m") is None:
+        raise ValueError(
+            f"{key!r} **缺 `z_m`**（这一行的**底面绝对标高**，米）—— 2026-10-08 起**每行必填**："
+            "Z 只从这一行取，阶段三不猜（用户指令「改位置表结构增加Z」）。"
+            "参照值：路面上的 0.00、站在两侧地面上的 0.15、人行道底面贴路面 0.00、"
+            "世界地基 −0.05（顶面 0.15、厚 0.20）、车行道 −0.15（顶面 0、厚 0.15）。")
+    try:
+        item["z_m"] = float(raw["z_m"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{key!r} 的 z_m 不是数字：{raw.get('z_m')!r}") from exc
     if not (item["footprint_m"][0] > 0 and item["footprint_m"][1] > 0):
         raise ValueError(f"{key!r} 的 footprint_m 必须都是正数（米）")
     return item
@@ -808,6 +845,32 @@ def build_plan(assets: list, whiteboxes: list, world: dict,
         if not math.isfinite(_hv) or _hv <= 0:
             raise ValueError(f"{_k!r} 的 `height_m` 必须是正的有限数，现在是 {_h!r}")
 
+    # --- 出口再挡一次：`label` **必须唯一**（2026-10-05 加）--------------------------------
+    # 为什么（实测缺陷链）：`label` 是**匹配键**（`uid = element_key|label`）—— 两行同名会让
+    #   ① `plan_row_signatures()` 按 label 建字典 ⇒ **后一条静默覆盖前一条**：验收基线与
+    #      `change_set()` 少一行，而 `figure_label_coverage()` 只要那个名字在正文里出现过一次
+    #      就算覆盖 ⇒ **图里永远看不出漏了一行**（正是本文件别处警告过的那类"真漏了没人看得出来"）；
+    #   ② `uid` 撞车 ⇒ `_write_ledger_rows()` 的 `res_by_uid` 按 uid 折叠，一行的落位结果被顶掉；
+    #   ③ 之后再点这个名字的 `patch` / `only_labels` 会"命中多行"拒收（吵的那一半）。
+    # 判据：**只查非空 label** —— 空 label 是"没写名字"，那不算撞名（图里另有占位说明）。
+    _seen_lab: dict[str, str] = {}
+    _dup_lab: list[str] = []
+    for _kind_cn, _rows_cn in (("资产", assets), ("白膜", whiteboxes)):
+        for _r in (_rows_cn or []):
+            _lab = str((_r or {}).get("label") or "").strip()
+            if not _lab:
+                continue
+            if _lab in _seen_lab:
+                _dup_lab.append(f"`{_lab}`（{_seen_lab[_lab]}行 与 {_kind_cn}行）")
+            else:
+                _seen_lab[_lab] = _kind_cn
+    if _dup_lab:
+        raise ValueError(
+            "放置表里有**重名**的 label：" + "、".join(_dup_lab)
+            + " —— label 是**匹配键**（`uid = element_key|label`：补丁定位 / 点名重摆 / 逐行签名"
+              "都认它），重名会让两行共用一个 uid：图里看不出漏了一行、台账对账会折叠。"
+              "请把这几行的 label 改成互不相同（同类多行必须能区分）。")
+
     plan = {
         "stage": "阶段二 · 平面放置规划",
         "unit": "m",
@@ -907,10 +970,18 @@ def mark_confirmed(plan: dict, who: str, user_quote: str = "") -> dict:
     # 老文件里可能带着 params_hash —— 它是"上一版机制"的残留，确认时顺手清掉，
     # 免得读的人以为现在还有"参数指纹"这道闸。
     out["confirmation"].pop("params_hash", None)
+    # ⚠ **2026-10-04 修**：`mode` / `rows` 是**微调版**（`mark_tuned()`）留下的那两笔 —— 原来
+    #   没清。后果：`acceptance_state()` **最先认 `mode`** ⇒ 微调版走完正路
+    #   「重画两张图 → `confirm_plan()`」之后**仍然返回 `tuned`**，`main.py` 的 `_tuned_plan`
+    #   仍为 True ⇒ `mode="full"` 继续被拒、真跑继续强制点名 —— 而报文里恰恰把那条正路说成
+    #   **唯一出路**（用户/agent 照它做，永远回不到正常验收）。**清掉 = 正常确认才是回到正常验收。**
+    out["confirmation"].pop("mode", None)
+    out["confirmation"].pop("rows", None)
     return out
 
 
-def mark_tuned(plan: dict, user_quote: str, rows: list[dict] | None = None) -> dict:
+def mark_tuned(plan: dict, user_quote: str, rows: list[dict] | None = None,
+               by: str = "用户") -> dict:
     """返回一份**带「微调版确认」信息的新 plan**（不改传入的那个对象）—— **第四阶段 · 微调**用。
 
     用在哪（阶段八之前的第 4 个阶段）：**整体搭建之后**用户说「把电线杆挪近一点」这类**小改** ——
@@ -929,6 +1000,11 @@ def mark_tuned(plan: dict, user_quote: str, rows: list[dict] | None = None) -> d
     ⚠ `rows` = **改了哪几行 / 为什么**（`[{"label": …, "why": …}, …]`）：`label` 与
       `plan_v1.json` 里的一致，`why` 能记用户原话就记原话。**只留痕，不做校验**
       （它不参与几何指纹，也不是闸门；目的是台账事后答得了「用户说了什么 ↔ 数据变成什么」）。
+
+    ⚠ `by` = **这句话是谁说的**（`用户` / `agent 自查`，2026-10-05 加）：它决定 `confirmed_by`
+      与新增的 `provenance`。**`agent 自查` 的那句话不算"用户点头"** —— `_precheck_build()` 见到
+      `provenance != 用户` 会**拒收这一版落关卡**（要落就得让他本人开口，重记一条
+      `request_plan_change(items=[他的原话], by="用户")`）。默认 `"用户"` 只为兼容旧调用方。
 
     落盘路径照旧是 `write_plan()`（本函数只造对象、**不写盘**）——
     它会自动留档上一版、并清掉不认新指纹的旧图（微调版**本来就没有图**）。
@@ -953,12 +1029,26 @@ def mark_tuned(plan: dict, user_quote: str, rows: list[dict] | None = None) -> d
         "confirmed": True,
         # `mode` 是"这是哪一种确认"的唯一判据 —— `acceptance_state()` 见到它就直接给 `tuned`。
         "mode": "tuned",
-        "confirmed_by": "用户（微调）",
+        # ⚠ **`confirmed_by` 不再写死**（2026-10-05 修）：`main.py::_pending_change_quote()` 现在把
+        #   `request_plan_change()` 记下的 `by` 一起带出来 —— 用户提的（`by="用户"`）才记成
+        #   「用户（微调）」；agent 自查的（`by="agent 自查"`）**只能**记成它自己。
+        #   以前这里写死，于是一次纯自查的改动在 plan 里长得像**用户确认过**；而
+        #   `_precheck_build()` 又拿 `confirmation.user_quote` 非空当"用户点头"的凭据
+        #   ⇒ **系统把 agent 的话洗成了人的确认**。现在它按新增的 `provenance` 拦。
+        "confirmed_by": ("用户（微调）" if str(by or "").strip() in ("", "用户")
+                         else f"{str(by).strip()}（微调）"),
+        # `provenance` = **这句话是谁说的**（`用户` / `agent 自查`）—— 「能不能当用户点头」的判据，
+        # 由 `main.py::_precheck_build()` 读。⚠ 它落在 `confirmation` 段里，而
+        # `plan_geometry_hash()` **排除 `confirmation`** ⇒ 补这一笔**不作废任何已有确认**。
+        "provenance": str(by or "").strip() or "用户",
         "confirmed_at": _now(),
         "user_quote": str(user_quote or ""),
         "rows": changed_rows,
         "plan_hash": plan_geometry_hash(plan),
-        "note": ("微调版确认（第四阶段 · 微调）：几何已按用户原话改过，"
+        "note": ("微调版确认（第四阶段 · 微调）：几何已按"
+                 + ("**用户原话**" if str(by or "").strip() in ("", "用户")
+                    else f"**{str(by).strip()}**的话")
+                 + "改过（`provenance` 记着这句话是谁说的），"
                  "**这一次没有图** —— 依据是 `user_quote` 与 `rows`。"
                  "几何一变，指纹就对不上，本次留痕自动作废。"),
     }
@@ -1859,6 +1949,15 @@ def empty_acceptance() -> dict:
         #   （实测：`request_plan_change` 记完、台账文件里确实是 `true`，
         #     `generate_plan` 仍然拒收「台账里没有记录」）。**这一行别删。**
         "change_window_open": False,
+        # ⚠ **2026-10-04 修（同型 blocker 第二次）**：`tuned_count` / `tuned_rows_total` /
+        #   `tuned_note` / `tuned_history` 原先**不在本表里**，而 `load_acceptance()` 是
+        #   **按本表的键过滤**的（血账见上面 `change_window_open` 那段）⇒ `mark_tuned()` 写进去的
+        #   微调计数**永远读不回来**：八阶段总览 ④ 恒报「tuned_count=0（还没微调过）」、
+        #   `tuned_rows_total` 也永远只剩本次那几行。**这四行别删。**
+        "tuned_count": 0,
+        "tuned_rows_total": 0,
+        "tuned_note": "",
+        "tuned_history": [],
     }
 
 

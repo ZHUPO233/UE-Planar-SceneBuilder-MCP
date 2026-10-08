@@ -82,8 +82,10 @@ class BuildOrderRow(BaseModel):
     """**搭建指令表里的一行** = 一个要落进关卡的东西（阶段三第 2 步）。
 
     ⚠ 这是"翻译件"不是"重新规划"：`loc_cm` 由 plan 的 `pos`（米）×100 得来，
-      **一个字都不许在这里改**。plan 里没有的只有两样，都在这里补上：
-      ① **Z**（竖直标高，规则见 `WHITEBOX_VERTICAL` / `ASSET_PIVOT_LIFT_CM`）；
+      **一个字都不许在这里改**。plan 里没有的只剩一样，在这里补上：
+      ① **Z 不再在这里补**（2026-10-08）：plan 的每一行**必填 `z_m`**（该行**底面绝对标高**，米），
+         `loc_cm[2]` 由它推（白膜 + 高度/2；资产再加 `ASSET_PIVOT_LIFT_CM × scale`）——
+         按 `element_key` 查表那条路（`WHITEBOX_VERTICAL`）**已删**；
       ② 白膜的**图元**（`primitive`）与**尺寸**（`size_cm`）—— 官方 PrimitiveTools
          只有 `add_cube` / `add_cone` / `add_cylinder` / `add_sphere`（**没有 `add_plane`**，
           2026-10-03 调官方工具集清单确认），所以 `plane` 也只能落成 cube ——
@@ -124,7 +126,7 @@ class BuildOrdersResult(BaseModel):
 
     stage: str = Field(description="阶段名")
     data_path: str = Field(description="指令表落盘位置（阶段三换执行器时读它，不用重做）")
-    plan_hash: str = Field(description="算这张表时 plan_v1.json 的几何指纹（变了这张表就作废）")
+    plan_hash: str = Field(description="算这张表时**活动那份 plan** 的几何指纹（变了这张表就作废）")
     world: dict = Field(default_factory=dict, description="世界中心 / 大小 / 包围盒（都是米）")
     counts: dict = Field(default_factory=dict, description="行数对账：资产行 / 白膜行 / 合计 / 各元素各几行")
     z_rules: list[str] = Field(
@@ -810,7 +812,7 @@ class PlanStatus(BaseModel):
             "**以它为准，别自己摆箭头**（与「别自己推 Z」同一条纪律）。"
             "它的 Z 口径与阶段三**同源**（`_compose_build_rows()`）⇒ 平面图 / 立面图都用它画，"
             "**别自己推 Z**（推错 = 图与数据不一致 = 等于没确认）。"
-            "⚠ 它是**只读派生值**：不写进 `plan_v1.json`、**不进几何指纹**（读状态不会作废确认）。"
+            "⚠ 它是**只读派生值**：不写进活动那份 plan、**不进几何指纹**（读状态不会作废确认）。"
         ),
     )
     next_step: str = Field(default="", description="下一步做什么")
@@ -841,8 +843,186 @@ class SurfaceRowResult(BaseModel):
     status: str = Field(
         default="",
         description=("`applied` 贴上了 / `already` 本来就是这块材质（幂等跳过）/ "
-                     "`failed` 没成（看 error）/ `dry` 演练，没写"),
+                     "`failed` 没成（看 error）。"
+                     "⚠ 2026-10-04 起没有 `dry` 那一档（阶段五的演练已删）"),
     )
+    error: str = Field(default="", description="没成的原因（官方原文）")
+
+
+class SurfaceProbeItem(BaseModel):
+    """**第 ① 步的逐条答案**：对着资产清单里的一个目标，找到它用的材质没有。
+
+    ⚠ 「名字对不上就是没找到」—— 与阶段一 `plan_assets` 同一条纪律：**不猜、不拿别的顶替**。
+    """
+
+    element_key: str = Field(default="", description="元素关键词（决定后面贴哪一块）")
+    label: str = Field(default="", description="这一行的标签（同类多个要能区分）")
+    target: str = Field(default="", description="看的是谁：`whitebox`（白膜）或网格资产包路径")
+    status: str = Field(
+        default="",
+        description=("`found`（有候选）/ `pending_user`（没找到 —— **要问用户**）/ "
+                     "`no_material`（读到了但槽是空的）"),
+    )
+    material: str = Field(default="", description="唯一命中时的那块材质（包路径）；多个候选时留空")
+    candidates: list[str] = Field(
+        default_factory=list, description="命中 / 搜到的**候选**材质路径（交给用户挑）"
+    )
+    candidates_detail: list[FoundAsset] = Field(
+        default_factory=list,
+        description=("候选的**结构化**明细（照阶段一 `plan_assets` 的 `ElementPlan.assets`）—— "
+                     "每条含 `matched_by`（按**资产名** / 按**文件夹名**命中）与 `matched_segment`"
+                     "（命中的是哪一段）：**为什么命中**是字段、不是散文"),
+    )
+    slot_name: str = Field(
+        default="", description="网格资产上的槽位名（`get_material_slots` 读回来的原文）"
+    )
+    source: str = Field(
+        default="", description="这块路径**从哪读到的**：`mesh_slot` / `user` / `search`"
+    )
+    note: str = Field(default="", description="给人看的说明（含「要问用户什么」）")
+    # --- 照阶段一 `ElementPlan` 补的两样（2026-10-04 晚对比之后）----------------------------
+    question: str = Field(
+        default="",
+        description=("**要原样问用户的话**（照阶段一 `ElementPlan.question`）—— "
+                     "agent 把这一句**逐条转达**，**不许改写成「确认吗」**"),
+    )
+    category: str = Field(
+        default="", description="**大类 key**（从阶段一资产表那一行抄来的）—— 报文按它分组"
+    )
+
+    # --- 2026-10-04 晚新增：清单口径改成「只记材质实例」之后，这三样是"下一步怎么走"的判据 -----
+    instance: str = Field(
+        default="",
+        description=("找到的**材质实例**包路径（清单最终只记实例）。"
+                     "⚠ 拿到的是**裸材质**时这里留空 —— 那属于 `from_material`（有材质缺实例）"),
+    )
+    instance_status: str = Field(
+        default="",
+        description=("`is_instance`（本来就是实例）/ `from_material`（有材质、缺实例 ⇒ 第 ⑤ 步派生）/ "
+                     "`to_create`（待自建：先建材质再派生实例）"),
+    )
+    parent: str = Field(
+        default="",
+        description="待派生时它的**父级**（那块材质/实例的包路径）—— 第 ⑤ 步按它派生实例",
+    )
+
+
+class MaterialConfirmItem(BaseModel):
+    """**材质清单的一行** —— 第 ④ 步交用户逐条确认的那张表（与阶段一 `confirm_assets` 同待遇）。"""
+
+    element_key: str = Field(description="元素关键词（与 elements.json / 资产清单里的一致）")
+    label: str = Field(default="", description="这一行的标签（同类多个要能区分）")
+    target: str = Field(
+        default="", description="`whitebox`（白膜）/ `slot`（网格资产的某个材质槽）"
+    )
+    mesh_path: str = Field(default="", description="`target=slot` 时：这张网格资产的包路径")
+    slot_name: str = Field(
+        default="", description="`target=slot` 时：槽位名（必须是 `get_material_slots` 返回过的）"
+    )
+    material: str = Field(
+        default="",
+        description=("**材质**那一栏：**搜到的那块材质**（**不是「母级」**）。这一栏与 `instance` "
+                     "那一栏**分开算** —— 匹到 1 块材质 + 1 块实例就是**两栏各填一个**；"
+                     "只有搜不到材质时这一栏才留空（⚠ 口径「搜到啥就是哪个」，**不向上找它的母级**）；"
+                     "⚠ 白膜·待自建行 = **我们提议要建到哪**（`/Game/UEMCP/Materials/M_<元素>`）；"
+                     "⚠ 标了**无**的行必须留空（无就是没有）"),
+    )
+    status: str = Field(
+        default="",
+        description=("`found`（有路径）/ `pending_user`（还没问完 —— 含**同一栏里搜到多块、要用户挑**；"
+                     "`confirm` 见到它就**拒收**）/ "
+                     "`missing_self_build`（**白膜**搜不到材质和实例 ⇒ **待自建**，第 ⑤ 步去建）/ "
+                     "`none`（**非白膜**问完「确实没有」⇒ **无**：别人的资产我们不自建；"
+                     "⚠ 只许非白膜行用、且不许带任何路径）"),
+    )
+    source: str = Field(default="", description="从哪读到的：`mesh_slot` / `user` / `search`")
+    note: str = Field(default="", description="备注（用户怎么答复的、为什么选它）")
+    # --- 照阶段一补的两样（2026-10-04 晚对比之后）：把"问过什么"与"哪个大类"一并留痕 ---------
+    question: str = Field(
+        default="",
+        description=("**从草稿抄过来的那句问话**（照阶段一）—— 定稿时一并留痕："
+                     "事后回答得了「当时问的是哪一句、他答的是什么（`user_quote`）」"),
+    )
+    category: str = Field(
+        default="", description="**大类 key**（从阶段一资产表那一行抄来的）—— 报文按它分组"
+    )
+    exists: bool = Field(
+        default=False,
+        description="官方 `exists()` 验证结果（⚠ 调用方不用填：`confirm` 会逐个覆盖；待自建/无行为 false）",
+    )
+
+    # --- 2026-10-04 晚新增：「清单两列都记」（材质 + 材质实例）之后的四个字段 ---------------------
+    instance: str = Field(
+        default="",
+        description=("**贴 / 调参用的那一块**：这一行的**材质实例**包路径。"
+                     "⚠ 留空 = 还没有实例（待自建 / 有材质缺实例的行第 ⑤ 步会建 / 派生出来）"),
+    )
+    instance_status: str = Field(
+        default="",
+        description=("`is_instance`（本来就是实例）/ `from_material`（有材质、缺实例 ⇒ 第 ⑤ 步派生）/ "
+                     "`to_create`（待自建：先建材质再派生实例）"),
+    )
+    parent: str = Field(
+        default="",
+        description="那份实例**派生自谁**（Material 或 MI 的包路径）—— 第 ⑤ 步按它派生",
+    )
+    parameters: list[str] = Field(
+        default_factory=list,
+        description="这块实例**可调**的参数名（官方 `list_parameters` 的原样返回；第 ⑨ 步的靶子）",
+    )
+
+
+class AssetSlotResult(BaseModel):
+    """**`asset_slots` 改网格资产材质槽**的逐条结果（第 ⑥ 步的另一条腿：改真资产）。"""
+
+    mesh: str = Field(description="网格资产包路径")
+    slot_name: str = Field(description="槽位名（必须来自 `get_material_slots` 的返回）")
+    material: str = Field(description="要写进去的材质包路径")
+    status: str = Field(
+        default="",
+        description=("`applied` / `already`（本来就是它，幂等跳过）/ `failed`。"
+                     "⚠ 2026-10-04 起没有 `dry` 那一档（阶段五的演练已删）"),
+    )
+    old_material: str = Field(
+        default="", description="**改之前**那一槽是什么（台账里记它，给回滚用）"
+    )
+    used_by_rows: int = Field(
+        default=0,
+        description="**影响面**：搭建台账里有几行摆的是这张网格（只数我们自己的台账，不额外调官方）",
+    )
+    error: str = Field(default="", description="没成的原因（官方原文）")
+
+
+class TuneResult(BaseModel):
+    """**`tune` 调一个材质实例参数的逐条结果**（第 ⑨ 步）。"""
+
+    material: str = Field(description="目标材质 / 材质实例包路径")
+    parameter: str = Field(description="参数名（⚠ 必须先在 `list_parameters` 的返回里出现过）")
+    kind: str = Field(
+        default="", description="参数类型：`scalar` / `vector` / `texture` / `static_switch`"
+    )
+    wanted: str = Field(default="", description="要写成的值（转成字符串，便于留痕）")
+    old: str = Field(default="", description="**改之前**的值（台账里记它，给回滚用）")
+    read_back: str = Field(default="", description="写完之后**读回来**的值 —— 读不回就空着，如实报")
+    status: str = Field(
+        default="",
+        description=("`tuned` / `already`（本来就是这个值，幂等跳过）/ `failed`。"
+                     "⚠ 2026-10-04 起没有 `dry` 那一档（阶段五的演练已删）"),
+    )
+    error: str = Field(default="", description="没成 / 没核上的原因（官方原文）")
+
+
+class MaterialOpResult(BaseModel):
+    """**`ops` 材质图编辑批次里一个 op 的结果**（读也是 op，所以读的 op 也在这里报）。"""
+
+    op: str = Field(description="op 名（如 add_node / connect / connect_output / recompile）")
+    status: str = Field(
+        default="",
+        description=("`ok` / `failed` / `skipped`（不合法，整批已拒收 —— 见 `error`）。"
+                     "⚠ 2026-10-04 起没有 `dry` 那一档（阶段五的演练已删）"),
+    )
+    ref: str = Field(default="", description="这个 op 落到哪个对象上（别名或返回的引用）")
+    detail: str = Field(default="", description="补一句给人看的（连了哪根线 / 读了什么）")
     error: str = Field(default="", description="没成的原因（官方原文）")
 
 
@@ -856,7 +1036,7 @@ class SurfaceReport(BaseModel):
 
     stage: str = Field(description="阶段名")
     level: str = Field(default="", description="在哪张图上贴的")
-    dry_run: bool = Field(default=False, description="true = 只算 + 校验，**一个组件都没写**")
+    dry_run: bool = Field(default=False, description="⚠ 阶段五的演练已删（2026-10-04），恒为 false")
     planned: int = Field(default=0, description="这次要处理几行")
     applied: int = Field(default=0, description="真贴上了几行")
     already: int = Field(default=0, description="本来就是这块材质、跳过几行（幂等）")
@@ -869,18 +1049,102 @@ class SurfaceReport(BaseModel):
     next_step: str = Field(default="", description="下一步做什么")
     warnings: list[str] = Field(default_factory=list, description="要提醒的坑（不藏着）")
 
+    # --- 2026-10-04 扩：`mode` 四档（probe / confirm / apply / asset_slots）的各自载荷 -------------
+    # ⚠ 一律**带默认值**：旧调用方（不传 mode）的报文与以前**逐字相同**，不破坏旧行为。
+    mode: str = Field(
+        default="apply",
+        description=("这一趟做的是哪一档：`apply`（默认，贴组件级覆盖）/ `probe`（只读找材质、"
+                     "出**草稿清单**）/ `confirm`（把草稿定稿成材质清单并签字）/ "
+                     "`asset_slots`（改**网格资产**的材质槽）"),
+    )
+    material_list_path: str = Field(
+        default="", description="材质清单落点（权威使用物 `catalog/material_list.json`；没落就是空）"
+    )
+    snapshot_path: str = Field(
+        default="", description="材质清单的**签字指纹**文件（照阶段一 library_snapshot 那套）"
+    )
+    draft_path: str = Field(default="", description="`probe` 落的**草稿清单**路径（`catalog/material_list_draft.json`）")
+    probe_items: list[SurfaceProbeItem] = Field(
+        default_factory=list, description="`probe`：逐行「这个目标用的材质是什么 / 从哪读到的」"
+    )
+    confirm_items: list[MaterialConfirmItem] = Field(
+        default_factory=list,
+        description="`confirm`：入库的材质清单行（`status` = found / missing_self_build / pending_user）",
+    )
+    snapshot_stale: bool | None = Field(
+        default=None,
+        description=("`probe`：现在这份材质清单**过没过期**（资产库指纹对不上 ⇒ true）；"
+                     "`None` = 没有清单 / 没有指纹，判不了（**不是**「没问题」）"),
+    )
+    slot_rows: list[AssetSlotResult] = Field(
+        default_factory=list, description="`asset_slots`：逐个（网格资产, 槽）的结果"
+    )
+    focused: list[str] = Field(
+        default_factory=list, description="`apply`：这一趟把视口**聚焦**到过哪些 Actor（空 = 没聚焦）"
+    )
+    saved: str = Field(
+        default="",
+        description=("`apply` + `save=true` 时：`saved` / `failed` / `off`。"
+                     "⚠ 2026-10-04 起没有 `dry_run` 那一档（阶段五的演练已删）。"
+                     "⚠ 存盘失败**不算材质没贴好** —— 材质已经写进关卡了，只是没落盘"),
+    )
+    wrote_back: str = Field(
+        default="",
+        description=("`apply` + `save=true` 时：**清单回写**的结果（路径，或回写失败的原因）。"
+                     "⚠ 用户 2026-10-04 的口径：**直到用户满意才写回清单** —— 所以回写与存盘"
+                     "都发生在 `save=true` 那一次，且**先回写、后存盘**"),
+    )
+    gaps: list[str] = Field(
+        default_factory=list,
+        description=("**缺口清单**（照阶段一 `AssetListDelivery.unresolved_elements`）："
+                     "阶段一资产表里有、这份材质单 / 草稿里**没有**的元素关键词 —— "
+                     "读表的人要一眼看出「这张表不完整」，不许让它静默消失。"
+                     "⚠ 只报事实、**不推断原因**"),
+    )
+    by_category: dict[str, dict[str, list[str]]] = Field(
+        default_factory=dict,
+        description=("**按大类分组**（照阶段一 `PlanReport.by_category`，形状基本相同）："
+                     "`{大类中文名: {\"found\": [元素…], \"missing\": [元素…], \"none\": [元素…]}}` —— "
+                     "用来逐类核对有没有漏。⚠ 判据只有一处：大类中文名由 `main.py` 查表回填。"
+                     "⚠ **`none` 是 2026-10-07 加的第三个桶**：那是「**无**」—— 非白膜（别人建好的"
+                     "资产）问过用户确实没有材质，**不是缺口**（原来它被并进 `missing`，会看出假缺口）"),
+    )
+
 
 class CreatedMaterial(BaseModel):
-    """**建出来的一块材质**（阶段五 · 第 0 步 `create_surfaces` 的逐条结果）。"""
+    """**建出来的一条**（阶段五 · 第 0 步 `create_surfaces` 的逐条结果）。
+
+    ⚠ 它同时报**两种东西**（2026-10-04 加，用户口径「建材质和材质实例直接合并」）：
+      · `kind="material"` = **建的一块材质**（空材质 + 参数节点 + 连线）；
+      · `kind="instance"` = **从父级派生的一块材质实例（MI）** —— 父级可以是 M，也可以是 MI。
+    ⚠ `kind` / `parent` **一律带默认值**：老调用方（或者只看旧字段的读法）报文里
+      这两个键就是空串，**与加它们之前逐字相同**。
+    """
 
     path: str = Field(description="包路径（例 `/Game/UEMCP/Materials/M_Road`）")
     folder: str = Field(default="", description="它建在哪个目录（官方 `create_material` 的 `folder_path`）")
     name: str = Field(default="", description="资产名")
     outputs: list[str] = Field(default_factory=list, description="连了哪几个材质输出（= 建了哪几个参数节点）")
     flags: dict = Field(default_factory=dict, description="材质自身开关（`_flags`：twoSided / blendMode）")
-    status: str = Field(default="", description="`would_create`（演练）/ `ok` / `failed`")
+    status: str = Field(
+        default="",
+        description="`ok` / `failed`。⚠ 2026-10-04 起没有 `would_create`（演练）那一档",
+    )
     error: str = Field(default="", description="没成功 / 读回对不上时，差在哪（官方原文）")
     note: str = Field(default="", description="配置里 `_note` 的原样带出（给人看的）")
+
+    # --- 2026-10-04 扩：这一条建的是**材质**还是**材质实例** -------------------------------------
+    kind: str = Field(
+        default="",
+        description=("这一条建的是什么：`material`（不带 `parent`：空材质 + 参数节点）/ "
+                     "`instance`（带 `parent`：从 M 或 MI 派生的材质实例）。"
+                     "⚠ MI 那条里 `outputs` 记的是**要覆盖的参数名**（不是材质输出）"),
+    )
+    parent: str = Field(
+        default="",
+        description=("`kind=\"instance\"` 时的**父级包路径**（M 或 MI）；材质那条恒为空串。"
+                     "⚠ 它也是回滚的依据：删掉这块 MI 不影响父级"),
+    )
 
 
 class AdoptEditsReport(BaseModel):
@@ -907,23 +1171,70 @@ class AdoptEditsReport(BaseModel):
 
 
 class CreateSurfacesReport(BaseModel):
-    """**阶段五 · 第 0 步**（建材质）的执行报告。
+    """**阶段五 · 第 0 步**（建材质 / 建材质实例）的执行报告。
 
     ⚠ 它**绝不存盘**（阶段五纪律）：新建的材质只在 UE 内存里 —— 报文里会明说"记得 Ctrl+S"。
-    ⚠ 它**绝不覆盖**已有材质：`exists()` 为真的一律跳过（幂等）。
+      （⚠ 阶段五**允许**存盘了，但要由第 ⑦ 步的 `apply_surfaces(save=true)` 那次来存 ——
+      本工具自己不存。）
+    ⚠ 它**绝不覆盖**已有资产：`exists()` 为真的一律跳过（幂等）。
+    ⚠ `created` / `already` 是**合计**；要分档看 `materials_*` / `instances_*` 那四个字段
+      （2026-10-04 加：报文里必须如实分档报「建了几块 Material、几个 MI、各自跳过几个」，
+      一个含糊的总数糊不过去）。
     """
 
     stage: str = Field(description="阶段名")
-    dry_run: bool = Field(default=False, description="true = 只算 + 逐个 `exists()` 验，**一个都没建**")
-    planned: int = Field(default=0, description="这次计划建几块（已存在的不算）")
-    created: int = Field(default=0, description="真建成了几块")
-    already: int = Field(default=0, description="已存在、跳过几块（幂等）")
-    failed: int = Field(default=0, description="几块没成 / 没核过（看 items 里的 error）")
+    dry_run: bool = Field(default=False, description="⚠ 阶段五的演练已删（2026-10-04），恒为 false")
+    planned: int = Field(default=0, description="这次计划建几条（已存在的不算）")
+    created: int = Field(default=0, description="真建成了几条（材质 + 材质实例的**合计**）")
+    already: int = Field(default=0, description="已存在、跳过几条（幂等；材质 + MI 合计）")
+    failed: int = Field(default=0, description="几条没成 / 没核过（看 items 里的 error）")
     items: list[CreatedMaterial] = Field(default_factory=list, description="逐条结果")
     ledger_path: str = Field(default="", description="建材质台账（我们建了什么，给回滚/追查用）")
     official_calls: int = Field(default=0, description="这次调了官方几次（留痕，方便复核）")
     next_step: str = Field(default="", description="下一步做什么")
     warnings: list[str] = Field(default_factory=list, description="要提醒的坑（不藏着）")
+
+    # --- 2026-10-04 扩：`create`（建待自建）/ `tune`（调参数）/ `ops`（材质图原语）三档 -------------
+    # ⚠ 一律**带默认值**：旧调用方（只传 only）的报文与以前**逐字相同**。
+    mode: str = Field(
+        default="create",
+        description=("这一趟做的是哪一档：`create`（默认，建 `create` 段 + 材质清单里**待自建**的）/ "
+                     "`tune`（对已存在的 M/MI 读-改-写参数）/ `ops`（材质图编辑原语，**整批校验**）"),
+    )
+    target: str = Field(default="", description="`ops` / `tune` 的对象：材质 / 材质函数 / 材质实例的包路径")
+    from_list: int = Field(
+        default=0, description="`create`：这次有几条是**从材质清单**（`missing_self_build`）读来的"
+    )
+    tune_rows: list[TuneResult] = Field(default_factory=list, description="`tune`：逐参数结果")
+    focused: list[str] = Field(
+        default_factory=list,
+        description=("`tune`：调完**切到那个物体视角并选中高亮**过哪些 Actor（第 ⑨ 步 —— "
+                     "「用户得看得见改了哪儿」）。⚠ 空列表不等于「没切」：要看 warnings —— "
+                     "台账缺失 / 跨图 / PIE 激活时**切不了**，那种情况会**如实报**在 warnings 里"))
+    op_rows: list[MaterialOpResult] = Field(default_factory=list, description="`ops`：逐 op 结果")
+    read_back: str = Field(
+        default="",
+        description=("`ops`：**读回**的结论（`get_expressions` 比节点数 + 每个 `connect_output` 用 "
+                     "`get_property_input` 核对）—— 读不回就如实写「没核成」，**不当作没问题**"),
+    )
+
+    # --- 2026-10-04 扩：`create` 档**分档报数**（材质 vs 材质实例）--------------------------------
+    # ⚠ 一律**带默认值**：不传的调用方（以及旧报文读法）看到的还是原来的键与原来的值。
+    # 为什么要有它们：一条配方可能是**材质**（不带 `parent`）、也可能是**材质实例**（带 `parent`）——
+    #   只报一个 `created=3` 说不清"建了 3 块材质还是 3 个 MI"；而这两者的回滚方式、
+    #   后续该填哪一种清单行都不一样。
+    materials_created: int = Field(
+        default=0, description="`create`：这次真建成的**材质**（`kind=material`）有几块"
+    )
+    instances_created: int = Field(
+        default=0, description="`create`：这次真建成的**材质实例**（`kind=instance`）有几个"
+    )
+    materials_already: int = Field(
+        default=0, description="`create`：**材质**里已存在、幂等跳过的有几块"
+    )
+    instances_already: int = Field(
+        default=0, description="`create`：**材质实例**里已存在、幂等跳过的有几个"
+    )
 
 
 class ExchangeReport(BaseModel):
@@ -931,7 +1242,7 @@ class ExchangeReport(BaseModel):
 
     ⚠ 只能导**场景描述**，导不了几何（官方没有场景导出工具，实测）—— 消费端是照着这份
       描述**重摆一遍**，不是"把模型搬过去"。
-    ⚠ 这份文件是**派生物**：权威几何永远是 `views/plan_v1.json`。
+    ⚠ 这份文件是**派生物**：权威几何永远是**活动那份 plan**（走 `active_plan_path()`）。
     """
 
     stage: str = Field(description="阶段名")
@@ -1100,8 +1411,9 @@ class LayoutRowVerdict(BaseModel):
 class EvaluateReport(BaseModel):
     """**阶段七 · 落位对账**的报告（只读：不碰关卡、不存盘、不改 plan）。
 
-    ⚠ 对的是**三份东西**：`views/plan_v1.json`（确认过的放置表）· `views/build_state_v1.json`
-      （阶段三搭建台账：上次到底搭了什么）· **关卡现状**（官方读回来的）。
+    ⚠ 对的是**三份东西**：**活动那份 plan**（`active_plan_path()`；纪元 2 = `views/plan_v2.json`）
+      · **活动那份搭建台账**（`active_ledger_path()`；纪元 2 = `views/build_state_v2.json`）
+      · **关卡现状**（官方读回来的）。
     ⚠ 关卡那一维**要 UE 在线**：连不上时它**只出 `plan ↔ 台账` 那半**，并在 `warnings` 里说清
       "哪些维这次没查" —— **不许把"没报"当成"没问题"**。
     """
