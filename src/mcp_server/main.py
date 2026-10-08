@@ -95,6 +95,11 @@ PlanResult = _schemas.PlanResult
 PlanStatus = _schemas.PlanStatus
 SurfaceRowResult = _schemas.SurfaceRowResult
 SurfaceReport = _schemas.SurfaceReport
+SurfaceProbeItem = _schemas.SurfaceProbeItem
+MaterialConfirmItem = _schemas.MaterialConfirmItem
+AssetSlotResult = _schemas.AssetSlotResult
+TuneResult = _schemas.TuneResult
+MaterialOpResult = _schemas.MaterialOpResult
 CreatedMaterial = _schemas.CreatedMaterial
 CreateSurfacesReport = _schemas.CreateSurfacesReport
 AdoptEditsReport = _schemas.AdoptEditsReport
@@ -147,6 +152,80 @@ ELEMENTS_PATH = STATE_DIR / "elements.json"       # 用户确认过的元素清�
 ASSET_LIST_PATH = STATE_DIR / "asset_list.json"   # 使用给用户的资产清单
 LIBRARY_PATH = STATE_DIR / "library_snapshot.json"  # 资产库指纹（给清单"签字"用）
 
+# --- 阶段五整层（`surfaces.py`）的**惰性取用口** -----------------------------------  【模块：surfaces】
+# 为什么不在文件顶部 import（与 `_planning_modules()` 同一笔血账，见那里 2026-09-23 的说明）：
+#   ① 启动方式是**脚本**（`python <仓库根>\src\mcp_server\main.py`），这时 `__package__` 是空的，
+#      顶部写 `from .surfaces import …` 会直接 `ImportError: attempted relative import with no
+#      known parent package` ⇒ **整个 server 起不来**；
+#   ② 不该连坐：阶段五出问题，不该把阶段一~四的工具一起带崩。
+# ⚠ 与规划层**不同的一点**：`surfaces.py` **不 import 本文件**（它要的官方调用与 IO 经
+#   `SurfacesRepo` 注入）⇒ 这里没有循环 import，只是启动方式那一条要求它必须惰性取。
+_SURFACES = None
+
+
+def _surfaces_module():
+    """取阶段五整层（`surfaces`）—— 惰性导入 + 两种启动方式兜底。"""
+    global _SURFACES
+    if _SURFACES is not None:
+        return _SURFACES
+    errors: list[str] = []
+    try:
+        from . import surfaces as s
+    except ImportError as exc:
+        errors.append(f"相对导入失败：{exc}")
+        # 脚本方式下 `__package__` 为空 ⇒ 自己把本文件所在目录放进 sys.path 再按顶层导入。
+        here = str(Path(__file__).resolve().parent)
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        try:
+            import surfaces as s
+        except ImportError as exc2:
+            errors.append(f"顶层导入失败：{exc2}")
+            # 两个错误都带上：只报第一个会让人查错方向
+            raise ToolError("阶段五整层（surfaces.py）导入失败（其余阶段的工具不受影响）："
+                            + "；".join(errors)) from exc2
+    _SURFACES = s
+    return _SURFACES
+
+
+# --- 阶段五 · **材质清单**（2026-10-04 加 · 新的权威使用物）-----------------------------------  【模块：surfaces】
+# 由来（用户原话第 ①~④ 步）：「对资产清单里的东西找材质记下路径 …… 最后像第一阶段一样拿到材质清单」。
+# 为什么必须有它：以前"贴什么"只有一个来源 —— `config/surface_materials.json` 的 `materials` 段
+#   （手填的 `element_key → 路径`）。可阶段五的流程要的是**一物一行的清单**（哪张网格的哪个槽、
+#   哪一行白膜、用户怎么答复的、哪几条待自建）—— 那是**使用物**，与阶段一的 `asset_list.json` 同性质。
+# ⚠ **一个来源**：材质清单接管"贴什么"；`config` 的 `materials` 段**退役**。
+#   ⚠ **2026-10-04 晚更正（用户口径「别为了兼容老代码去做，能翻新直接翻新」）**：
+#     那一段的**兼容读取分支已删** —— 现在只读 `create` 段（建法配方），**不再读 `materials`**。
+# ⚠ **落点在这里收敛成一处**（`catalog/`，不是 `state/`）：此前代码写的是 `STATE_DIR / …`，
+#   而文档（`docs/阶段五-表面材质.md`）与磁盘上实际用的都是 `catalog/material_list.json` ——
+#   两处不一致本身就是隐患（"读一份、写另一份"最坏的情况是静默用了空清单）。
+# ⚠ **为什么不直接写 `_surfaces_module().MATERIAL_LIST_PATH`**（2026-10-04 晚，权衡后改口径）：
+#   那样等于**在 import 期就硬依赖 surfaces.py** —— 它一旦导入失败，`main.py` 自己就起不来，
+#   阶段一~四的工具跟着一起死（`_planning_modules()` 的存在就是为了避免这种"连坐"）。
+#   所以这里写**字面路径**，再由 `_assert_surfaces_paths_agree()` 在**第一次真用到阶段五时**
+#   核对两边一致 —— 既"只有一个出处"，又不让阶段五的问题扩散到全局。
+MATERIAL_LIST_PATH = STATE_DIR / "material_list.json"            # 权威清单（`confirm` 落盘）
+MATERIAL_LIST_DRAFT_PATH = STATE_DIR / "material_list_draft.json"  # `probe` 的草稿
+MATERIAL_SNAPSHOT_PATH = STATE_DIR / "material_snapshot.json"    # 清单的**签字指纹**
+
+# 材质清单里每行的 `status` 取值 —— **只认这四个**，不许别处自己造第五个。
+#   found             有路径、验过了
+#   pending_user      **还没问完**（没找到、等用户给路径）—— `confirm` 见到它就**拒收**
+#   missing_self_build **白膜**搜不到材质和实例 ⇒ **待自建**（第 ⑤ 步去建；**不是跳过**）
+#   none              **非白膜**（别人建好的资产）问完「确实没有」⇒ **无**（我们不去给它造材质/实例）
+# ⚠ 2026-10-04 晚用户口径：「是白膜还是保留原来的，搜不到材质或者材质实例就标记待自建，
+#   不是白膜的问完没有就标记为无，毕竟别人建好的资产我们也不可能做材质或者材质实例」。
+MAT_STATUS_FOUND = "found"
+MAT_STATUS_PENDING = "pending_user"
+MAT_STATUS_SELF_BUILD = "missing_self_build"
+MAT_STATUS_NONE = "none"
+
+MATERIAL_PROBE_DEFAULT_APPENDIX: tuple[str, ...] = ("Material", "MI", "M_")
+"""`probe` 找候选时的**后缀关键词** —— 与阶段一 `plan_assets` 一样，纯本地子串匹配。
+
+⚠ 它**不替用户选**：命中多个就**全列出来**交给用户挑（`plan_assets` 同一条纪律：
+  「名字对不上就是没找到」，**不许拿别的资产顶替**）。"""
+
 # 官方工具的"地址" = 工具集名 + 工具名
 TS_ASSET = "editor_toolset.toolsets.asset.AssetTools"    # 找资产 / 改名 / 验证存在
 TS_SCENE = "editor_toolset.toolsets.scene.SceneTools"    # 关卡信息 / 摆 Actor / outliner
@@ -158,6 +237,11 @@ TS_PRIM = "editor_toolset.toolsets.primitive.PrimitiveTools"  # 白膜加图元�
 #   人工痕迹 / 读回对账**一律留在编排层**，脚本只当"手脚"。这条边界是实测划出来的。
 TS_PROG = "editor_toolset.toolsets.programmatic.ProgrammaticToolset"
 TS_OBJECT = "editor_toolset.toolsets.object.ObjectTools"  # 读对象属性（白膜尺寸在组件上）
+# 阶段五 · 第 ① 步要用的两件（**只读**：读网格资产上有哪些材质槽、每个槽现在挂的是哪块材质）。
+# ⚠ 路径写法与 `measure_asset` / `plan_assets` 里那份**逐字一致**
+#   （那两处是硬编码字面量，这里提成常量只是为了不再抄第三遍）。
+TS_STATIC_MESH = "editor_toolset.toolsets.static_mesh.StaticMeshTools"
+TS_SKELETAL_MESH = "editor_toolset.toolsets.skeletal_mesh.SkeletalMeshTools"
 
 # 资产类别 → 官方的类路径（find_assets 的 asset_type 要的是类路径）
 CLASS_PRESETS: dict[str, str] = {
@@ -198,13 +282,18 @@ BUILD_STATE_V2_PATH = VIEWS_DIR / "build_state_v2.json"
 def active_ledger_path() -> Path:
     """**现在算数的那份搭建台账是哪个文件** —— 全工程读写台账的唯一咽喉。
 
-    口径（与 plan 那边同构）：`views/build_state_v2.json` 在 ⇒ 它（纪元 2）；
-    否则 `views/build_state_v1.json`。
+    口径一句话：**`build_state_v2.json` 在 ⇒ 就它一份；不在 ⇒ 纪元 1 的 `build_state_v1.json`**。
 
-    ⚠ 与 plan 那边**故意不一样的一处**：这里只判"文件在不在"，**不判能不能解析** ——
-      台账读不动时 `_load_build_state()` 本来就返回 `{}`（当"没有基线"，各闸自己拒收），
-      而**退回 v1 只会更糟**：那会拿一份已经冻结的旧基线去对账，**静默出错**。
-      "读不动"这件事由各处按"没有台账"拒收，如实说话。
+    ⚠ 判据只有**"那个文件在不在"**这一条（与 `planning.active_plan_path()` **逐字同形**：
+      纪元 2 的产物在 ⇒ 只认它，**没有"能不能解析"那一层**）。2026-10-07 用户指令
+      「进入纪元 2 后，V1 要不直接删除得了，以后增删改查都靠 V2」+「别结束了前三阶段后面又
+      **失忆用 V1**」—— 那条**"v2 读不动就退回 v1"**的回退**不存在**（`_load_build_state()` 读不动
+      本来就返回 `{}` = "没有基线"，各闸自己拒收，如实说话）。
+
+    ⚠ **"v2 台账不在 ⇒ v1"不是回退，是从零搭建的正常目标**：新工程阶段三第一次落位时，
+      磁盘上还没有 v2 台账 —— 那一版必须写进 v1 台账，换纪元那一步
+      （`_save_ledger_epoch2()`）再把整表接力成 v2。**这一支不能砍**（砍了的话第一次搭建的
+      台账会直接写进 v2，而 `_epoch2_ready()` 又要求拿 v1 台账核"阶段三落完了没有" ⇒ 死锁）。
     """
     return BUILD_STATE_V2_PATH if BUILD_STATE_V2_PATH.exists() else BUILD_STATE_PATH
 
@@ -266,20 +355,26 @@ GROUND_Z_M = 0.15
 依据：plan 的人行道 / 连接路白膜行自带 `height_m = 0.15`（cube 厚 15 cm），
 且同一条 note 写明「y-10～-8.5。cube 高 15 cm」—— 15 cm 就是这个高差。"""
 
-WHITEBOX_VERTICAL: dict[str, tuple[str, float]] = {
-    "ground":   ("top", GROUND_Z_M),           # 世界地基：**顶面** = 两侧地面（整块世界垫在最下面）
-    "road":     ("top", ROAD_SURFACE_Z_M),     # 路面本身：**顶面**压在路面标高上
-    "sidewalk": ("bottom", ROAD_SURFACE_Z_M),  # 人行道：底面落路面，厚 15 cm → 顶面 = 地面
-    "path":     ("bottom", ROAD_SURFACE_Z_M),  # 连接路：同上（也是 15 cm 厚）
-    "grass":    ("top", GROUND_Z_M),           # 草坪：**顶面** = 两侧地面（薄板 5 cm）
-    "shrub":    ("bottom", GROUND_Z_M),        # 灌木：站在 15 cm 高的地面上
-}
-"""白膜的竖直摆法：`(贴哪一头, 那一头的标高[米])`。
+# ⚠ **`WHITEBOX_VERTICAL` 已删除**（2026-10-08 用户指令「赶紧改位置表结构增加Z」）：
+#   原来它按 `element_key` 推"贴顶还是贴底"，**表里没有的还要在报文里问用户**
+#   （「不对就说，改代码里的表」）—— 用户明确否掉了这条路：
+#   「关于竖直我之前就说了改位置表结构你说不用，现在又来问我，赶紧改位置表结构增加Z」。
+#   现在 **Z 只在放置表的每一行里**（`z_m` = 该行**底面绝对标高**，米），阶段三只读它、不猜。
+#   下面是**参照值**（填 `z_m` 时对表用，**不是判据**）：
+#     · 两侧地面（人行道 / 草坪**顶面**）= `GROUND_Z_M` = 0.15；车行道**路面** = `ROAD_SURFACE_Z_M` = 0.00
+#     · 世界地基：**顶面** = 0.15（厚 0.2 ⇒ 底面 **−0.05**）
+#     · 车行道：**顶面** = 0.00（厚 0.15 ⇒ 底面 **−0.15**）
+#     · 人行道 / 连接路 / 绿化带台座：底面贴路面 = **0.00**（厚 0.15 ⇒ 顶面 0.15）
+#     · 草坪薄板（5 cm）：**顶面** = 0.15 ⇒ 底面 0.10
+#     · 站在地面上的（灌木 / 护栏 / 电线杆 / 招牌 / 树池）与**已有资产**：底面 = **0.15**
+#     · 跑在机动车道上的（车 / 货车）：底面 = **0.00**
+"""**（`WHITEBOX_VERTICAL` 表已删 · 2026-10-08）** 当年那张表的口径说明，留档用、**不再是判据**：
+白膜的竖直摆法 `(贴哪一头, 那一头的标高[米])`。
 
 为什么要分「贴顶 / 贴底」：`PrimitiveTools.add_cube` 的方块**以 Actor 原点为中心**
 （2026-09-26 实测，见 docs/阶段三 §11 第 4 条），所以拿到的是**中心点标高** ——
 薄板（路面 / 草坪 / 地基）该贴顶面，有厚度的台（人行道 / 连接路）与立着的东西（灌木）该贴底面。
-**表里没有的 element_key 按 `("bottom", GROUND_Z_M)`**（立在地面上），并在报文里点名。
+⚠ 上面这些**现在都写进 plan 的 `z_m` 了**（底面标高）—— 阶段三读那一行，不查这里。
 
 ⚠ **`ground`（世界地基 / 世界底板）的口径**（2026-09-27 用户指令加的那一层，依据如下、不是拍的）：
   它**顶面 = `GROUND_Z_M`（15 cm）= 两侧地面的标高**，所以——
@@ -322,7 +417,14 @@ SURFACE_MATERIAL_DEFAULT: dict[str, str] = {}
   且**已真贴进关卡**（33 行 applied / 1 already / 0 failed）。
   它们现在住在 `config/surface_materials.json`（= 那台机器的配置），**不再进代码**。
   ⚠ `shrub` 那条命中的是**材质**（不是材质实例），而且"贴上去像不像灌木"**未经人确认** ——
-  那是"按名字选一个"的决定，不是实测结论。"""
+  那是"按名字选一个"的决定，不是实测结论。
+
+⚠ **`materials` 段已退役**（2026-10-04）：权威来源换成**材质清单** `catalog/material_list.json`
+  （用户原话第 ④ 步「最后像第一阶段一样拿到材质清单」）。`_surface_materials()` 与这个内置默认
+  **只为兼容旧包保留读取**：材质清单不存在时才会退回它，退回时会在 `warnings` 里**点名**
+  「该搬进材质清单了」—— **一个来源，不许两套口径**。
+  ⚠ 2026-10-07：**点名那句原来在 `_surface_apply_list()` 里**，那个函数是死代码、已删 ——
+  现在退回那条路在 `surfaces.apply()`（活路径）里报，判据不变。"""
 
 
 def _surface_materials() -> tuple[dict[str, str], str]:
@@ -480,11 +582,13 @@ ENV_MATERIAL_FOLDER = "/Game/UEMCP/env"
 ⚠ 目录不存在时 `create` 会失败 —— 那条路会把官方报错**原文**带回来（不掩饰）。"""
 
 TS_MATINST = "editor_toolset.toolsets.material_instance.MaterialInstanceTools"
-# --- 阶段五 · **从零建材质**（2026-10-04 加 · ⚠ **尚未实测**）----------------------------------
+# --- 阶段五 · **建材质 / 调参数 / 材质图原语**的常量（2026-10-04 加 · ⚠ **尚未实测**）------------
 # 由来：`apply_surfaces` 只能贴**已存在**的材质；用户现场那 6 个 `/Game/UEMCP/Materials/M_*`
 #   工程里根本不存在 → 逐个 exists() 不过 → **整批拒收、一个都不贴**（现场就是白模）。
-#   ⇒ 缺的是"建材质"这一步的**编排**（官方 `MaterialTools` 本来就有一套：create_material /
-#     add_expression / connect_to_output / recompile —— 2026-10-04 实测 describe_toolset 确认）。
+#   ⇒ 缺的是"建材质 / 调参数"这一步的**编排**（官方 `MaterialTools` 本来就有一套：
+#     create_material / add_expression / connect_to_output / recompile / list_expression_classes /
+#     get_expressions / get_property_input …，`MaterialInstanceTools` 有 create 与四类参数读写
+#     —— 2026-10-04 实测 describe_toolset 确认）。
 # ⚠ **下面四个常量是"猜的属性名"**（来自官方工具 schema 的常规命名，**没有真跑核实过**）：
 #   真跑若报错，官方原文会带出来；改这四个常量即可，**不用改逻辑**。
 TS_MATERIAL = "editor_toolset.toolsets.material.MaterialTools"
@@ -502,6 +606,22 @@ MAT_OUTPUTS = (
 """材质实例工具集 —— 实测 2026-09-29 有 `list_parameters` / `get_/set_scalar_parameter` /
 `get_/set_vector_parameter` / `set_texture_parameter` / `set_static_switch_parameter` / `create`。
 云量 / 云密度就是靠它调的（参数实测叫 `Cloud_GlobalCoverage` / `Cloud_GlobalDensity`）。"""
+
+# --- 阶段五 · **建材质实例（MI）**：`create` 段里给了 `parent` 的那些（2026-10-04 加 · ⚠ 尚未实测）---
+# 由来：用户早先的口径是「建材质和材质实例直接合并」；官方
+#   `MaterialInstanceTools.create(folder_path, asset_name, parent)` 的 `parent` 类型是
+#   `/Script/Engine.MaterialInterface` ⇒ **父级可以是 M，也可以是 MI**（后者就是"派生"）。
+#   ⚠ 全工程此前只有阶段六的云 MI 那段用过它（那是好的、别动），阶段五这条**一直缺着** ——
+#     于是 `create` 段里想从现成的 MI 派生一块子实例，没有任何写法能表达。
+# ⚠ **边界（必须写死，不许靠人记得）**：材质实例**没有材质图** —— 所以一条配方里
+#   **同时**给 `parent` 与"连到输出的键"（`BaseColor` 这种）是自相矛盾的，**当场拒收**；
+#   反过来，没有 `parent` 的那条走**老路**（建空材质 + 参数节点 + `connect_to_output` + `recompile`），
+#   **行为一个字都不许变**。
+MAR_KIND_MATERIAL = "material"
+MAR_KIND_INSTANCE = "instance"
+# MI 一条里**允许**的参数类型（按值的形状分派，与 `mode="tune"` 那档同一套判据 —— 不许两套口径）：
+#   数字 ⇒ scalar / 4 元数组 ⇒ vector / 字符串 ⇒ texture（要 `exists()`）/ true|false ⇒ static_switch。
+MAR_INSTANCE_KINDS = ("scalar", "vector", "texture", "static_switch")
 
 ENV_ACTOR_FOLDER = f"{OUR_FOLDER_ROOT}_env"
 """阶段六自己建的 Actor（后处理卷）放这个 outliner 分组。
@@ -679,12 +799,28 @@ def _ref_path(value: Any) -> str:
     官方把 UObject 引用序列化成 `{"refPath": "..."}`；但**不能假设它一定是这个形状** ——
     实测个别接口会直接把字符串丢回来。取不到就返回空串（调用方据此判"没拿到 Actor"），
     **绝不编一个路径**。
+
+    ⚠ **2026-10-07 补两层解包**（修 ops 档「读回是空的」那个**假阴性**）：
+      `ObjectTools.get_property_input` 的返回是**套了一层**的 ——
+      `{"returnValue": {"output_name": …, "expression": {"refPath": …}, "input_name": ""}}`。
+      原来这里只认顶层 `refPath` ⇒ 明明连上了也报"读回是空的"（实测：`MP_BaseColor`
+      明明连着刚建的那个节点，ops 却报空 —— 见 `docs/阶段五-表面材质.md` 那一段）。
+      ⚠ 只按**已知的那两层**往里走（`returnValue` / `expression`），别乱翻别的键：
+      多翻一层就可能把"没连上"解成"连上了"（那是更坏的错）。
     """
-    if isinstance(value, dict):
-        ref = value.get("refPath")
-        return str(ref) if ref else ""
     if isinstance(value, str):
         return value
+    if not isinstance(value, dict):
+        return ""
+    ref = value.get("refPath")
+    if ref:
+        return str(ref)
+    for wrap in ("returnValue", "expression"):
+        inner = value.get(wrap)
+        if isinstance(inner, dict):
+            got = _ref_path(inner)          # 递归：`returnValue` 里还套着 `expression`
+            if got:
+                return got
     return ""
 
 
@@ -888,6 +1024,25 @@ def parse_return(text: str) -> Any:
     if isinstance(data, dict) and "returnValue" in data:
         return data["returnValue"]
     return data
+
+
+def _exists_true(value: Any) -> bool:
+    """官方 `exists()` 的返回值 → **这个路径在不在**（全工程**唯一**判据）。
+
+    ⚠ **为什么不能写 `bool(value)` / `if value:`**（2026-10-04 修；同类错在本文件里抓到 6 处）：
+      官方**可能回字符串** `"false"`，而 **`bool("false")` 在 Python 里是 `True`**
+      ⇒ 一个**不存在的资产会被判成"在"**。而这道判据管的正是"路径验不过就整批拒收"那类闸门：
+      落关卡前的资产路径校验 / `ops` 档的目标 / 环境材质 MI / 纹理参数验活 / 阶段一清单验活。
+      判据就是阶段一 `_asset_row()` 里原来那份：`True` / `"true"`（忽略大小写）/ `1` 算**在**，
+      其余（`False` / `"false"` / `None` / `0` / 别的类型）一律算**不在**。
+    ⚠ **阶段五 `surfaces.py::asset_exists()` 是同一支判据的副本**（那边经 `SurfacesRepo.official`
+      拿不到本函数）—— **改判据要两处一起改**，不然又成了两套口径。
+    """
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return value == 1                 # 官方偶尔回 1；其余（None / dict / 0）一律当"不在"
 
 
 def to_object_path(package_path: str) -> str:
@@ -2590,27 +2745,68 @@ def _ledger_row(order: dict, actor: str, loc: Any = None, yaw: Any = None,
     }
 
 
-def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[str], list[str]]:
+def _surface_hint_by_key() -> dict[str, str]:
+    """`{element_key: 材质实例路径}` —— 从**材质清单**取（供"提示 / 对账 / 重摆后自动补材质"用）。
+
+    ⚠ 2026-10-04 晚加，替掉原来读 `config` 退役段的那条路：
+      · **读不到 / 旧格式** ⇒ 返回空表（**这不是错误**：提示本来就允许为空），
+        由调用方在需要时自己带 `warnings`；
+      · 同一 `element_key` 多行时取**第一条有实例的**。
+        ⚠ 2026-10-07：原来这里对照的是 `_surface_rows_for_ledger_row()`（死代码、已删）——
+        那句"多条要比实例、判不出就跳过"的判据现在在 `surfaces.apply()` 里（活路径）。
+
+    ⚠ **2026-10-07 修（真 bug，实测 16 行受害）**：这里原来只取清单里的 **`instance` 字段**
+      （`_instance_row(r)`）—— 而**待自建（`to_create`）/ 有材质缺实例（`from_material`）**那两类行，
+      它们的实例路径**是推出来的、清单里那一格是空的**（要等第 ⑦ 步"用户满意"才回写）。
+      ⇒ 凡是这些 `element_key` 的白膜行，**重摆之后自动补材质会静默跳过它们**：
+      实测（2026-10-07 樱木街）一轮增量重摆之后，**16 行**（护栏 ×2 / 电线杆 ×4 / 招牌 ×6 /
+      树池 ×3 / 货车 ×1）**全部没有材质覆盖**，而补材质一句 warning 都没报（那 5 个 element_key
+      正好都是待自建的）。
+      ⇒ 现在**走与 ⑤⑥⑨ 步同一支判据**：`surfaces.surface_instance(row, recipes)`
+      （有实例用实例；没有就算出**要派生的那个**路径）。判据只有一处，别再各写一份。
+    """
+    out: dict[str, str] = {}
+    # ⚠ **不套 `except Exception`**（2026-10-04 晚自查后去掉）：那会把真 bug 藏起来
+    #   （本项目最反对的一种做法）。"没有清单 / 旧格式"本来就不是异常 ——
+    #   `_manifest_rows_strict()` 经 `_load_material_doc()` 会**如实返回空表**，
+    #   所以这里天然得到空提示；真出了别的错，就该让它冒出来。
+    _recipes, _note = _surface_creates()          # 配方表（派生落点要用它，与 ⑤⑥⑨ 同源）
+    _sv = _surfaces_module()
+    for r in _manifest_rows_strict():
+        k = str(r.get("element_key") or "").strip()
+        inst = _sv.surface_instance(r, _recipes)
+        if k and inst and k not in out:
+            out[k] = inst
+    return out
+
+
+def _compose_build_rows(plan: dict, asset_list: dict,
+                        hint_by_key: dict[str, str] | None = None
+                        ) -> tuple[list[dict], list[str], list[str]]:
     """把 `plan_v1.json` 翻成**搭建指令表**（纯计算，不碰 UE）。返回 `(rows, z_rules, warnings)`。
 
     翻译只做三件事，其余一律照抄 —— **坐标本身一个字都不许在这里改**：
       ① **米 → 厘米**：`cm = m × 100`，**只缩放不翻轴**（plan 写明与 UE 同为左手系 Z-up，
          X 前进 / Y 右 / Z 上 —— `world.coordinate_system`）；
       ② `rot_deg` → UE `yaw`：**不反号**（2026-09-26 实测两者同向，docs/阶段三 §3 的表）；
-      ③ **补 Z**：plan 只有平面坐标 `pos: [X, Y]`，竖直方向的两条依据写在本文件顶部的
-         `WHITEBOX_VERTICAL`（白膜）与 `ASSET_PIVOT_LIFT_CM`（原点不在底面的资产）里。
+      ③ **Z 只从行里读**：plan 的**每一行都带 `z_m`**（该行**底面绝对标高**，米，**必填**），
+         竖直方向**只认它**（阶段三不按 `element_key` 猜 —— 那张 `WHITEBOX_VERTICAL` 已于 2026-10-08
+          删除，用户指令「赶紧改位置表结构增加Z」）；「原点不在底面」的资产（`ASSET_PIVOT_LIFT_CM`）
+          再往上加『高出的那段 × scale』。
 
     顺序：**按五层搭建顺序重排**（`BUILD_LAYERS`：① 世界地基 → ② 地皮 → ③ 建筑层 →
     ④ 设施层 → ⑤ 植被层；2026-09-27 用户指令）。同层内保持 plan 的原序（资产行在前、白膜行在后）。
     plan 的 pos 坐标一个字都不动 —— 改的只是**落进 UE 的先后**。
+    ⚠ `hint_by_key`（可选）= 白膜行 `surface_material_hint` 的来源；**不传就是空**（纯计算函数
+      不自己去读文件 —— 要提示的调用方自己传 `_surface_hint_by_key()`）。
     """
     warnings: list[str] = []
-    # 材质表**每次调用都重新读**（配置文件改完立刻生效，不用重启）—— 见 `_surface_materials()`。
-    # 读不动 / 没配置时退回内置默认（⚠ **默认是空的** → 那就是"什么都不贴"），
-    # 并把原因写进 warnings（**不静默**）。
-    _mats, _mats_note = _surface_materials()
-    if _mats_note:
-        warnings.append(_mats_note)
+    hint_by_key = hint_by_key or {}
+    # ⚠ 2026-10-04 晚：这里**不再读** `config/surface_materials.json` 的 `materials` 段
+    #   （那段**已退役、且已从配置里删掉**）。贴什么只有**材质清单**一个来源 ——
+    #   `surface_material_hint` 改由调用方经 `hint_by_key` 传进来（见上面的形参说明）。
+    #   ⚠ 教训：删掉那两行读取时漏了下面 `_mats` 的两处使用 ⇒ `drawing` 一度报
+    #     `NameError: name '_mats' is not defined`（**预检抓不出来，是 `get_plan()` 的警告抓到的**）。
 
     # 白膜厚度兜底：阶段一清单里每个元素都登记过一个 `size_cm[2]`（车行道 15 cm、草坪 5 cm…）。
     # 为什么从清单取而不是在代码里写死：那是**登记过的**尺寸，代码写死就成了"我替用户估"。
@@ -2671,20 +2867,25 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
             note += (f" ｜ 阶段三：`scale_z` = {scale_z:g}（Z 方向倍率）→ RelativeScale3D = "
                      f"[{scale:g}, {scale:g}, {scale * scale_z:g}]（**占地仍是 {scale:g}**）")
 
-        # Z：地面标高 + 「原点比底面高」的那一段（乘上这个资产的缩放）—— 见 ASSET_PIVOT_LIFT_CM
+        # Z：**底面**标高 —— 2026-10-08 起**只从这一行的 `z_m` 取**（用户指令「赶紧改位置表结构增加Z」）。
+        #   Actor 原点 = 底面 +「原点比底面高」那段（`ASSET_PIVOT_LIFT_CM`，乘这个资产的 `scale`
+        #   —— 那是**资产自己的属性**（原点在哪），不是摆放口径，所以它留在表里）。
+        # ⚠ **历史**：2026-10-07 用户定案 B —— plan 的 `z_m` = 「这一行的底面绝对标高」（米），
+        #   改之前它是「**Actor 原点**的绝对标高」。现在**每一行都必须写**（阶段二字段校验兜住），
+        #   代码**不再**在缺 `z_m` 时按口径推一个数出来（那条 `GROUND_Z_M` 兜底已删）。
         lift_cm = ASSET_PIVOT_LIFT_CM.get(path, 0.0) * scale
-        z_cm = GROUND_Z_M * 100.0 + lift_cm
-        if a.get("z_m") is not None:
-            # plan 显式给了**绝对标高**（米）→ 用它，覆盖上面按口径推的值（2026-09-30 加）
-            # ⚠ 对**资产行**这个值是 **Actor 原点**的标高（资产的 `loc.z` 就是原点，不是中心）——
-            #   原先这里写的是"中心绝对标高"，那是错的（2026-09-30 只改文案，坐标一个字没动）。
-            z_cm = float(a["z_m"]) * 100.0
-            note += (f" ｜ 阶段三：plan 显式给了 `z_m` = {float(a['z_m']):g} m"
-                     f" → **原点**标高 {z_cm:.2f} cm（**覆盖**按口径推的值）")
+        if a.get("z_m") is None:                       # 理论上进不来（阶段二必填）；真进来就拒收
+            raise ToolError(
+                f"资产行「{a.get('label') or path}」**没有 `z_m`**（底面绝对标高，米）—— "
+                "阶段三**拒收**（Z 只从这一行取，不再按口径猜）。补上再落关卡。")
+        z_base_cm = float(a["z_m"]) * 100.0
+        note += (f" ｜ 阶段三：plan 的 `z_m` = {float(a['z_m']):g} m（**底面**）→ "
+                 f"底面 {z_base_cm:.2f} cm")
+        z_cm = z_base_cm + lift_cm
         if lift_cm:
             note += (f" ｜ 阶段三补 Z：该资产原点比底面高 {ASSET_PIVOT_LIFT_CM[path]:g} cm"
                      f"（scale 1 实测）×{scale:g} = {lift_cm:.2f} cm，"
-                     f"挪到地面 {GROUND_Z_M * 100:g} cm 之上 → 原点 z = {z_cm:.2f} cm")
+                     f"底面 {z_base_cm:.2f} cm → 原点 z = {z_cm:.2f} cm")
 
         # **画图用的底 / 顶绝对标高 + 占位包围盒**（2026-09-30 加，供 `get_plan().drawing`）：
         # 立面图必须知道这两头；口径就在这一段里算（**同一处 Z 口径**，不让画图的人再推一遍）。
@@ -2692,7 +2893,6 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
         _bb = bbox_by_path.get(path)
         bbox_cm = ([num(_bb[0] * scale), num(_bb[1] * scale), num(_bb[2] * scale * scale_z)]
                    if _bb else None)
-        z_base_cm = z_cm - lift_cm
         if bbox_cm:
             z_top_cm: float | None = z_base_cm + float(bbox_cm[2])
         else:
@@ -2743,17 +2943,22 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
                 f"厚度用了{'阶段一清单登记值' if key in thickness_cm else '兜底值'} "
                 f"{thick:g} cm。这一版 plan 是绕过阶段二校验写进来的，建议补齐后再落。")
 
-        # Z：贴顶还是贴底 —— 官方 add_cube 的方块**以 Actor 原点为中心**，所以这里算的是中心点。
-        anchor, anchor_z = WHITEBOX_VERTICAL.get(key, ("bottom", GROUND_Z_M))
-        if key not in WHITEBOX_VERTICAL:
-            warnings.append(f"白膜「{label}」：element_key `{key}` 没有竖直口径，按"
-                            f"『底面贴地面 {GROUND_Z_M:g} m』处理 —— 不对就说，改代码里的表。")
-        z_m = (anchor_z - height_m / 2.0) if anchor == "top" else (anchor_z + height_m / 2.0)
-        if w.get("z_m") is not None:
-            # plan 显式给了**中心绝对标高**（米）→ 用它，覆盖上面按「贴顶 / 贴底」推的值（2026-09-30 加）
-            z_m = float(w["z_m"])
-            note += (f" ｜ 阶段三：plan 显式给了 `z_m` = {z_m:g} m → 中心标高 {z_m * 100:.2f} cm"
-                     f"（**覆盖**『{anchor}』口径）")
+        # Z：**只从这一行的 `z_m` 取**（2026-10-08 用户指令「赶紧改位置表结构增加Z」）——
+        #   底色：官方 `add_cube` 的方块**以 Actor 原点为中心**，所以这里算的是中心点，
+        #   而 plan 给的 `z_m` 是**底面** ⇒ 中心 = 底面 + 高/2。
+        # ⚠ **删掉的是 `WHITEBOX_VERTICAL` 那张按 element_key 推的表**（原来它按"贴顶 / 贴底"推，
+        #   表里没有的 element_key 还要在报文里问用户"不对就说，改代码里的表"——用户明确否掉了这条路：
+        #   「关于竖直我之前就说了改位置表结构…现在又来问我」）。现在**每行自带 Z**，代码不猜。
+        if w.get("z_m") is None:
+            raise ToolError(
+                f"白膜「{label}」**没有 `z_m`**（底面绝对标高，米）—— 阶段三**拒收**（不猜）。"
+                "参照值：路面上的 0.00、站在两侧地面上的 0.15、人行道这类底面贴路面的 0.00、"
+                "世界地基 −0.05（顶面 0.15、厚 0.20）、车行道 −0.15（顶面 0、厚 0.15）。")
+        _base_m = float(w["z_m"])
+        z_m = _base_m + height_m / 2.0
+        note += (f" ｜ 阶段三：plan 的 `z_m` = {_base_m:g} m（**底面**）→ "
+                 f"底面 {_base_m * 100:.2f} / 中心 {z_m * 100:.2f} / "
+                 f"顶面 {(z_m + height_m / 2.0) * 100:.2f} cm")
 
         if shape == "plane":
             note += (f" ｜ 阶段三：官方 PrimitiveTools **没有 add_plane**（只有 cube / cone / cylinder / "
@@ -2780,7 +2985,7 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
             "z_base_cm": num(z_m * 100.0 - height_m * 100.0 / 2.0),
             "z_top_cm": num(z_m * 100.0 + height_m * 100.0 / 2.0),
             "folder": FOLDER_BY_ELEMENT.get(key, f"{OUR_FOLDER_ROOT}/{key or 'misc'}"),
-            "surface_material_hint": _mats.get(key, ""),
+            "surface_material_hint": hint_by_key.get(key, ""),
             "note": note,
         })
 
@@ -2836,15 +3041,18 @@ def _compose_build_rows(plan: dict, asset_list: dict) -> tuple[list[dict], list[
         warnings.append(_bounds_note)
 
     z_rules = [
-        f"路面标高 z = {ROAD_SURFACE_Z_M:g} m；两侧地面（人行道 / 草坪**顶面**）"
-        f"比路面高 {GROUND_Z_M * 100:g} cm —— 依据：plan 的人行道/连接路白膜自带 height_m=0.15。",
+        "**Z 只在 plan 的每一行里**（`z_m` = 该行**底面绝对标高**，米，**必填**）—— "
+        "阶段三读它、**不猜**（按 `element_key` 查表那条已于 2026-10-08 删除，"
+        "用户指令「赶紧改位置表结构增加Z」）。",
         "白膜 cube：`add_cube` 的方块**以 Actor 原点为中心**（2026-09-26 实测）→ "
-        "loc.z = 贴的那一头 ± 高度/2；贴哪一头见本文件 `WHITEBOX_VERTICAL`。",
-        "⚠ 上面两条是**默认**：plan 的放置行若显式给了 `z_m`（**米，中心绝对标高**）→ "
-        "**以它为准**、覆盖按口径推的值（2026-09-30 加；用来表达「用户把某一行手动挪高 / 挪低了」）。",
-        f"已有资产：loc.z = {GROUND_Z_M * 100:g} cm（站在抬高的地面上）；"
-        "原点不在底面的（见 `ASSET_PIVOT_LIFT_CM`）再加『高出的那段 × scale』。",
-        "⚠ 上面几条是**口径**（依据写在常量旁），不是实测值 —— 觉得不对就说，改表里的数即可。",
+        "loc.z = `z_m`（底面）+ 高度/2。",
+        f"填 `z_m` 的参照值：路面标高 {ROAD_SURFACE_Z_M:g} m；两侧地面（人行道 / 草坪**顶面**）"
+        f"比路面高 {GROUND_Z_M * 100:g} cm。",
+        f"已有资产：底面 = 它的 `z_m`；原点不在底面的（见 `ASSET_PIVOT_LIFT_CM`）再加"
+        "『高出的那段 × scale』。",
+        "⚠ 参照值是**口径**（不是实测）：路面上的 0.00、站在地面上的 0.15、人行道底面贴路面 0.00、"
+        "世界地基 −0.05、车行道 −0.15。要改就改**行里那个数**（阶段四：request_plan_change → "
+        "generate_plan(patch)），不用改代码。",
     ]
     return rows, z_rules, warnings
 
@@ -2864,7 +3072,8 @@ def _drawing_geometry(plan: dict) -> dict:
       与硬规则 6「预估值不许伪装成实测值」同源）。
     """
     asset_list = load_json(ASSET_LIST_PATH) or {}
-    rows, z_rules, compose_warnings = _compose_build_rows(plan, asset_list)
+    rows, z_rules, compose_warnings = _compose_build_rows(plan, asset_list,
+                                                         hint_by_key=_surface_hint_by_key())
     compose_warnings = list(compose_warnings)
 
     try:
@@ -3010,7 +3219,8 @@ async def _orders_snapshot() -> BuildOrdersResult:
     if not (plan.get("assets") or plan.get("whiteboxes")):
         raise ToolError(f"{plan_path.name} 是**初始化状态**（两张表都空）—— 没有坐标可翻译。")
 
-    rows, z_rules, warns = _compose_build_rows(plan, load_json(ASSET_LIST_PATH) or {})
+    rows, z_rules, warns = _compose_build_rows(plan, load_json(ASSET_LIST_PATH) or {},
+                                               hint_by_key=_surface_hint_by_key())
     plan_hash = planning.plan_geometry_hash(plan)
     counts = _counts_of(rows)
 
@@ -3268,12 +3478,29 @@ async def _precheck_build(ctx: Context[AppContext], planning: Any) -> _Precheck:
             "这一版的确认里**没有用户原话**（`confirmation.user_quote` 为空）—— "
             "证明不了是用户点的头。请按「使用图 → 停下等用户回话 → "
             "`confirm_plan(confirmed_by=…, user_quote=原话)`」重走一遍确认，再来搭建")
+    # ⚠ **微调版的"原话"必须是用户本人的**（2026-10-05 加）——`request_plan_change(by="agent 自查")`
+    #   记的是 **agent 自己的话**：它可以让 plan 有留痕，但**不能**当"用户点头"的凭据。
+    #   不拦的话，一次纯自查的改动会被记成「用户（微调）确认过」并**直接落关卡** = 伪造人的确认。
+    #   ⚠ 边界照实说：**2026-10-05 之前写的微调版 plan 没有 `provenance` 字段** ⇒ 这里按空处理、
+    #     **放行**（向后兼容）。要改成"没有 provenance 也拦"只需去掉下面 `_prov and` 那一段。
+    _prov = str(_conf.get("provenance") or "").strip()
+    if _tuned_version and _prov and _prov != "用户":
+        problems.append(
+            f"这一版是**微调版**，但它的依据是 `provenance=\"{_prov}\"` —— **不是用户本人的要求**，"
+            "证明不了是他点的头。\n"
+            f"· 它记下的那句话是：「{str(_conf.get('user_quote') or '').strip()}」\n"
+            "· 两条出路：① 让他本人开口 → `request_plan_change(items=[他的原话], by=\"用户\")` → "
+            "`generate_plan(patch=[…])` **把这次改动重打一遍**（那一版的 `provenance` 就是「用户」）"
+            "→ 再 `execute_build(only_labels=[…])`；② 这次改动先不落关卡。\n"
+            "· ⚠ 不许自己编一句他的原话（编了就是伪造人的确认）。")
 
-    rows, _z_rules, warns = _compose_build_rows(plan, load_json(ASSET_LIST_PATH) or {})
+    rows, _z_rules, warns = _compose_build_rows(plan, load_json(ASSET_LIST_PATH) or {},
+                                                hint_by_key=_surface_hint_by_key())
     if _tuned_version:
         warns.append(
             "**这是微调版 plan**（`confirmation.mode=tuned`，**没有图**，依据是用户原话 + 改了哪几行）"
-            "—— 真跑**只会动点名的那几行**（`only_labels` 必填、`mode=full` 会被拒收）。"
+            "—— 真跑**只动 `plan↔台账` 差异里的那几行**（差异 = 这一轮被要求改的行；"
+            "`only_labels=[…]` 可再收窄到更少几行；`mode=full` 仍会被拒收）。"
             "⚠ 要回到「正常验收」（有图那种）：重画两张图 → `confirm_plan()`。")
 
     want = len(plan.get("assets") or []) + len(plan.get("whiteboxes") or [])
@@ -3300,7 +3527,9 @@ async def _precheck_build(ctx: Context[AppContext], planning: Any) -> _Precheck:
     for p in unique_paths:
         used += 1
         try:
-            ok = await call_official(ctx, "exists", {"path": p}, toolset=TS_ASSET)
+            # ⚠ 判据**只认** `_exists_true()`（不许写 `if not ok:` 直接吃官方返回值 ——
+            #   官方会回字符串 `"false"`，那种写法会把它判成"在"，这道闸就废了）。
+            ok = _exists_true(await call_official(ctx, "exists", {"path": p}, toolset=TS_ASSET))
         except ToolError as exc:
             dead.append(f"{p}（调用失败：{exc}）")
             continue
@@ -4300,32 +4529,33 @@ async def execute_build(
                   "的开关。去掉它们再调（他本人的原话只填进 `confirm_stage3`）。")
         return _promote_epoch2(planning, _s3_quote, dry_run=dry_run)
 
-    # ⚠ **第四阶段 · 微调版 plan 的专属硬闸**（2026-10-04 用户拍板）——
-    #   微调版的语义就是"**只动我刚说的那几行**"，所以：① 真跑**必须点名**；② **不许 `full`**。
-    #   ⚠ 这里只读 plan 文件判"是不是微调版"（`confirmation.mode == "tuned"`），不碰 UE、不改盘。
+    # ⚠ **第四阶段 · 微调版 plan 的专属硬闸**（2026-10-04 用户拍板；2026-10-07 按用户指令收窄）——
+    #   微调版的语义是"**只动我要求的那几行**" ⇒ **不许 `full`**（这条照旧）。
+    #   ⚠ **"真跑必须点名"那一条已于 2026-10-07 删除**（用户原话：「不是都用 V2 版了吗，进入纪元 2 后，
+    #     V1 要不直接删除得了，以后增删改查都靠 V2」）：
+    #     V1 一删，"微调版"就成了**唯一那份 plan 的常态语义**，再强制点名会把
+    #     「**新增行 / 换过 `element_key` 的行**」堵死 —— 它们**点不了名**（台账里没有这一行，
+    #     而点名只认台账里已有的行），不点名又被这条闸拦 ⇒ **两条路互锁**（BUG 记录与实测
+    #     拒收原文见 `docs/阶段四-微调.md` 第 1 条；2026-10-07 樱花街第 6 版真撞上）。
+    #     现在：**不点名 = 按 `plan↔台账` 差异动** —— 差异本身就是"这一轮被要求改的那几行"
+    #     （plan 的改动全部来自 `request_plan_change` + `generate_plan(patch=…)`，有原话留痕）；
+    #     `only_labels` 仍在，用来**再收窄**到更少的几行。
     _tuned_plan = False
     try:
-        # ⚠ 走咽喉：纪元 2 开了之后活动 plan 是 `plan_v2.json` —— 微调版正是纪元 2 的常态。
-        _pd = planning.active_plan()
-        _tuned_plan = str((((_pd.get("confirmation") or {}).get("mode")) or "")) == "tuned"
+        # ⚠ 走咽喉：活动 plan（`active_plan_path()`）—— 微调版正是纪元 2 的常态。
+        #   ⚠ 只取 `mode` 这一个字段就够（2026-10-07：「必须点名」那条闸拆掉之后，
+        #     这里不再需要把 `confirmation.rows` 读出来报给用户）。
+        _conf_now = (planning.active_plan() or {}).get("confirmation") or {}
+        _tuned_plan = str(_conf_now.get("mode") or "") == "tuned"
     except (OSError, ValueError):
         _tuned_plan = False
-    if _tuned_plan and not dry_run:
-        if mode == "full":
-            raise ToolError(
-                "拒收：**这是微调版 plan**（`confirmation.mode=tuned`）—— 微调只动那几行，"
-                "**不许全量重摆** —— 一个 Actor 都没动。\n"
-                "· 只想动那几行 → `execute_build(only_labels=[…])`（默认 `auto` 走增量）。\n"
-                "· 确实要整体重摆 → 那属于**阶段三**：先重画两张图 → `confirm_plan()` "
-                "把它变回「正常验收」那一版，再 `mode=\"full\", force_full=true`。")
-        if not _only_given:
-            raise ToolError(
-                "拒收：**这是微调版 plan，真跑必须点名**（`only_labels` 为空）—— 一个 Actor 都没动。\n"
-                f"· 这一版微调改的是：{'、'.join('「' + str(r.get('label') or '') + '」' for r in ((_pd.get('confirmation') or {}).get('rows') or [])[:8]) or '（留痕里没记 label）'}\n"
-                "· 正确用法：`execute_build(only_labels=[上面那几行], dry_run=true)` 先看一眼 → "
-                "再带同一个 `only_labels` 真跑。\n"
-                "· 为什么拦：不点名 = 允许它顺手重摆别的行 —— 那正是「用户手挪的东西被复原」"
-                "那类事故的来源。")
+    if _tuned_plan and not dry_run and mode == "full":
+        raise ToolError(
+            "拒收：**这是微调版 plan**（`confirmation.mode=tuned`）—— 微调只动那几行，"
+            "**不许全量重摆** —— 一个 Actor 都没动。\n"
+            "· 只想动那几行 → `execute_build(only_labels=[…])`（默认 `auto` 走增量）。\n"
+            "· 确实要整体重摆 → 那属于**阶段三**：先重画两张图 → `confirm_plan()` "
+            "把它变回「正常验收」那一版，再 `mode=\"full\", force_full=true`。")
     if _only_given:
         if mode == "full":
             raise ToolError(
@@ -5156,22 +5386,33 @@ async def execute_build(
     #   —— 每次都得**手动**再跑一次 `apply_surfaces()`，忘一次那一行就变成灰白模。
     # 口径（三条，别改）：
     #   ① **只补这次真落了**的白膜行 —— 没落的行组件没被换掉，材质还在，多写一遍是白费；
-    #   ② **材质从 `config/surface_materials.json` 现读**（与 `apply_surfaces` 同一张表、同一个函数），
+    #   ② **材质从材质清单现读**（与 `apply_surfaces()` 同一个来源、**同一支判据**
+    #      `surfaces.surface_instance()` —— 有实例用实例、没有就算出**要派生的那个路径**），
     #      不另存一份"落的时候用的材质"，免得两处口径将来打架；
+    #      ⚠ 2026-10-04 晚改：这里原来读 `_surface_materials()`（= `config` 那张**已退役**的
+    #      `materials` 段，现在恒为空）—— 继续读它只会"静默什么都不补"（看着跑过了、其实没贴）。
+    #      ⚠ 2026-10-07 再修：改成**只读 `instance` 字段**又漏了"实例可派生"那两类行（见下）。
     #   ③ **补失败不算搭建失败** —— 这一步是收尾，不是闸；失败只写进 `warnings`（异常也吞在这一层）。
-    #   幂等：`_surface_apply_row` 自己先读现值，是那块材质就记 `already`、不重复写。
+    # 幂等：`_surface_apply_row` 自己先读现值，是那块材质就记 `already`、不重复写。
     if placed:
-        mats, mats_note = _surface_materials()
-        if mats_note:
-            warns.append(mats_note)
+        # ⚠ **2026-10-07 修（真 bug · 实测 16 行受害）**：这段原来**自己内联**拼了一份
+        #   `{element_key: 实例}`，判据是清单里的 **`instance` 字段**（`_instance_row()`）——
+        #   而**待自建（`to_create`）/ 有材质缺实例（`from_material`）**那两类行，那一格**是空的**
+        #   （实例路径要第 ⑦ 步"用户满意"才回写）⇒ **它们重摆之后这一段静默跳过**：
+        #   实测一轮增量重摆后 **16 行**（护栏 ×2 / 电线杆 ×4 / 招牌 ×6 / 树池 ×3 / 货车 ×1）
+        #   全没有材质覆盖，而这里**一句 warning 都没报**（"还没实例 ⇒ 不是丢了，别贴"那句
+        #   注释在当时看是对的，实际上它把"**要派生的实例**"也当成"没有实例"了）。
+        #   ⇒ 现在**复用 `_surface_hint_by_key()`**（它已改成走 `surface_instance(row, recipes)`
+        #   那一支判据，与 ⑤⑥⑨ 步同源）—— **判据只有一处**，不许在这儿再内联第二份。
+        _inst_by_key: dict[str, str] = {k.lower(): v for k, v in _surface_hint_by_key().items()}
         led_by_uid = {str(x.get("uid")): x for x in new_ledger_rows}
         surf: list[dict] = []
         for res, r in zip(results, targets):
             if not res.ok or r.get("kind") != "whitebox":
                 continue
-            want = str(mats.get(str(r.get("element_key"))) or "")
+            want = str(_inst_by_key.get(str(r.get("element_key") or "").strip().lower()) or "")
             if not want:
-                continue                      # 这颗元素本来就没配材质 → 不是"丢了"，别贴
+                continue                      # 这一行**还没有材质实例** → 不是"丢了"，别贴
             led = led_by_uid.get(str(r.get("uid"))) or {}
             try:
                 status, err, used = await _surface_apply_row(ctx, led, want)
@@ -5198,6 +5439,25 @@ async def execute_build(
                 if s["status"] == "failed":
                     warns.append(f"⚠ 自动补材质没成：「{s['label']}」{s['error']}")
 
+    # ---------- 「这一轮的凭据」是哪句话（2026-10-07 补缺口 #3）-----------------------------
+    # 问题（原文记录在 `docs/阶段四-微调.md` 第 3 条）：报文里那句「依据 = 用户的**原话**「…」」
+    #   取的是 `_quote_ok or user_quote`，而**微调版 + 点名**这条路两边都是空的 ——
+    #   静默走的是"他刚说要改这几行"那份凭据（在 plan 里，`_precheck_build()` 已核过它非空、
+    #   且 `provenance` 是"用户"）⇒ 报文会打印一对**空引号**「」，读起来像"没人同意过"，
+    #   而实际是"这一版确实是他点头的、只是这次调用没把那句话带过来"。
+    # 口径：**三处按可信度取，并标明来源**；三处都空 ⇒ **那半句一个字都不打印**（而不是打印空引号）。
+    _conf_user_quote = ""
+    if isinstance(plan, dict):
+        _conf_user_quote = str((plan.get("confirmation") or {}).get("user_quote") or "").strip()
+    if str(_quote_ok or "").strip():
+        _evidence_quote, _evidence_src = str(_quote_ok).strip(), "（本次调用 · 人工痕迹闸放行的那句）"
+    elif str(user_quote or "").strip():
+        _evidence_quote, _evidence_src = str(user_quote).strip(), "（本次调用传进来的）"
+    elif _conf_user_quote:
+        _evidence_quote, _evidence_src = _conf_user_quote, "（这一版 plan 记的 `confirmation.user_quote`）"
+    else:
+        _evidence_quote, _evidence_src = "", ""
+
     if mode == "incremental":
         diff_summary = _incremental_diff(
             targets, same, gone, changed, orders, reclaim_actor, drifted, manual, named=named)
@@ -5214,7 +5474,8 @@ async def execute_build(
                 + "、".join(f"「{x}」" for x in _named_labels[:8])
                 + ("…" if len(_named_labels) > 8 else "")
                 + f"；其余 {len(same)} 行**一个 Actor 都没碰**、也没读。"
-                "依据 = 用户的**原话**「" + str(_quote_ok or user_quote).strip() + "」。")
+                + (f"依据 = 用户的**原话**「{_evidence_quote}」{_evidence_src}。"
+                   if _evidence_quote else ""))
     else:
         diff_summary = {
             "全量重摆": True, "要删": len(remove_refs), "要摆": len(targets), "没动": 0,
@@ -5271,7 +5532,8 @@ async def execute_build(
                 if not targets else "")
              # ⚠ 点名成功时要一眼看出"只动了这几行"（2026-10-03 加）—— 与全量重摆区分开。
              + (f"✅ **点名重摆完成**：只动了你点名的那 {len(targets)} 行（按 plan 重摆），"
-                f"其余 {len(same)} 行原样没碰。依据 = 用户原话「{str(_quote_ok or user_quote).strip()}」。"
+                f"其余 {len(same)} 行原样没碰。"
+                + (f"依据 = 用户原话「{_evidence_quote}」{_evidence_src}。" if _evidence_quote else "")
                 if named else "")
              + "① 在 UE 里看这几处对不对"
              "（`rows` 里 `ok=false` 的就是没落成的）；② `mismatches` 非空就逐条查；"
@@ -5524,7 +5786,8 @@ async def export_layout(
     等之间切换」）。所以文件里带的是**语义 + 尺寸 + 变换 + 材质 + 层**，不是模型。
 
     做三件事：
-      ① 读 `plan_v1.json`（权威几何，米）+ `catalog/asset_list.json`（资产实测包围盒）
+      ① 读**活动那份 plan**（`planning.active_plan_path()`；纪元 2 = `views/plan_v2.json`，
+        权威几何，米）+ `catalog/asset_list.json`（资产实测包围盒）
          + 重算一遍指令行（拿阶段三补的 **Z**、**层**、白膜尺寸、材质线索）；
       ② 落盘 `views/exchange/scene_v1.json`（机器读）+ `scene_v1.csv`（表格视图）；
       ③ 给了 `ue_dir` 就再经官方 `write_file` **复制一份**进 UE 工程 `Saved/UEMCP/`
@@ -5532,7 +5795,7 @@ async def export_layout(
 
     ⚠ **导不了几何**（实测：官方没有 glTF / FBX / 场景导出工具）—— 消费端是照着这份描述
       **重摆一遍**。
-    ⚠ **只读导出**：权威几何永远是 `plan_v1.json`。外部改过这份文件**不会**自动回到 plan ——
+    ⚠ **只读导出**：权威几何永远是**活动那份 plan**（走 `active_plan_path()`）—— 外部改过这份文件**不会**自动回到 plan ——
       用 `check_exchange()` 看对账报告，再按阶段二那套改（`request_plan_change` →
       `generate_plan(patch=…)` → **重画图** → 用户看图确认）。
     ⚠ 写 UE 那一步只写**纯文本**、落在工程 `Saved/` 下：**不存盘关卡、不碰任何资产**。
@@ -5546,7 +5809,8 @@ async def export_layout(
     plan = planning.active_plan()
     gate = planning.gate_check(plan)
     asset_list = load_json(ASSET_LIST_PATH) or {}
-    rows, _z_rules, row_warns = _compose_build_rows(plan, asset_list)
+    rows, _z_rules, row_warns = _compose_build_rows(plan, asset_list,
+                                                    hint_by_key=_surface_hint_by_key())
     warns += row_warns
     if not gate["confirmed"]:
         warns.append("⚠ 这一版规划**还没被用户确认**（闸门关着）—— 导出去的这份没经过验收，"
@@ -5650,9 +5914,11 @@ async def check_exchange(
     file_hash = str((doc.get("source") or {}).get("plan_hash") or "")
 
     warns: list[str] = []
-    _mats, _mats_note = _surface_materials()
-    if _mats_note:
-        warns.append(_mats_note)
+    # ⚠ 2026-10-04 晚：这里原来读 `_surface_materials()`（= `config` 那张**已退役**的 `materials` 段，
+    #   现在恒为空）。**贴什么只有材质清单一个来源** —— 逐条对账要用的"该用哪块材质"改成
+    #   **从材质清单取**（判据 = `surfaces.surface_instance()` 那一处；2026-10-07 之前只认
+    #   `instance` 字段，待自建 / 缺实例那两类行会被漏掉）。
+    _mats = _surface_hint_by_key()
     if file_hash != now_hash:
         warns.append(
             f"⚠ 这份交换文件是**按另一版 plan 导出的**（文件记 {file_hash[:10] or '(空)'}… ≠ "
@@ -5728,6 +5994,33 @@ async def check_exchange(
     )
 
 
+# --- 阶段五 · 第 ⑥ ⑦ 步 · **一次一个物体：贴 → 切视角 → 用户看 → 存盘**（2026-10-04 加 · ⚠ 尚未实测）---
+# ⚠ **2026-10-07：本节的实现在 `surfaces.py`**（`focus()` / `apply(save=True)`）——
+#   main.py 里那批（`_surface_focus` / `_surface_focus_rows` / `_surface_apply_list` /
+#   `_surface_rows_for_ledger_row`）是**死代码，已按用户指令删除**。
+#   下面这段是**口径与实测记录**（切视角为什么不用自己算相机 / 存盘那条），**留着有用**。
+# 用户原话：「指定物体在UE上贴上去和用户反复确认调试，别忘了要切到那个目标物体视角去，免得贴上去
+#   用户不知道贴哪了，知道用户满意就保存创建材质实例填回材质清单」。
+# ⚠ **切视角有现成工具，不用自己算相机**（2026-10-04 实测 `describe_toolset`）：
+#   `EditorAppToolset.FocusOnActors(actors=[…])` —— 官方原文「重新定位关卡编辑器摄像机，使其聚焦于
+#   指定 Actor；**PIE 激活时无法调用**」。**这就是用户双击物体那个动作本身**。
+#   配 `SelectActors`（选中高亮，让人一眼看出是哪一个）。
+# ⚠ **本阶段不出图**（用户 2026-10-04 原话：「不需要出图，用户能在UE里直接看」）——
+#   **不调** `CaptureViewport` / `CaptureAssetImage`。切完视角，用户自己在 UE 里看。
+# ⚠ 第 ⑦ 步的**存盘**是显式的：走官方 `AssetTools.save_assets`（**空列表 = 存所有脏资产**，
+#   与 `setup_environment(save=…)` 同一处用法）。只在**真跑**时存；演练绝不存；
+#   存盘失败**不算"材质没贴好"**（材质已经写进关卡了）—— 如实报进 `warnings`。
+
+
+# --- 阶段五 · 材质清单的**消费方**：`probe` / `confirm` / `apply` / `asset_slots`（2026-10-04 加）---
+# ⚠ 2026-10-07：**四档的活实现都在 `surfaces.py`**（`probe` / `confirm` / `apply` / `asset_slots`）——
+#   main.py 里那份旧的探材质实现（`_probe_materials` / `_surface_probe_asset` /
+#   `_probe_material_search` / `_material_probe_guard` / `_confirm_material_rows` /
+#   `_render_material_list`）是**死代码，已按用户指令删除**。
+# ⚠ 这四档**共用同一个工具**（用户已定：**工具面仍是 20 个**，不许新造第 21 件）。
+# ⚠ `mode="apply"`（默认）的行为与 2026-10-04 之前**逐字相同** —— 旧调用方不受影响。
+
+
 # --- 阶段五 · 给白膜贴表面材质（2026-09-27 实现；**机制已实测**）------------------  【模块：surfaces】
 # 由来：用户 2026-09-27「继续完成项目」，并定下 `ground`（世界地基）贴草地。
 #
@@ -5749,232 +6042,22 @@ async def check_exchange(
 # ⚠ 本工具**绝不存盘**；只改**组件材质覆盖**，不动几何 / 位置 / 分组。
 
 
-def _surface_matches(raw: Any, material: str) -> bool:
-    """读回的 `overrideMaterials` 里第一块是不是就是目标材质（幂等判断用它）。
+def _norm_material_path(value: Any) -> str:
+    """把一个材质路径**规整成包路径**（去掉对象名后缀）；取不到就返回空串。
 
-    ⚠ `get_properties` 返回的是 **JSON 字符串**（它的 outputSchema 就是 string），得自己解；
-      解不动、或形状不认识 → 一律当**不匹配** —— 安全侧：宁可多写一遍，也不假装已经贴好了。
+    为什么必须有它（2026-09-27 实测踩过）：`overrideMaterials` 要的是**对象路径**
+    （`/Game/X/MI_A.MI_A`），而清单 / 配置里写的是**包路径**（`/Game/X/MI_A`）——
+    两边混着来的时候，读回核对会**永远对不上**（明明贴上了却报没贴上）。
+    这里统一收敛到**包路径**（`exists()` / `set_material` / 台账都用它），
+    要对象路径时再经 `to_object_path()` 转回去。
     """
-    try:
-        doc = json.loads(raw) if isinstance(raw, str) else raw
-    except (ValueError, TypeError):
-        return False
-    if not isinstance(doc, dict):
-        return False
-    arr = doc.get("overrideMaterials")
-    if not isinstance(arr, list) or not arr:
-        return False
-    first = arr[0]
-    got = str((first or {}).get("refPath") or "") if isinstance(first, dict) else str(first)
-    return got == to_object_path(material)
-
-
-async def _surface_apply_row(
-    ctx: Context[AppContext], row: dict, material: str, dry: bool = False
-) -> tuple[str, str, int]:
-    """给台账里这一行贴材质。返回 `(status, error, 用掉几次官方调用)`。
-
-    status ∈ `applied`（贴上了）/ `already`（本来就是它，幂等跳过）/ `failed` / `dry`。
-    ⚠ `dry=True` 时**仍然去找组件**（这一趟的意义就是"确认这个 Actor 还活着、
-      而且有 `cube` 组件"），但**读也不写** —— 一个字节都不改。
-    """
-    used = 0
-    actor = str(row.get("actor") or "")
-    if not actor:
-        return "failed", "台账这一行没有 Actor 引用（上次没落成 / 引用已失效）", 0
-
-    # 白膜组件名固定是 `cube`（`add_cube` 时传的 name）—— 按引用末段找，不靠顺序猜
-    used += 1
-    comps = await call_official(
-        ctx, "get_components", {"actor": {"refPath": actor}}, toolset=TS_ACTOR)
-    cube = ""
-    for item in (comps or []):
-        ref = _ref_path(item)
-        if ref and ref.rsplit(".", 1)[-1] == "cube":
-            cube = ref
-            break
-    if not cube:
-        names = [_ref_path(i) for i in (comps or [])]
-        return "failed", f"这个 Actor 上找不到名为 `cube` 的组件（现有组件：{names}）", used
-    if dry:
-        return "dry", "", used
-
-    wanted = {"instance": {"refPath": cube}, "properties": ["overrideMaterials"]}
-    used += 1
-    cur = await call_official(ctx, "get_properties", dict(wanted), toolset=TS_OBJECT)
-    if _surface_matches(cur, material):
-        return "already", "", used
-
-    used += 1
-    await call_official(ctx, "set_properties", {
-        "instance": {"refPath": cube},
-        "values": json.dumps(
-            {"overrideMaterials": [{"refPath": to_object_path(material)}]},
-            ensure_ascii=False),
-    }, toolset=TS_OBJECT)
-
-    # 读回核对：写进去了但读回不是它 = **没成**（与阶段三"读回对账"同一条纪律）
-    used += 1
-    back = await call_official(ctx, "get_properties", dict(wanted), toolset=TS_OBJECT)
-    if _surface_matches(back, material):
-        return "applied", "", used
-    return "failed", f"写了但读回不是这块材质（读回 {back!r}）", used
-
-
-@mcp.tool()
-async def apply_surfaces(
-    ctx: Context[AppContext],
-    dry_run: Annotated[bool, Field(
-        description=("true = 只算「哪几行要贴哪块材质」+ 逐个验材质路径、逐个确认 Actor 还在，"
-                     "**一个组件都不写**（先看一遍再动手用这个）"))] = False,
-    only: Annotated[list[str] | None, Field(
-        description=("只处理这几个 `element_key`（如 `[\"road\"]`）；留空 = 全部有材质映射的白膜行"))] = None,
-) -> SurfaceReport:
-    """
-    【场景⑤ 表面与环境】什么时候用我：白膜还是灰的、要把材质贴上去时 —— 只贴**组件级覆盖**，不动几何。**阶段五 · 第 1 步**：给白膜**贴表面材质**（不贴的话落下去的就是灰白模）。
-    
-    做四件事：
-      ① 读**搭建台账** `views/build_state_v1.json` —— 靠里面记的 **Actor 引用**贴，
-         **不重新去关卡里找**（那得重跑一遍识别，是另一码事）；
-      ② 核对**当前关卡与台账一致**（换图了就拒收，一个组件都不写）；
-      ③ **逐个验材质路径** `exists()` —— 不过就拒收（与阶段三"一条不过就一个都不落"同一条纪律）；
-      ④ 逐行：找 `cube` 组件 → 读现值（**幂等**：已是这块材质就跳过）→ `set_properties`
-         写 `overrideMaterials` → **读回核对**（写进去但读回不是它 = 没成，如实报）。
-
-    ⚠ 贴的是**组件级覆盖**，**不改资产**：改资产会把 `/Engine/BasicShapes/Cube` 这种
-      引擎自带网格一起改掉（所有实例跟着变）—— 这是实测确认过的。
-    ⚠ 只贴**白膜行**；资产行（house / tree）**自带材质**，本工具不碰。
-    ⚠ **绝不存盘** —— 贴完你在 UE 里看，存不存由你定。
-    ⚠ 材质表在 **`config/surface_materials.json`**（**不写死在代码里**）—— 改它**不用改代码、
-      不用重启**，因为本工具**每次调用都重新读**。代码里的 `SURFACE_MATERIAL_DEFAULT`
-      **故意是空的**（材质路径属于你工程，不该写死在代码里）：配置缺了 / 坏了就退回它，
-      并把原因写进 `warnings` —— **那时就是一个元素都不贴**，会明说，不假装"贴了"。
-    """
-    calls = 0
-    warns: list[str] = []
-
-    # 材质表**每次调用都重新读**（配置文件改完立刻生效，不用重启）—— 见 `_surface_materials()`。
-    _mats, _mats_note = _surface_materials()
-    if _mats_note:
-        warns.append(_mats_note)
-
-    ledger = _load_build_state()
-    ledger_rows = [x for x in (ledger.get("rows") or []) if isinstance(x, dict)]
-    if not ledger_rows:
-        raise ToolError(
-            f"还没有搭建台账（`{active_ledger_path().name}`）—— 贴材质靠台账里的**Actor 引用**，"
-            "没台账就不知道贴谁。先把关卡搭起来（`execute_build()`）；"
-            "场景已经搭好了就先 `execute_build(mode=\"incremental\", adopt=true)` 认领现状。")
-
-    # ① 当前关卡必须与台账一致（换图了，台账里的 Actor 引用在这儿没有意义）
-    level = str(await call_official(ctx, "get_current_level", {}, toolset=TS_SCENE) or "")
-    calls += 1
-    if str(ledger.get("level") or "") not in ("", level):
-        raise ToolError(
-            f"台账记的关卡是 `{ledger.get('level')}`，当前关卡是 `{level}` —— **换图了**，"
-            "台账里的 Actor 引用在这儿没有意义 —— **一个组件都没写**。要么切回那张图，"
-            "要么在**这张图上**重新搭（`execute_build`）。")
-
-    # ② 挑出要贴的行（只白膜；资产行自带材质，不进这张表）
-    wanted_keys = set(_mats)
-    if only:
-        picked = {str(k).strip() for k in only if str(k).strip()}
-        wanted_keys &= picked
-        if not wanted_keys:
-            raise ToolError(
-                f"`only` 里的元素**都没有材质映射** —— 有映射的是：{sorted(_mats)}。"
-                f"（收到：{only}）")
-    targets = [r for r in ledger_rows
-               if str(r.get("kind") or "") == "whitebox"
-               and str(r.get("element_key") or "") in wanted_keys]
-    asset_rows = sum(1 for r in ledger_rows if str(r.get("kind") or "") == "asset")
-    if not targets:
-        warns.append(f"台账里没有**有材质映射的白膜行**（要贴的元素：{sorted(wanted_keys)}）—— "
-                     "没什么可贴的。")
-
-    # ③ 材质路径逐个 exists()：不过就拒收（**一个组件都不写**）
-    materials = sorted({_mats[str(r["element_key"])] for r in targets})
-    dead: list[str] = []
-    for p in materials:
-        calls += 1
-        try:
-            ok = await call_official(ctx, "exists", {"path": p}, toolset=TS_ASSET)
-        except ToolError as exc:
-            dead.append(f"{p}（调用失败：{exc}）")
-            continue
-        if not ok:
-            dead.append(p)
-    if dead:
-        raise ToolError(
-            "拒收：材质路径验不过（官方 exists() 返回否）：" + "、".join(dead)
-            + " —— **一个组件都没写**。先确认这几块材质还在不在"
-              "（映射见 `config/surface_materials.json`）。")
-
-    # ④ 逐行贴（dry_run 仍会逐个找组件确认 Actor 还活着，但不写）
-    rows_out: list[SurfaceRowResult] = []
-    applied = already = failed = 0
-    for r in targets:
-        material = _mats[str(r["element_key"])]
-        try:
-            status, err, used = await _surface_apply_row(ctx, r, material, dry=dry_run)
-            calls += used
-        except ToolError as exc:
-            status, err = "failed", str(exc)
-        if status == "applied":
-            applied += 1
-        elif status == "already":
-            already += 1
-        elif status == "failed":
-            failed += 1
-        rows_out.append(SurfaceRowResult(
-            label=str(r.get("label") or r.get("uid") or ""),
-            element_key=str(r.get("element_key") or ""),
-            material=material, actor=str(r.get("actor") or ""),
-            status=status, error=err))
-
-    if failed:
-        warns.append(f"⚠ 有 {failed} 行**没贴上** —— 逐条原因在 `rows` 里（不掩饰）。")
-    if dry_run:
-        warns.append("演练：**一个组件都没写**。要真贴就去掉 `dry_run` 重调。")
-    else:
-        warns.append("**全程未存盘** —— 贴完的样子在 UE 里看，存不存由你定。")
-    warns.append("⚠ 本工具只改**组件材质覆盖**，不动几何 / 位置 / 分组 —— "
-                 "阶段三那套台账对账不受影响。")
-
-    return SurfaceReport(
-        stage="阶段五 · 表面材质（给白膜贴材质）",
-        level=level, dry_run=dry_run, planned=len(targets),
-        applied=applied, already=already, failed=failed,
-        asset_rows_untouched=asset_rows, rows=rows_out, official_calls=calls,
-        next_step=(
-            (f"演练：这次会给 {len(targets)} 行贴材质（元素：{'、'.join(sorted(wanted_keys))}）。"
-             "要真做就去掉 `dry_run` 重调。"
-             if dry_run else
-             f"贴完：{applied} 行新贴、{already} 行本来就对、{failed} 行没成。"
-             "在 UE 视口里看一眼（还嫌灰就是没贴上 —— 看 `rows` 里的 error）。"
-             "⚠ 存不存盘由你在 UE 里决定。下一步是**阶段六 · 环境搭建**（`setup_environment` —— "
-             "按时段配太阳 / 天空 / 大气 / 天光 / 雾 / 云 / 后处理）。")
-        ),
-        warnings=warns,
-    )
-
-
-# --- 阶段三 · **认领手改**（2026-10-04 加 · ⚠ **尚未实测**）-----------------------------------  【模块：build】
-# 由来（用户原话）：「我人为操作它又画图又重新调用啥的太浪费时间了…人为操作了被发现，并且用户也确认
-#   就用人为操作的就别循环流程了，改个台账为当前现场值就行，只针对人为操作」。
-# 病根：默认那条增量**只比两份我们自己写的文件**（指令表 vs 台账）⇒ `plan == 台账` 时恒报「要动 0 行」；
-#   而"把关卡现状写回 plan"以前**只能走阶段二那条循环**（重规划 → **重画两张图** → 重新确认）——
-#   实测为了认领手拖的 2 cm，跑了 3 分 44 秒。
-# 本工具补的就是这一步：**值从关卡来**（不是从 plan 纸面来）——读现状 → 只改那几行的 plan → 台账也改
-#   成**实测值** → **不摆 Actor、不删 Actor、不重画图**。
-# ⚠ **闸照旧**（不新增机制）：仍要「先问过 + 问的那批就是这批 + 用户原话 + 地板」——
-#   否则 Agent 可以自己把任何漂移"认领"掉，那等于绕开"用户点头"（与 `execute_build` 的覆盖闸同构）。
-#   ⚠ 2026-10-04 把当时的「应答码」撤了（用户指令：「把这个什么码删掉，太离谱了」）。
-# ⚠ **代价照实说**：plan 几何一变 ⇒ 上次确认的指纹作废，而这一次**没有图** ⇒ 报文、`params` 与
-#   `acceptance.json` 里都写「**用户授权的几何变更、未出图**」，事后可对质。
-# ⚠ 只改**被判为"人工改过"的行**（`_live_vs_ledger` 的 `manual`）—— 其余行一个字都不碰。
-# ⚠ **为什么必须连 plan 一起改**：只改台账 ⇒ `plan ≠ 台账` ⇒ 下次增量判 `changed`、又把它摆回 plan
-#   （等于白认领）。所以"认领"的终点一定是**两边都变成关卡现状**。
+    raw = str(value or "").strip().replace("\\", "/")
+    if not raw:
+        return ""
+    head, _, tail = raw.rpartition("/")
+    if "." in tail:                      # `/Game/X/MI_A.MI_A` → `/Game/X/MI_A`
+        tail = tail.split(".", 1)[0]
+    return f"{head}/{tail}" if head else tail
 
 
 @mcp.tool()
@@ -6117,11 +6200,24 @@ async def adopt_user_edits(
     if skipped:
         warns.append("⚠ 这几行**跳过**了（读不到现状值，不猜）：" + "；".join(skipped))
 
-    plan = planning.record_change_request(
+    # ⚠ **2026-10-04 修（阻断级）**：这行原来写的是 `plan = planning.record_change_request(...)` ——
+    #   而那个函数的返回值是**验收台账**（`planning/plan.py:2074 return acc`），**不是 plan**。
+    #   两个后果：① 下一行 `_apply_plan_patch(plan, patch)` 在台账里找 `assets`/`whiteboxes`
+    #   ⇒ 恒报「补丁要动的行 … 在**当前放置表里找不到**」⇒ **`adopt_user_edits` 真跑 100% 失败**
+    #   （2026-10-04 实测撞到：用户手改过的路面认领不进去）；
+    #   ② `build_plan(..., plan.get("world"), params=plan.get("params"))` 会拿到空值
+    #   ⇒ **世界范围与 `params` 段被抹掉**。
+    #   它的用途是**副作用**（把「用户要改什么」记进验收台账 + 打开改动窗口），返回值在这里没有用
+    #   —— 写法与 12302 行 `request_plan_change` 那一处**一致**（不接收返回值）。**别改回赋值。**
+    planning.record_change_request(
         plan, items=[f"用户手改认领：{len(patch)} 行按关卡现状写回（`adopt_user_edits`）"],
         by="用户", reason=str(quote))
     a_rows, b_rows, notes = _apply_plan_patch(plan, patch)
-    new_plan = planning.build_plan(a_rows, b_rows, plan.get("world") or {}, params=plan.get("params"))
+    try:
+        new_plan = planning.build_plan(a_rows, b_rows, plan.get("world") or {},
+                                       params=plan.get("params"))
+    except ValueError as exc:      # 出口那道唯一性检查（2026-10-05 加）—— 转成工具报文
+        raise ToolError(f"放置表不成立：{exc} —— 一个字节都没写。") from exc
     new_plan = planning.mark_confirmed(new_plan, "用户（手改认领）", str(quote))
     _pp = new_plan.setdefault("params", {})
     if isinstance(_pp, dict):
@@ -6181,19 +6277,986 @@ async def adopt_user_edits(
         warnings=warns)
 
 
+# --- 阶段五 · 给 `surfaces.py` 注入外部能力（官方调用 / IO / 路径换算）-----------------  【模块：surfaces】
+# 为什么要有这个桥（而不是让 `surfaces.py` import 本文件）：
+#   · 本文件是**脚本入口**（`python src/mcp_server/main.py`），顶部 import 会炸（见
+#     `_surfaces_module()` 的血账）；反过来让 surfaces import main 就会形成环；
+#   · 于是口径是**依赖注入**：阶段五要的每一样能力都在这里一次性交出，
+#     `surfaces.py` 只认 `SurfacesRepo` 那几个字段，**不知道 server 的存在**。
+# ⚠ 这里**只做转发，不做事**（不查关卡、不兜底、不改判据）—— 判据只能有一份，在 surfaces.py。
+# ⚠ 本函数**不改任何行为**：它不写盘、不碰关卡，只把已有函数句柄装进一个 dataclass。
+def _assert_surfaces_paths_agree() -> None:
+    """核对「材质清单那三个落点」两边一致 —— **只在阶段五真被调用时才跑**（不在 import 期）。
+
+    为什么要有它（而不再是 import 期直接取 surfaces 的值，见上面那段权衡）：
+      · `main.py` 与 `surfaces.py` 各写了一遍落点 ⇒ 这是**两处口径**，必须有机器的核对；
+      · 但又不能让 surfaces 的导入失败连坐全局 ⇒ 挪到"真要用阶段五"的这一刻。
+    ⚠ 不一致时**拒收**（`ToolError`）并点名两边的值 —— 静默用错清单（读一份、写另一份）
+      是这一层最坏的一种错：它会看着"跑通了"，而产物落在别处。
+    """
+    s = _surfaces_module()
+    pairs = (
+        ("权威清单", MATERIAL_LIST_PATH, s.MATERIAL_LIST_PATH),
+        ("草稿", MATERIAL_LIST_DRAFT_PATH, s.MATERIAL_LIST_DRAFT_PATH),
+        ("签字指纹", MATERIAL_SNAPSHOT_PATH, s.MATERIAL_SNAPSHOT_PATH),
+    )
+    diff = [f"{name}：`main.py` 写的是 `{mine}`、`surfaces.py` 写的是 `{theirs}`"
+            for name, mine, theirs in pairs if Path(mine) != Path(theirs)]
+    if diff:
+        raise ToolError(
+            "阶段五的**落点两边对不上**（这是两处口径，必须一致）—— **一个字节都没写**：\n  - "
+            + "\n  - ".join(diff)
+            + "\n· 改法：把 `main.py` 顶部那三个常量与 `surfaces.py` 的 `*_PATH` 改成同一个路径。"
+              "（**不许**只改一边：那会变成「读一份、写另一份」，产物落在没人看的地方。）")
+
+
+async def _surfaces_repo(ctx: Context[AppContext]) -> Any:
+    """构造 `SurfacesRepo`（阶段五的外部能力注入面）。"""
+    _assert_surfaces_paths_agree()
+    s = _surfaces_module()
+    level = ""
+    try:
+        got = await call_official(ctx, "get_current_level", {}, toolset=TS_SCENE)
+        level = str(got or "")
+    except ToolError:
+        # 查不到关卡**不拦**：阶段五有一半是离线动作（probe / confirm / 建材质）。
+        # ⚠ 但 `level` 留空这件事会由 surfaces.py 自己按"判不了"处理（**不是**没问题）。
+        level = ""
+
+    async def _official(tool_name: str, arguments: dict, toolset: str = "") -> Any:
+        return await call_official(ctx, tool_name, arguments, toolset=(toolset or None))
+
+    async def _inventory() -> tuple[dict, int]:
+        return await library_inventory(ctx)
+
+    # ⚠ 大类中文名：**查 `config/asset_categories.json` 那一份表**（`category_cn()`）——
+    #   大类表全工程只有一份，阶段五的清单正文照阶段一同一套显示中文名。
+    #   表只读一次并缓存（正文里每行都要查一次，别每行都去读文件）。
+    _cat_cache: dict[str, Any] = {}
+
+    def _cat_cn(k: str) -> str:
+        if "table" not in _cat_cache:
+            _cat_cache["table"] = load_categories()
+        return category_cn(k, _cat_cache["table"])
+
+    return s.SurfacesRepo(
+        official=_official,
+        level=level,
+        load_json=load_json,
+        save_json=save_json,
+        archive_json=_archive_json,
+        to_object_path=to_object_path,
+        normalize_path=_norm_material_path,
+        library_inventory=_inventory,
+        match_assets=match_assets_by_keyword,
+        category_cn=_cat_cn,
+        # ⚠ **签字指纹 = 阶段一那一份**（`library_fingerprint`：sha256，把每条路径都算进去）——
+        #   本轮对比时发现阶段五原来只算"每类的数量"，**同类里一增一删、数量不变就判不出过期**。
+        fingerprint=library_fingerprint,
+        ref_path=_ref_path,
+    )
+
+
+async def _material_snapshot_stale(repo: Any) -> bool | None:
+    """材质清单**过没过期** —— 判据在 `surfaces.snapshot_stale()`（**一处实现**）。
+
+    ⚠ 返回 `None` = **判不了**（没有清单 / 没有指纹 / 取不到实况）—— **不是**「没问题」。
+    """
+    return await _surfaces_module().snapshot_stale(repo)
+
+
+async def _material_snapshot_diff(ctx: Context[AppContext]) -> str:
+    """清单**过时了的话，说清怎么变的**（照阶段一 `describe_count_changes`）→ 一句人话（空 = 没话说）。
+
+    ⚠ 为什么要有它（2026-10-04 晚**第四轮**对比阶段一时补的）：以前只报"指纹与签字时对不上"，
+      **不说哪儿变了** —— 而阶段一那份 `describe_count_changes()` 正是"59 → 58"这种信号的出处
+      （2026-09-23 实测：`/Game/Fab/Urban_Street_Pack` 整个包在我工作期间消失，就是靠它看见的）。
+    ⚠ 只在**已经判成过期**时才调它（它要多枚举一次材质库）—— 不是每次 probe 都付这个成本。
+    ⚠ 判据一条没变：**过没过期仍只认** `surfaces.snapshot_stale()`；这里只负责**把差异说成人话**，
+      而且**复用阶段一那一份** `describe_count_changes()`（不另写一份）。
+    """
+    signed = load_json(MATERIAL_SNAPSHOT_PATH)
+    if not isinstance(signed, dict):
+        return ""
+    signed_counts = {str(k): int(v or 0) for k, v in (signed.get("counts") or {}).items()}
+    try:
+        inv, _calls = await library_inventory(ctx)
+    except ToolError as exc:
+        return f"（材质库实况没取到：{exc} —— **说不清哪儿变了**）"
+    _digest, live_counts = library_fingerprint(inv)
+    diffs = describe_count_changes(signed_counts, live_counts)
+    if diffs:
+        return "变化是：" + "；".join(diffs) + "。"
+    if signed_counts == live_counts:
+        # 数量一样、指纹不同 ⇒ **同类里换过资产**（第三轮对比发现"只比数量"会漏判的就是这种）
+        return ("各类**数量没变**（" + "、".join(f"{k}:{v}" for k, v in sorted(live_counts.items()))
+                + "）但**路径变了** —— 有资产被换过 / 改过名（数量指纹看不出来，路径指纹才看得出来）。")
+    return "（判得出过期，但这次**说不出是哪一类变的**。）"
+
+
+def _probe_report(rep: Any) -> SurfaceReport:
+    """把 `surfaces.probe()` 的报文转成**本文件的 `SurfaceReport`**（工具返回值不变）。
+
+    ⚠ 只做字段搬运，**不改任何判据**：`probe_rows` 是阶段五那一层的产物（含
+      `instance` / `instance_status` / `parent` —— 那一层新加的），这里逐条搬进
+      `SurfaceProbeItem`。搬不动的字段（没有的）就留默认值，**不编**。
+    """
+    items = [
+        SurfaceProbeItem(
+            element_key=str(getattr(r, "element_key", "") or ""),
+            label=str(getattr(r, "label", "") or ""),
+            target=str(getattr(r, "target", "") or ""),
+            status=str(getattr(r, "status", "") or ""),
+            material=str(getattr(r, "material", "") or ""),
+            candidates=[str(x) for x in (getattr(r, "candidates", None) or [])],
+            # ⚠ 照阶段一：候选的**结构化**明细（含"为什么命中"）——直接拼成 `FoundAsset`
+            #   （与阶段一 `plan_assets` 用的是**同一个模型**，字段一字不差）。
+            candidates_detail=[
+                FoundAsset(
+                    name=str((d or {}).get("name") or ""),
+                    path=str((d or {}).get("path") or ""),
+                    asset_type=str((d or {}).get("asset_type") or ""),
+                    matched_by=str((d or {}).get("matched_by") or ""),
+                    matched_segment=str((d or {}).get("matched_segment") or ""),
+                )
+                for d in (getattr(r, "candidates_detail", None) or [])
+                if isinstance(d, dict) and (d or {}).get("path")
+            ],
+            slot_name=str(getattr(r, "slot_name", "") or ""),
+            source=str(getattr(r, "source", "") or ""),
+            note=str(getattr(r, "note", "") or ""),
+            # --- 2026-10-04 晚新增（清单只记实例之后，这三样是"下一步怎么走"的判据）---
+            instance=str(getattr(r, "instance", "") or ""),
+            instance_status=str(getattr(r, "instance_status", "") or ""),
+            parent=str(getattr(r, "parent", "") or ""),
+            # --- 照阶段一补的：要原样问用户的话 + 大类（大类的中文名下面查表回填）---
+            question=str(getattr(r, "question", "") or ""),
+            category=str(getattr(r, "category", "") or ""),
+        )
+        for r in (getattr(rep, "probe_rows", None) or [])
+    ]
+    return SurfaceReport(
+        stage=str(getattr(rep, "stage", "") or "阶段五 · 第 ①~③ 步"),
+        mode="probe", level="", dry_run=False,
+        planned=int(getattr(rep, "planned", 0) or 0), asset_rows_untouched=0, rows=[],
+        probe_items=items,
+        snapshot_stale=getattr(rep, "snapshot_stale", None),
+        material_list_path=str(MATERIAL_LIST_PATH),
+        snapshot_path=str(MATERIAL_SNAPSHOT_PATH),
+        draft_path=str(MATERIAL_LIST_DRAFT_PATH),
+        official_calls=int(getattr(rep, "official_calls", 0) or 0),
+        next_step=str(getattr(rep, "next_step", "") or ""),
+        gaps=list(getattr(rep, "gaps", None) or []),
+        # ⚠ 按大类分组**照阶段一**（`PlanReport.by_category` 同一形状）——
+        #   大类中文名一律查 `config/asset_categories.json`（`category_cn()`），**不在这里另写一份表**。
+        by_category=_surface_by_category(items),
+        warnings=list(getattr(rep, "warnings", None) or []),
+    )
+
+
+def _surface_by_category(items: list[Any]) -> dict[str, dict[str, list[str]]]:
+    """把阶段五的行**按大类分组** → `{大类中文名: {"found": [...], "missing": [...], "none": [...]}}`。
+
+    ⚠ **照阶段一 `plan_assets` 的 `by_category`**（形状基本一致：`found` / `missing` 两个桶）——
+      用来**逐类核对有没有漏**。大类的 key 从行里来（从资产表抄的），
+      **中文名一律查 `config/asset_categories.json`**（`category_cn()`）——
+      ⚠ 本函数**不另写一份表**（本项目最忌讳两套口径）。
+
+    ⚠ **2026-10-07 加第三个桶 `none`**（文档「待核实」第 6 条"分桶与三分法不一致"核实结果：
+      **确实不一致、而且会误导**）：阶段五的 `status` 是**四档**（`found` / `pending_user` /
+      `missing_self_build` / `none`），其中 **`none`（无）不是缺口** —— 那是"别人建好的资产上
+      确实没有材质、问过用户、我们不自建"。原来它被并进 `missing` ⇒ 逐类核对时会**看出一个假缺口**。
+      现在**单列一桶**：三类都看得见，**谁也没被静默藏起来**（"不许静默消失"这条纪律照旧）。
+      ⚠ 形状因此比阶段一多一个键 —— 读报文的人按"三桶"读（有 `none` 桶就说明清单里有"无"行）。
+    """
+    table = load_categories()
+    out: dict[str, dict[str, list[str]]] = {}
+    for r in items:
+        key = str(getattr(r, "element_key", "") or "").strip().lower()
+        if not key:
+            continue
+        bucket = out.setdefault(category_cn(str(getattr(r, "category", "") or ""), table),
+                                {"found": [], "missing": [], "none": []})
+        # 阶段五的四档：`found` 之外都算「还没落位」（要问用户 / 待自建 / 无）
+        ok = str(getattr(r, "status", "") or "").strip().lower() == MAT_STATUS_FOUND
+        if ok:
+            bucket["found"].append(key)
+        elif str(getattr(r, "status", "") or "").strip().lower() == MAT_STATUS_NONE:
+            bucket["none"].append(key)
+        else:
+            bucket["missing"].append(key)
+    return out
+
+
+def _confirm_report(rep: Any) -> SurfaceReport:
+    """把 `surfaces.confirm()` 的报文转成**本文件的 `SurfaceReport`**（工具返回值不变）。
+
+    ⚠ 只搬字段、不加判据：清单行的权威字段是 `instance`（那一层新加的），
+      这里逐条搬进 `MaterialConfirmItem`。
+    """
+    items = [
+        MaterialConfirmItem(
+            element_key=str(getattr(r, "element_key", "") or ""),
+            label=str(getattr(r, "label", "") or ""),
+            target=str(getattr(r, "target", "") or ""),
+            mesh_path=str(getattr(r, "mesh_path", "") or ""),
+            slot_name=str(getattr(r, "slot_name", "") or ""),
+            material=str(getattr(r, "material", "") or ""),
+            status=str(getattr(r, "status", "") or ""),
+            source=str(getattr(r, "source", "") or ""),
+            note=str(getattr(r, "note", "") or ""),
+            exists=bool(getattr(r, "exists", False)),
+            # --- 2026-10-04 晚新增（清单只记实例）---
+            instance=str(getattr(r, "instance", "") or ""),
+            instance_status=str(getattr(r, "instance_status", "") or ""),
+            parent=str(getattr(r, "parent", "") or ""),
+            parameters=[str(x) for x in (getattr(r, "parameters", None) or [])],
+            # --- 照阶段一补的：草稿里那句问话 + 大类（定稿时一并留痕）---
+            question=str(getattr(r, "question", "") or ""),
+            category=str(getattr(r, "category", "") or ""),
+        )
+        for r in (getattr(rep, "confirm_rows", None) or [])
+    ]
+    self_build = [i.label or i.element_key for i in items
+                  if str(i.status or "").strip().lower() == MAT_STATUS_SELF_BUILD]
+    # ⚠ 还有一类**不是待自建、但还没有实例**的行：`from_material`（**有材质、缺实例**）——
+    #   第 ⑤ 步只给它派生一份实例（不建材质）。报文里必须点名，否则用户读清单会以为漏了它。
+    derive = [i.label or i.element_key for i in items
+              if not str(i.instance or "").strip()
+              and str(i.status or "").strip().lower() == MAT_STATUS_FOUND]
+    # ⚠ **「无」那一档**（2026-10-04 晚用户口径）：非白膜、问完确实没有材质 / 实例 ——
+    #   别人的资产我们**不去给它造**；报文里点名，免得用户读清单以为这一行漏了。
+    none_items = [i.label or i.element_key for i in items
+                  if str(i.status or "").strip().lower() == MAT_STATUS_NONE]
+    return SurfaceReport(
+        stage=str(getattr(rep, "stage", "") or "阶段五 · 第 ④ 步"),
+        mode="confirm", level="", dry_run=False,
+        planned=int(getattr(rep, "planned", 0) or 0), asset_rows_untouched=0, rows=[],
+        confirm_items=items,
+        material_list_path=str(MATERIAL_LIST_PATH),
+        snapshot_path=str(MATERIAL_SNAPSHOT_PATH),
+        draft_path=str(MATERIAL_LIST_DRAFT_PATH) if MATERIAL_LIST_DRAFT_PATH.exists() else "",
+        official_calls=int(getattr(rep, "official_calls", 0) or 0),
+        next_step=str(getattr(rep, "next_step", "") or ""),
+        gaps=list(getattr(rep, "gaps", None) or []),
+        by_category=_surface_by_category(items),
+        warnings=list(getattr(rep, "warnings", None) or []) + [
+            f"✅ 材质清单已落盘 `{MATERIAL_LIST_PATH}`（**权威来源**；每行只记材质实例）。"
+            + (f" ⚠ 还有 {len(self_build)} 条**待自建** —— 第 ⑤ 步 `create_surfaces()` 会先建材质、"
+               "再派生实例。" if self_build else "")
+            + (f" ⚠ 还有 {len(derive)} 条**有材质、缺实例**（{'、'.join(derive)}）—— "
+               "第 ⑤ 步 `create_surfaces()` 会**只给它们派生实例**（母材质不动），"
+               "派生完再把母材质参数现值提升为实例覆盖。" if derive else "")
+            + (f" ✅ 有 {len(none_items)} 条按你的答复记成**无**（{'、'.join(none_items)}）—— "
+               "那是**别人建好的资产**、没有材质 / 实例，我们**不建**；第 ⑥ 步贴的时候**跳过**它们。"
+               if none_items else ""),
+        ],
+    )
+
+
+def _tune_report(rep: Any) -> CreateSurfacesReport:
+    """把 `surfaces.tune()` 的报文转成**本文件的 `CreateSurfacesReport`**（工具返回值不变）。
+
+    ⚠ `TuneResult` 是既有模型；这里把那一层的逐参数结果（含 `old` 旧值）原样搬过来 ——
+      **旧值是回滚依据**，不许丢。
+    """
+    rows = []
+    for r in (getattr(rep, "tune_rows", None) or []):
+        got = r if isinstance(r, dict) else {}
+        rows.append(TuneResult(
+            material=str(got.get("material") or ""),
+            parameter=str(got.get("parameter") or ""),
+            kind=str(got.get("kind") or ""),
+            wanted=str(got.get("wanted") or ""),
+            old=str(got.get("old") or ""),
+            read_back=str(got.get("read_back") or ""),
+            status=str(got.get("status") or ""),
+            error=str(got.get("error") or ""),
+        ))
+    return CreateSurfacesReport(
+        stage=str(getattr(rep, "stage", "") or "阶段五 · 第 ⑨ 步"),
+        mode="tune", target=str(getattr(rep, "target", "") or ""), dry_run=False,
+        planned=int(getattr(rep, "planned", 0) or 0), created=0,
+        already=int(getattr(rep, "already", 0) or 0),
+        failed=int(getattr(rep, "failed", 0) or 0),
+        items=[], tune_rows=rows,
+        focused=list(getattr(rep, "focused", None) or []),
+        official_calls=int(getattr(rep, "official_calls", 0) or 0),
+        ledger_path=str(getattr(rep, "ledger_path", "") or ""),
+        next_step=str(getattr(rep, "next_step", "") or ""),
+        warnings=list(getattr(rep, "warnings", None) or []) + [
+            "⚠ 这一档**只能调材质清单里的实例**（硬拦）：清单外的资产（例：共享母料）会被拒收 —— "
+            "要调就先把那块实例收进清单（`probe` → `confirm`，或先 `create_surfaces()` 派生一块自己的实例）。",
+        ],
+    )
+
+
+def _apply_report(rep: Any) -> SurfaceReport:
+    """把 `surfaces.apply_surfaces()` 的报文转成**本文件的 `SurfaceReport`**（工具返回值不变）。
+
+    ⚠ 新增一栏 `wrote_back`：第 ⑦ 步"用户满意 ⇒ 先回写清单、再存盘"的结果 ——
+      回写成不成、存盘成不成**分开报**（存盘失败不算材质没贴好，但必须说出来）。
+    """
+    rows = [
+        SurfaceRowResult(
+            label=str(getattr(r, "label", "") or ""),
+            element_key=str(getattr(r, "element_key", "") or ""),
+            material=str(getattr(r, "instance", "") or ""),
+            actor=str(getattr(r, "actor", "") or ""),
+            status=str(getattr(r, "status", "") or ""),
+            error=str(getattr(r, "error", "") or ""),
+        )
+        for r in (getattr(rep, "rows", None) or [])
+    ]
+    return SurfaceReport(
+        stage=str(getattr(rep, "stage", "") or "阶段五 · 第 ⑥⑧ 步"),
+        mode="apply", level=str(getattr(rep, "level", "") or ""), dry_run=False,
+        planned=int(getattr(rep, "planned", 0) or 0),
+        applied=int(getattr(rep, "applied", 0) or 0),
+        already=int(getattr(rep, "already", 0) or 0),
+        failed=int(getattr(rep, "failed", 0) or 0),
+        asset_rows_untouched=int(getattr(rep, "asset_rows_untouched", 0) or 0),
+        rows=rows,
+        focused=[str(x) for x in (getattr(rep, "focused", None) or [])],
+        saved=str(getattr(rep, "saved", "") or ""),
+        wrote_back=str(getattr(rep, "wrote_back", "") or ""),
+        material_list_path=str(MATERIAL_LIST_PATH),
+        official_calls=int(getattr(rep, "official_calls", 0) or 0),
+        next_step=str(getattr(rep, "next_step", "") or ""),
+        warnings=list(getattr(rep, "warnings", None) or []),
+    )
+
+
+def _create_report(rep: Any) -> CreateSurfacesReport:
+    """把 `surfaces.create()` 的报文转成**本文件的 `CreateSurfacesReport`**（工具返回值不变）。
+
+    ⚠ `CreatedMaterial` 是既有模型（`kind` / `parent` 已在其中），逐条搬即可；
+      这里**不加判据** —— 建什么、跳什么、提升哪些值，全部由 `surfaces.py` 说了算。
+    """
+    items = [
+        CreatedMaterial(
+            path=str(getattr(r, "path", "") or ""),
+            folder=str(getattr(r, "path", "") or "").rsplit("/", 1)[0],
+            name=str(getattr(r, "path", "") or "").rsplit("/", 1)[-1],
+            outputs=list((getattr(r, "promoted", None) or {}).keys()),
+            flags={},
+            status=("failed" if str(getattr(r, "status", "")) == "failed" else "ok"),
+            error=str(getattr(r, "error", "") or ""),
+            note=str(getattr(r, "note", "") or ""),
+            kind=("instance" if str(getattr(r, "kind", "")) == "instance" else "material"),
+            parent=str(getattr(r, "parent", "") or ""),
+        )
+        for r in (getattr(rep, "rows", None) or [])
+    ]
+    # ⚠ **缺口 #3（2026-10-07 修）：分档报数原来是写死的 0** —— 于是同一份报文里会出现
+    #   `already=5` 与 `materials_already=0 / instances_already=0` **自相矛盾**（工具描述与
+    #   schema 都承诺"分档报数…各自幂等跳过几个"）。判据只有一处：**从 rows 里数**
+    #   （`surfaces.create` 的 `CreatedRow.kind` = material / instance、`status` = already）。
+    _rows5 = list(getattr(rep, "rows", None) or [])
+    materials_already = sum(1 for r in _rows5
+                            if str(getattr(r, "kind", "")) == "material"
+                            and str(getattr(r, "status", "")) == "already")
+    instances_already = sum(1 for r in _rows5
+                            if str(getattr(r, "kind", "")) == "instance"
+                            and str(getattr(r, "status", "")) == "already")
+    return CreateSurfacesReport(
+        stage=str(getattr(rep, "stage", "") or "阶段五 · 第 ⑤ 步"),
+        mode=str(getattr(rep, "mode", "") or "create"), dry_run=False,
+        planned=int(getattr(rep, "planned", 0) or 0),
+        created=int(getattr(rep, "created", 0) or 0),
+        already=int(getattr(rep, "already", 0) or 0),
+        failed=int(getattr(rep, "failed", 0) or 0),
+        from_list=0, items=items,
+        materials_created=int(getattr(rep, "materials_created", 0) or 0),
+        instances_created=int(getattr(rep, "instances_created", 0) or 0),
+        materials_already=materials_already, instances_already=instances_already,
+        ledger_path=str(getattr(rep, "ledger_path", "") or ""),
+        official_calls=int(getattr(rep, "official_calls", 0) or 0),
+        next_step=str(getattr(rep, "next_step", "") or ""),
+        warnings=list(getattr(rep, "warnings", None) or []) + [
+            "⚠ 口径：**只有待自建的才建材质**；有材质缺实例的**只派生实例**（父级 = 拿到的那块）。"
+            "派生时父级的参数现值会**提升为新实例的覆盖** —— 之后要调就调实例，不用回头改母材质。",
+        ],
+    )
+
+
+def _load_material_doc() -> tuple[dict, str]:
+    """读**签名后的材质清单**（`catalog/material_list.json`）；读不动就带上原因。
+
+    返回 `(文档, 提示)`：提示非空 = 该带进 `warnings` 的原因 —— **不静默**。
+
+    ⚠ **2026-10-04 晚：判据已收敛到 `surfaces.py`**。原来这里自己写了一遍"旧格式算不算数"，
+      而 `surfaces.load_manifest()` 里**另有一份**（细节已经不一样：一处空表算"读不到"、
+      另一处不算）—— **那是两套口径**，本项目最忌讳。
+      现在**只留这一处读文件**，判据一律转发 `surfaces.legacy_manifest_note()`。
+    """
+    if not MATERIAL_LIST_PATH.exists():
+        return {}, (f"还没有材质清单（`{MATERIAL_LIST_PATH}`）—— "
+                    "第 ① 步先用 `apply_surfaces(mode=\"probe\")` 出草稿，"
+                    "再 `apply_surfaces(mode=\"confirm\", items=[…], user_quote=…)` 定稿。")
+    try:
+        doc = json.loads(MATERIAL_LIST_PATH.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as exc:
+        return {}, f"材质清单读不动 / 不是合法 JSON（{exc}）—— **当作没有清单**处理（不猜）。"
+    if not isinstance(doc, dict):
+        return {}, "材质清单的顶层不是对象 —— **当作没有清单**处理。"
+    return doc, _surfaces_module().legacy_manifest_note(doc, MATERIAL_LIST_PATH.name)
+
+
+def _material_rows() -> list[dict]:
+    """材质清单的**行**（`items`）。清单不在 / 形状不对 ⇒ 空列表（调用方据此拒收或报警）。"""
+    return _surfaces_module().manifest_rows_of(_load_material_doc()[0])
+
+
+# --- 阶段五 · 「权威行 = 材质实例」的两个取用处（2026-10-04 晚加）--------------------  【模块：surfaces】
+# 用户口径：「**清单里都只记下材质实例，也只找材质实例**」。
+# 于是"哪一行能拿去贴 / 拿去调"这件事必须有**唯一一份判据** —— 判据在 `surfaces.py`：
+#   · `surfaces.strict_rows_of()` 只回"形状合格的新式行"（有 `instance_status`）；
+#   · `surfaces.instance_of(row)` 只回"这一行要用的那块实例"（没有 ⇒ 空）。
+# 下面两个是**转发**（阶段三收尾补材质 / 阶段总览要用），**不许在别处再判一遍**。
+def _manifest_rows_strict() -> list[dict]:
+    """材质清单里**形状合格**的行（新式：带 `instance_status`）；旧格式一律不算。"""
+    return _surfaces_module().strict_rows_of(_material_rows())
+
+
+def _instance_row(row: dict) -> str:
+    """这一行**现在已经有的**材质实例包路径；没有就空串（= 这一行现在还贴不了）。
+
+    ⚠ **它与 `surfaces.surface_instance()` 不是同一件事，别互相替用**（2026-10-04 晚写清）：
+      · 本函数回答「**清单里现在就摆着哪块实例**」——阶段三收尾补材质、阶段总览用它
+        （那时第 ⑤ 步还没跑，拿一个**还不存在**的派生路径去写组件 = 写坏）；
+      · `surface_instance()` 回答「**这一步最终该贴哪块**」——"有材质、缺实例"的行会回
+        **可复算的派生路径**，`apply_surfaces`（第 ⑥⑧ 步）用它，并在写之前逐个 `exists()` 验活。
+      判据各自只有一处，谁也不许在别处再拼一遍路径。
+    """
+    return _surfaces_module().instance_of(row)
+
+
+def _archive_json(path: Path, prefix: str) -> str:
+    """把一份我们自己的 JSON **留档**到 `views/archive/`，返回留档路径（失败返回空串）。
+
+    ⚠ 为什么每次落盘都留档（照 `_save_build_state` 的口径）：覆盖写之后，
+      「上一版长什么样」就**无法从磁盘审计**了。留档失败**不拦**本次落盘，只记一条日志。
+    """
+    try:
+        if not path.exists():
+            return ""
+        _ar = path.parent / "archive"
+        _ar.mkdir(parents=True, exist_ok=True)
+        _stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        dest = _ar / f"{prefix}_{_stamp}.json"
+        shutil.copy2(path, dest)
+        return str(dest)
+    except OSError as exc:                  # noqa: BLE001 —— 留档失败不该拦住落盘
+        logging.getLogger(__name__).warning("留档失败（不影响本次落盘）：%s", exc)
+        return ""
+
+
+# --- 阶段五 · 表面材质台账（2026-10-04 扩容：created + tuned + asset_slots + focused）-----------  【模块：surfaces】
+# ⚠ 它是 `views/surface_materials_v1.json` —— 我们自己的 JSON（**不是 UE 资产、不是关卡存盘**）。
+# 为什么一次调用会碰三处（`create_surfaces` 建材质 / `apply_surfaces` 改槽与聚焦）：四段
+#   **共用同一本台账**，所以写的时候必须**读-改-写**（只动自己那一段），不能整份覆盖 ——
+#   整份覆盖会在一次调用里把另一段刚写的记录擦掉。
+# 留档（`views/archive/`）与搭建台账同一条纪律：覆盖写之前先留一份上一版。
+
+def _surface_ledger_merge(key: str, entries: list[dict]) -> str:
+    """把一批记录**追加**进台账的 `key` 段（`created` / `tuned` / `asset_slots` / `focused`）。
+
+    返回台账路径。⚠ **读-改-写**：只动 `key` 那一段，其余各段原样保留
+      （四段共用一本台账，整份覆盖会把别人刚写的擦掉）。
+    ⚠ 留档失败**不拦**（照 `_save_build_state` 的口径：写下去比留档重要）。
+    """
+    doc: dict = {}
+    try:
+        if SURFACE_CREATE_PATH.exists():
+            _prev = json.loads(SURFACE_CREATE_PATH.read_text(encoding="utf-8-sig"))
+            if isinstance(_prev, dict):
+                doc = _prev
+    except (OSError, ValueError):
+        doc = {}
+    doc.setdefault("stage", "阶段五 · 表面材质台账（我们自己的文件；记我们建过 / 调过 / 改过什么）")
+    doc["at"] = datetime.now(timezone.utc).isoformat()
+    doc["note"] = ("四段：`created`（建出来的材质）/ `tuned`（调过的参数，**记旧值**）/ "
+                   "`asset_slots`（改过的网格资产材质槽，**记旧材质**）/ "
+                   "`focused`（第 ⑥ 步聚焦过哪些 Actor）—— 都是给回滚与追查用的。"
+                   "⚠ 这里记的是**我们自己的记录**，不是 UE 存盘。")
+    prev = doc.get(key)
+    doc[key] = (list(prev) if isinstance(prev, list) else []) + list(entries)
+    _archive_json(SURFACE_CREATE_PATH, "surface_materials")
+    save_json(SURFACE_CREATE_PATH, doc)
+    return str(SURFACE_CREATE_PATH)
+
+
+# --- 阶段五 · 新的权威使用物：材质清单（2026-10-04 加 · ⚠ **尚未实测**）-----------------------  【模块：surfaces】
+# 九步流程的第 ①~④ 步：找材质 → 记路径 → 找不到问用户 → 确实没有标**待自建** → 出清单交用户逐条确认。
+# 与阶段一 `confirm_assets` **一个待遇**：落盘 + **签字**（指纹）+ **缺口清单**（谁还没着落）。
+#
+# ⚠ 闸门一条都不放松（AGENTS 的"能闸就闸"）：
+#   · `probe` **没有资产清单就拒收**（静默出个空清单最坏 —— 看着像"什么都没找到"，其实是没表）；
+#   · `confirm` **必须带用户原话**（拿不出原话 = 没问过人，与 `_pending_change_quote` 同一条纪律）；
+#   · `confirm` 见到 `pending_user` 行 ⇒ **拒收**（"还没问完"不许入库）；
+#   · `apply_surfaces` / `asset_slots` 写之前**整批**验 `exists()`，**一条不过 ⇒ 一个字节都不写**。
+# ⚠ 第 ① 步的读取面（2026-10-04 实测 `describe_toolset` 确认）：
+#   `StaticMeshTools.get_material_slots(mesh)` / `get_material(mesh, slot_name)`；
+#   `SkeletalMeshTools` 同名三件对称（`set_material` 是**改资产**那条腿，走 `mode="asset_slots"`）。
+
+
+def _surface_matches(raw: Any, material: str) -> bool:
+    """读回的 `overrideMaterials` 里第一块是不是就是目标材质（幂等判断用它）。
+
+    ⚠ `get_properties` 返回的是 **JSON 字符串**（它的 outputSchema 就是 string），得自己解；
+      解不动、或形状不认识 → 一律当**不匹配** —— 安全侧：宁可多写一遍，也不假装已经贴好了。
+    """
+    try:
+        doc = json.loads(raw) if isinstance(raw, str) else raw
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(doc, dict):
+        return False
+    arr = doc.get("overrideMaterials")
+    if not isinstance(arr, list) or not arr:
+        return False
+    first = arr[0]
+    got = str((first or {}).get("refPath") or "") if isinstance(first, dict) else str(first)
+    return got == to_object_path(material)
+
+
+async def _surface_apply_row(
+    ctx: Context[AppContext], row: dict, material: str
+) -> tuple[str, str, int]:
+    """给台账里这一行贴材质。返回 `(status, error, 用掉几次官方调用)`。
+
+    status ∈ `applied`（贴上了）/ `already`（本来就是它，幂等跳过）/ `failed`。
+    ⚠ 2026-10-04：原来的 `dry` 形参已随演练一并删除（用户指令「把演练这一步删掉」）——
+      本函数**只被** `apply_surfaces()` 的 `apply` 档调用，所以形参直接删掉、不留兼容位。
+      ⚠ 2026-10-07：那句"另一处 `_surface_rows_for_ledger_row` 是挑行、不写"里的那个函数
+      是死代码、已删 —— "挑哪一行"现在在 `surfaces.apply()` 里（活路径）。
+    ⚠ 本函数**一调就是真写**：先读现值（幂等）→ 写 → 读回核对（读不回来如实报）。
+    """
+    used = 0
+    actor = str(row.get("actor") or "")
+    if not actor:
+        return "failed", "台账这一行没有 Actor 引用（上次没落成 / 引用已失效）", 0
+
+    # 白膜组件名固定是 `cube`（`add_cube` 时传的 name）—— 按引用末段找，不靠顺序猜
+    used += 1
+    comps = await call_official(
+        ctx, "get_components", {"actor": {"refPath": actor}}, toolset=TS_ACTOR)
+    cube = ""
+    for item in (comps or []):
+        ref = _ref_path(item)
+        if ref and ref.rsplit(".", 1)[-1] == "cube":
+            cube = ref
+            break
+    if not cube:
+        names = [_ref_path(i) for i in (comps or [])]
+        return "failed", f"这个 Actor 上找不到名为 `cube` 的组件（现有组件：{names}）", used
+
+    wanted = {"instance": {"refPath": cube}, "properties": ["overrideMaterials"]}
+    used += 1
+    cur = await call_official(ctx, "get_properties", dict(wanted), toolset=TS_OBJECT)
+    if _surface_matches(cur, material):
+        return "already", "", used
+
+    used += 1
+    await call_official(ctx, "set_properties", {
+        "instance": {"refPath": cube},
+        "values": json.dumps(
+            {"overrideMaterials": [{"refPath": to_object_path(material)}]},
+            ensure_ascii=False),
+    }, toolset=TS_OBJECT)
+
+    # 读回核对：写进去了但读回不是它 = **没成**（与阶段三"读回对账"同一条纪律）
+    used += 1
+    back = await call_official(ctx, "get_properties", dict(wanted), toolset=TS_OBJECT)
+    if _surface_matches(back, material):
+        return "applied", "", used
+    return "failed", f"写了但读回不是这块材质（读回 {back!r}）", used
+
+
+@mcp.tool()
+async def apply_surfaces(
+    ctx: Context[AppContext],
+    # ⚠ 2026-10-04 用户指令：**删掉演练这一步**（原话「把演练这一步删掉，不需要演练」）——
+    #   原来的 `dry_run` 形参已整段移除，本工具**一调就是真做**。
+    only: Annotated[list[str] | None, Field(
+        description=("`mode=\"apply\"`：只处理这几个 `element_key`（如 `[\"road\"]`）；"
+                     "留空 = 清单里全部有材质路径的白膜行"))] = None,
+    mode: Annotated[str, Field(
+        description=("这一趟做哪一档（**默认 apply，旧行为不变**）：\n"
+                     "· `apply` —— 按**材质清单**给白膜贴**组件级覆盖**（第 ⑥⑧ 步）；\n"
+                     "· `probe` —— **只读**：对着资产清单逐条找材质、出**草稿清单**（第 ①~③ 步，"
+                     "不碰关卡）；\n"
+                     "· `confirm` —— 把草稿 + 用户的答复**定稿**成 `catalog/material_list.json` "
+                     "并签字（第 ④ 步，**必须带用户原话**）；\n"
+                     "· `asset_slots` —— 改**网格资产**的材质槽（`StaticMeshTools.set_material`）。"
+                     "⚠ 它**改的是资产**，影响所有没覆盖该槽的实例 —— 所以**必须点名**目标。"))] = "apply",
+    items: Annotated[list[MaterialConfirmItem] | None, Field(
+        description=("⚠ **只给 `mode=\"confirm\"` 用**：定稿的材质清单行（把草稿逐条过一遍、"
+                     "把用户的答复填进去）。留空 = 拒收（「确认」必须有一张明明白白的表）"))] = None,
+    user_quote: Annotated[str, Field(
+        description=("⚠ **只给 `mode=\"confirm\"` 用**：**用户本人的原话**"
+                     "（例：「这几块对，灌木那个确实没有，你建一个」）。"
+                     "拿不出原话 = 你还没问过他 ⇒ **拒收**（与 `confirm_plan` / `confirm_assets` "
+                     "同一条纪律：**不许自己编**）"))] = "",
+    asset_slots: Annotated[list[dict] | None, Field(
+        description=("⚠ **只给 `mode=\"asset_slots\"` 用**：逐条 `{mesh, slot_name, material[, note]}`。"
+                     "`mesh` = 网格资产**包路径**；`slot_name` **必须**来自官方 "
+                     "`get_material_slots` 的返回；`material` = 材质 / 材质实例包路径。"
+                     "⚠ 用户 2026-10-04 定「**开，而且不用额外开关**」—— 所以不加布尔开关，"
+                     "但**必须点名**：没有「顺手改到资产」的隐藏模式"))] = None,
+    focus: Annotated[bool, Field(
+        description=("⚠ **只给 `mode=\"apply\"` 用**：贴完把 UE 视口**聚焦到刚贴的那些物体**并选中高亮"
+                     "（第 ⑥ 步「切到那个目标物体视角」，免得用户不知道贴哪了）。"
+                     "⚠ 官方 `FocusOnActors` **PIE 激活时不能调**；⚠ 本阶段**不出图**"))] = False,
+    focus_max: Annotated[int, Field(
+        ge=0, le=200,
+        description=("配合 `focus=true`：最多聚焦几个（默认 3）。"
+                     "⚠ 一次聚焦几十个的话**用户只看得见最后一个** —— 那等于没切"))] = 3,
+    save: Annotated[bool, Field(
+        description=("⚠ **只给 `mode=\"apply\"` 用**：贴完**存盘**（第 ⑦ 步「用户满意就保存」）。"
+                     "走官方 `AssetTools.save_assets`（**空列表 = 存所有脏资产**）。"
+                     "⚠ 只在**用户满意**那一步打开"))] = False,
+) -> SurfaceReport:
+    """
+    【场景⑤ 表面与环境】什么时候用我：白膜还是灰的、要把材质贴上去时 —— 按**材质清单**贴；找材质 / 确认清单也走我。**阶段五**：`probe`（找材质）→ `confirm`（清单签字）→ `apply`（贴）→ `focus`（切视角）→ `save`（存盘）。
+
+    ⚠ **没有演练这一步**（2026-10-04 用户指令：「把演练这一步删掉，不需要演练」）：
+      本工具**一调就是真做**（原 `dry_run` 形参已删除）。唯一**天然只读**的是
+      `mode="probe"` —— 那是功能上的只读（第 ①~③ 步只写我们自己的草稿 JSON），不是演练档。
+
+    四档（`mode`，**默认 `apply` = 2026-10-04 之前的行为，逐字不变**）：
+
+    **`mode="apply"`（默认）** —— 给白膜贴**组件级覆盖**（`OverrideMaterials`），不动几何：
+      ① 读**搭建台账**（`active_ledger_path()`）—— 靠里面记的 **Actor 引用**贴，
+         **不重新去关卡里找**（那得重跑一遍识别，是另一码事）；
+      ② 核对**当前关卡与台账一致**（换图了就拒收，一个组件都不写）；
+      ③ **逐个验材质路径** `exists()` —— 不过就拒收（与阶段三"一条不过就一个都不落"同一条纪律）；
+      ④ 逐行：找 `cube` 组件 → 读现值（**幂等**：已是这块材质就跳过）→ `set_properties`
+         写 `overrideMaterials` → **读回核对**（写进去但读回不是它 = 没成，如实报）。
+      ⚠ 这一档**一调就是真写**（没有演练档）：动手前把要贴的行看清楚 —— `only=[…]` 可以点名
+        只要哪几个 `element_key`，其余的**一行都不碰**。
+
+    **`mode="probe"`（只读，第 ①~③ 步）** —— 对着**资产清单**逐条找它的**材质和材质实例**、记路径：
+      · 网格资产 → 官方 `get_material_slots` + `get_material`（`StaticMeshTools` /
+        `SkeletalMeshTools` 同名对称）；白膜行 → 实况枚举材质库后**本地**匹配；
+      · **清单两栏都记**（用户 2026-10-04 晚口径）：「材质清单是两栏，一个是材质，一个是材质实例」——
+        **材质**一栏 + **材质实例**一栏；⚠ **两栏分开算**：匹到「1 块材质 + 1 块实例」
+        ⇒ **两栏各填一个**，状态 `found`（**不是二选一、不问用户**）；只有**同一栏里搜到多块**
+        时才落 `pending_user` 交用户确认（原话：「搜到多个让用户自己确认」，**不许替他挑**）；
+        ⚠ **搜到啥就是哪个**（**不向上找它的母级**）；
+      · **搜不到时按"是不是白膜"分两条路**（**不许混**）：**是白膜** ⇒ 标 **`missing_self_build`**
+        （**待自建**）并给一个**提议落点**（`/Game/UEMCP/Materials/M_<元素>`）；
+        **不是白膜**（别人建好的资产）⇒ `pending_user`（**问用户要路径**）；
+      · **名字对不上就是"没找到"**（**不许拿别的资产顶替** —— 与 `plan_assets` 同一条纪律）；
+        **没有资产清单就拒收**；
+      · 结果落**草稿** `catalog/material_list_draft.json`，**一个字节都不写关卡**。
+
+    **`mode="confirm"`（第 ④ 步）** —— 把草稿 + 用户的答复定稿成 `catalog/material_list.json`：
+      · **必须带 `user_quote`**（拿不出原话 = 没问过人）；**`items` 空表 ⇒ 拒收**；
+      · 清单里还有 `pending_user` ⇒ **拒收**（那一行是"还没问完"）；
+      · `missing_self_build` **允许**存在 —— 那正是第 ⑤ 步要用 `create_surfaces()` 建的；
+      · **`none`（无）也允许** —— 那是**非白膜**（别人建好的资产）问完「确实没有」的答复：
+        我们**不去给它造材质 / 实例**；⚠ 两条硬判据：**只许非白膜行**、**不许带任何路径**；
+      · 落盘后**签字**（`catalog/material_snapshot.json`，照阶段一 `library_snapshot` 那套），
+        之后 `probe` 才判定得了"这张清单过没过期"。
+
+    **`mode="asset_slots"`（第 ⑥ 步的另一条腿）** —— 改**网格资产**的材质槽：
+      · 官方 `StaticMeshTools.set_material(mesh, slot_name, material)`，官方 docstring 明说它
+        **影响所有未覆盖该槽的实例** —— 所以报文里会点名"这张网格在场景里被我们摆了几行"；
+      · 写入前**四道**：`exists()` 验资产 → `get_material_slots` 拿真实槽位名（写不在列表里的
+        槽名 ⇒ **拒收**）→ 读旧材质存台账 → 写后 `get_material` **读回核对**。
+
+    ⚠ 第 ⑥ 步的"切到目标物体视角"用官方现成工具（**不用自己算相机**）：
+      `EditorAppToolset.FocusOnActors`（**PIE 激活时不能调**）+ `SelectActors`（选中高亮）——
+      按**台账里的 Actor 引用**聚焦，不按名字猜。**本阶段不出图**（用户原话：
+      「不需要出图，用户能在UE里直接看」）⇒ 这里**没有**任何 `CaptureViewport` 调用。
+    ⚠ 第 ⑦ 步 `save=true` 才存盘（用户原话「直到用户满意就保存」）—— 旧话"阶段五绝不存盘"
+      **作废**；⚠ 存盘失败**不算"材质没贴好"**（材质已经写进关卡了），如实报进 `warnings`。
+    ⚠ "贴什么"**只有一个来源**：材质清单。`config/surface_materials.json` 的 `materials` 段
+      **已退役**（清单不存在时仍会读它顶上，并在 `warnings` 里点名提醒 —— **不许两套口径**）。
+    ⚠ 组件级覆盖**只能**走 `ObjectTools.set_properties` 改 `OverrideMaterials`：
+      官方**没有** `set_component_material_override` 这个工具（那名字只在 `StaticMeshTools.
+      set_material` 的 docstring 里被点名，工具面里不存在）。
+    ⚠ **阶段五的完整九步流程**见 **`docs/阶段五-表面材质.md`**（第〇节是用户原话）。
+    """
+    calls = 0
+    warns: list[str] = []
+    mode_key = str(mode or "apply").strip().lower() or "apply"
+    if mode_key not in ("apply", "probe", "confirm", "asset_slots"):
+        raise ToolError(
+            f"`mode` 只认 `apply` / `probe` / `confirm` / `asset_slots`，收到 {mode!r} —— "
+            "**一个字节都没写**（参数不许被静默吞掉：不认识的档位当场拒收，不猜你想干什么）。")
+
+    # ---- 这一档**不该出现**的参数：当场拒收，不静默忽略（AGENTS 2026-10-03 第 6 条）----------
+    _misplaced: list[str] = []
+    if mode_key != "confirm" and (items or str(user_quote or "").strip()):
+        _misplaced.append("`items` / `user_quote`（只给 `mode=\"confirm\"` 用）")
+    if mode_key != "asset_slots" and asset_slots:
+        _misplaced.append("`asset_slots`（只给 `mode=\"asset_slots\"` 用）")
+    if mode_key != "apply" and (focus or save):
+        _misplaced.append("`focus` / `save`（只给 `mode=\"apply\"` 用）")
+    if mode_key != "apply" and only:
+        _misplaced.append("`only`（只给 `mode=\"apply\"` 用）")
+    if _misplaced:
+        raise ToolError(
+            f"拒收：`mode={mode_key}` 却传了 " + "、".join(_misplaced)
+            + " —— 这些参数在这一档里**没有任何意义**。"
+              "以前那种「静默忽略」会让你以为多做了一次确认，实际什么都没发生 —— "
+              "**参数不许被吞掉**，所以这里当场拒收（一个字节都没写）。")
+
+    # ---- ⓐ probe：**只读**，出草稿清单（第 ①~③ 步）------------------------------------------
+    # ⚠ 2026-10-04 晚：**整段实现搬去 `surfaces.py`**（用户口径翻新：只找材质实例）。
+    #   本档现在只做三件事：构造注入面 → 调 `surfaces.probe()` → 把结果原样报出来。
+    #   判据（谁能当候选、实例还是裸材质、草稿写哪儿）**只有 surfaces.py 那一份**。
+    if mode_key == "probe":
+        repo = await _surfaces_repo(ctx)
+        rep = await _surfaces_module().probe(repo, max_per_element=max(1, 5))
+        # ⚠ **必须 `await`**（2026-10-04 晚实测踩到）：`_material_snapshot_stale()` 是 async 的，
+        #   漏了 await ⇒ 拿到的是**协程对象** ⇒ `_probe_report()` 建 pydantic 模型时报
+        #   `ValidationError: snapshot_stale … input_value=<coroutine …>`，
+        #   而工具面只回一句**没有正文的** `Error executing tool apply_surfaces`（很难查）。
+        #   ⚠ 这类错**预检抓不到**（预检没调这一档的完整路径）—— 是**真跑**抓到的。
+        stale = await _material_snapshot_stale(repo)
+        if stale:
+            # ⚠ 照阶段一：**不只说过时，还说清怎么变的**（`describe_count_changes` 的原话场：
+            #   "某个包整个消失"就是靠"58 → 56"这种话看见的）。它要多枚举一次，**只在过期时**才调。
+            rep.warnings.append("⚠ 现在这份材质清单**过时了**（材质库指纹与签字时对不上）—— "
+                                + await _material_snapshot_diff(ctx)
+                                + " 请重新 `probe` 一遍再 `confirm`。")
+        counts: dict[str, int] = {}
+        for r in rep.probe_rows:
+            counts[r.status] = counts.get(r.status, 0) + 1
+        status_txt = "、".join(f"{k} {v}" for k, v in sorted(counts.items())) or "一行都没有"
+        rep.snapshot_stale = stale
+        rep.material_list_path = str(MATERIAL_LIST_PATH)
+        rep.snapshot_path = str(MATERIAL_SNAPSHOT_PATH)
+        rep.next_step = (
+            f"草稿已落 `{MATERIAL_LIST_DRAFT_PATH.name}`：{status_txt}。"
+            "**下一步**：把草稿逐条拿去问用户 ——"
+            "· `is_instance` 的行：这块实例就用它吗？\n"
+            "· `from_material` 的行：**有材质、缺实例** ⇒ 第 ⑤ 步由 `create_surfaces()` "
+            "派生一份实例（父级就是那块材质）；先让用户确认用哪块当母材质。\n"
+            "· 没找到的（`pending_user`）：问他有没有（有就给路径；他说「确实没有」⇒ 标 `missing_self_build`）。\n"
+            "问完拿他的原话调 `apply_surfaces(mode=\"confirm\", items=[…], user_quote=\"他的原话\")` 定稿。")
+        rep.warnings.append("只读：`probe` **不碰关卡**（连草稿也只是我们自己的 JSON）。")
+        return _probe_report(rep)
+
+    # ---- ⓑ confirm：定稿 + 签字（第 ④ 步）---------------------------------------------------
+    # ⚠ 2026-10-04 晚：**整段实现搬去 `surfaces.py`**（用户口径翻新：**清单两列都记** ——
+    #   材质 + 材质实例；白膜搜不到 = 待自建；非白膜问完没有 = 无）。
+    #   本档只做：构造注入面 → 调 `surfaces.confirm()` → 搬报文。
+    #   ⚠ 闸门**一条都没放松**（都在那一层，见 `surfaces.confirm()` 的 docstring）：
+    #     空表拒收 / 必须有用户原话 / 不许有 `pending_user` / **每行都要"有主"**
+    #     （现成实例、或给得出母材质；两个例外 = 白膜待自建 / 非白膜记「无」）/
+    #     路径逐个 `exists()` 不过就整批拒收。
+    if mode_key == "confirm":
+        repo = await _surfaces_repo(ctx)
+        rep = await _surfaces_module().confirm(repo, items, user_quote)
+        rep.material_list_path = str(MATERIAL_LIST_PATH)
+        rep.snapshot_path = str(MATERIAL_SNAPSHOT_PATH)
+        return _confirm_report(rep)
+
+    # ---- ⓒ asset_slots：改**网格资产**的材质槽（用户 2026-10-04 定：开、不用额外开关）----------
+    if mode_key == "asset_slots":
+        led = _load_build_state()
+        by_mesh: dict[str, int] = {}
+        for r in (led.get("rows") or []):
+            if not isinstance(r, dict):
+                continue
+            path = _norm_material_path(r.get("asset_path") or "")
+            if path:
+                by_mesh[path] = by_mesh.get(path, 0) + 1
+        rows_out_s: list[AssetSlotResult] = []
+        applied = already = failed = 0
+        for item in (asset_slots or []):
+            mesh = _norm_material_path((item or {}).get("mesh"))
+            slot = str((item or {}).get("slot_name") or "").strip()
+            mat = _norm_material_path((item or {}).get("material"))
+            row = AssetSlotResult(mesh=mesh, slot_name=slot, material=mat,
+                                  used_by_rows=by_mesh.get(mesh, 0))
+            if not (mesh and slot and mat):
+                row.status, row.error = "failed", (
+                    "必须**点名**：`mesh`（网格资产包路径）+ `slot_name` + `material` 三样都要给 —— "
+                    "**没有「顺手改到资产」的隐藏模式**")
+                rows_out_s.append(row)
+                failed += 1
+                continue
+            slot_names: list[str] = []
+            try:
+                calls += 1
+                got = await call_official(ctx, "get_material_slots",
+                                          {"mesh": {"refPath": to_object_path(mesh)}},
+                                          toolset=TS_STATIC_MESH)
+                slot_names = [str(x.get("name") or "") if isinstance(x, dict) else str(x or "")
+                              for x in (got or [])]
+                slot_names = [s for s in slot_names if s]
+            except ToolError as exc:
+                row.status, row.error = "failed", f"读材质槽失败：{exc}"
+                rows_out_s.append(row)
+                failed += 1
+                continue
+            # ② 槽名必须是**读回来的真名**（写一个不存在的槽 ⇒ 拒收，**不猜**）
+            if slot not in slot_names:
+                row.status, row.error = "failed", (
+                    f"槽 `{slot}` **不在**这张网格的槽列表里（真实槽位：{slot_names or '一个都没有'}）—— "
+                    "槽名必须来自 `get_material_slots` 的返回，**不许自己拼**")
+                rows_out_s.append(row)
+                failed += 1
+                continue
+            # ③ 读旧材质（台账里记它，给回滚用）
+            try:
+                calls += 1
+                old = await call_official(ctx, "get_material",
+                                          {"mesh": {"refPath": to_object_path(mesh)},
+                                           "slot_name": slot}, toolset=TS_STATIC_MESH)
+                row.old_material = _norm_material_path(_ref_path(old))
+            except ToolError as exc:
+                warns.append(f"⚠ `{mesh}` 的槽 `{slot}` 旧材质没读回来（{exc}）—— "
+                             "台账里这一格是空的（**不是「原来没有」**，是**没读到**）。")
+            if row.old_material == mat:
+                row.status = "already"
+                rows_out_s.append(row)
+                already += 1
+                continue
+            # ⚠ 2026-10-04：原来的 `if dry_run: row.status = "dry"` 这一档已随演练一并删除 ——
+            #   走到这儿就是**真写**（写入前那四道闸在上面，一道都没放松）。
+            try:
+                calls += 1
+                await call_official(ctx, "set_material",
+                                    {"mesh": {"refPath": to_object_path(mesh)},
+                                     "slot_name": slot,
+                                     "material": {"refPath": to_object_path(mat)}},
+                                    toolset=TS_STATIC_MESH)
+            except ToolError as exc:
+                row.status, row.error = "failed", f"写入失败：{exc}"
+                rows_out_s.append(row)
+                failed += 1
+                continue
+            calls += 1
+            back = await call_official(ctx, "get_material",
+                                       {"mesh": {"refPath": to_object_path(mesh)},
+                                        "slot_name": slot}, toolset=TS_STATIC_MESH)
+            got_back = _norm_material_path(_ref_path(back))
+            if got_back == mat:
+                row.status = "applied"
+            else:
+                row.status, row.error = "failed", (
+                    f"写了但**读回不是它**（读回 {got_back or '空'}）—— 如实报，不当作成功")
+                failed += 1
+            if row.status == "applied":
+                applied += 1
+            rows_out_s.append(row)
+
+        if not (asset_slots or []):
+            warns.append("⚠ `mode=\"asset_slots\"` 但 `asset_slots` 是空的 —— "
+                         "**什么都没做**（这一档必须点名目标，没有「默认全改」）")
+        if failed:
+            warns.append(f"⚠ 有 {failed} 个槽**没改成** —— 逐条原因在 `slot_rows[].error` 里。")
+        if any(r.status == "applied" for r in rows_out_s):
+            warns.append("⚠ **改的是资产**：官方 docstring 明说它影响"
+                         "「所有**未覆盖**该槽的实例」—— 场景里别的同款网格会跟着变。"
+                         "⚠ 本工具**不存盘**：要留住它请在 UE 里按 Ctrl+S（第 ⑦ 步）。")
+            try:
+                _surface_ledger_merge("asset_slots", [
+                    {"mesh": r.mesh, "slot_name": r.slot_name, "material": r.material,
+                     "old_material": r.old_material, "used_by_rows": r.used_by_rows,
+                     "at": datetime.now(timezone.utc).isoformat()}
+                    for r in rows_out_s if r.status == "applied"])
+            except OSError as exc:
+                warns.append(f"⚠ 台账没写成（{exc}）—— 这次**没留下「旧槽材质是什么」的记录。")
+        # ---- 回写材质清单（⚠ 2026-10-08 补 · 缺口 #19）----------------------------------
+        # 由来：这一档改的是**网格资产的槽**（清单里 `target` = 网格路径、`slot_name` = 槽名那一类行），
+        #   而第 ⑦ 步那次回写**只遍历白膜行**（`targets`）⇒ 改完槽之后**清单里那一行还是旧值**。
+        #   实测现场：树冠槽已换成 `MI_SakuraPink`，而清单里 `tree·normal_leaves` 仍写着 `MI_M_Sakura`。
+        #   ⚠ 按本项目"过期口径不许留"的纪律，这不能靠人记得 —— **改完就回写**。
+        # 口径（**不另开一条写入路**）：走第 ⑦ 步同一个写入点 `surfaces.save_manifest()`；
+        #   `quote=""` ⇒ 它**继承**旧清单的签字原话 / `deliverable` / `signed_at`
+        #   （这**不是**一次新确认，所以那三样一个字都不许被换掉）。
+        #   回写只动**这两格**：`instance` = 槽上实际那块材质、`instance_status` = is_instance
+        #   （`status` 跟到 `found`）—— 其余字段原样带过去。
+        wrote_back = ""
+        _applied_slots = [r for r in rows_out_s if r.status in ("applied", "already") and r.material]
+        if _applied_slots:
+            try:
+                _repo = await _surfaces_repo(ctx)
+                _payload: list[dict] = []
+                _touched: list[str] = []
+                for _r in _material_rows():
+                    _rr = dict(_r)
+                    for _s in _applied_slots:
+                        if (to_object_path(str(_rr.get("target") or "")) == to_object_path(_s.mesh)
+                                and str(_rr.get("slot_name") or "") == _s.slot_name):
+                            if to_object_path(str(_rr.get("instance") or "")) != to_object_path(_s.material):
+                                _rr["instance"] = _s.material
+                                _rr["instance_status"] = _surfaces_module().INST_IS_INSTANCE
+                                if not str(_rr.get("material") or "").strip():
+                                    _rr["material"] = _s.material
+                                _rr["status"] = MAT_STATUS_FOUND
+                                _touched.append(str(_rr.get("label") or _rr.get("element_key") or ""))
+                            break
+                    _payload.append(_rr)
+                if _touched:
+                    _surfaces_module().save_manifest(
+                        _repo, _payload, "",
+                        extra={"written_back_at": _repo.now(),
+                               "written_back_why": ("`mode=\"asset_slots\"` 改了**网格资产的槽** "
+                                                    "（缺口 #19：这一档原来不回写清单）"),
+                               "deliverable_note": ("`deliverable` 是**签字当时**渲染的正文"
+                                                    "（历史记录，**不会**随回写更新）；"
+                                                    "`items` 才是回写后的**活状态**。")})
+                    wrote_back = str(MATERIAL_LIST_PATH)
+                    warns.append("✅ 材质清单已回写（`instance` 跟到槽上的实际材质）："
+                                 + "、".join(_touched[:6])
+                                 + ("…" if len(_touched) > 6 else ""))
+                else:
+                    warns.append("✅ 槽已经对上了，清单那几行本来就是对的 —— 清单**没动**。")
+            except OSError as exc:
+                warns.append(f"⚠ 材质清单回写失败（{exc}）—— **槽已经改好了**，但清单里那一行还是旧值。")
+        return SurfaceReport(
+            stage="阶段五 · 第 ⑥ 步（改网格资产的材质槽）",
+            mode="asset_slots", level="", dry_run=False,
+            planned=len(asset_slots or []), applied=applied, already=already, failed=failed,
+            asset_rows_untouched=0, rows=[], slot_rows=rows_out_s, official_calls=calls,
+            wrote_back=wrote_back,
+            material_list_path=str(MATERIAL_LIST_PATH) if MATERIAL_LIST_PATH.exists() else "",
+            next_step=(
+                (f"改完：{applied} 个槽新写、{already} 个本来就对、{failed} 个没成。"
+                 "**请在 UE 里看一眼效果**（改资产会让同款网格一起变）。"
+                 "⚠ 本工具不存盘：满意之后按第 ⑦ 步存盘（`setup_environment(save=true)` 或 Ctrl+S）。")),
+            warnings=warns)
+
+    # ---- ⓓ apply（默认档）：按材质清单贴**实例**（第 ⑥⑧ 步）----------------------------------
+    # ⚠ 2026-10-04 晚：**整段实现搬去 `surfaces.py`**，并按用户口径改了两处：
+    #   ① 贴的是 `instance`（清单只记材质实例），认组件名 `cube` 的规矩不变；
+    #   ② `save=true` 那一步**先回写清单、再存盘**（用户原话「直到用户满意才写回清单」）——
+    #      回写的内容 = 这一趟**真贴上去的那些实例路径**；存盘失败**不算材质没贴好**，如实报。
+    #   闸门没放松：清单里没有带实例的行 ⇒ 拒收；换图（台账关卡 ≠ 当前关卡）⇒ 拒收；
+    #   实例路径逐个 `exists()` 不过 ⇒ 整批拒收；逐行"先读现值 → 幂等 → 写 → **读回核对**"。
+    repo = await _surfaces_repo(ctx)
+    ledger = _load_build_state()
+    rep = await _surfaces_module().apply_surfaces(
+        repo, ledger, only=only, focus=focus, focus_max=focus_max,
+        save=save, user_quote=user_quote)
+    return _apply_report(rep)
+
+
 # --- 阶段五 · 第 0 步：**从零建材质**（2026-10-04 加 · ⚠ **尚未实测**）---------------------  【模块：surfaces】
 # 「谁消费 / 要什么闸门」先定清楚（AGENTS 的架构原则要求这么接新能力）：
 #   · **谁消费**：`apply_surfaces()` —— 它的"整批拒收"就发生在"材质不存在"上（现场：6 个
 #     `/Game/UEMCP/Materials/M_*` 工程里没有 → 一个都不贴 → 白模）。
-#   · **闸门**：`dry_run` 先列清单（会建哪些路径 / 连哪几个输出 / 用什么表达式类）→
-#     真跑**整批校验**（配置里有一条不合法 ⇒ 一个都不建）→ 建完**逐条读回核对**
-#     （参数在不在 + 输出接上没）→ 落**台账**（我们建了什么，给回滚用）→ **绝不存盘**
-#     （阶段五纪律），报文里明说"还在内存里，切关卡就没了"。
+#   · **闸门**：**整批校验**（配置里有一条不合法 ⇒ 一个都不建）→ 建完**逐条读回核对**
+#     （参数在不在 + 输出接上没）→ 落**台账**（我们建了什么，给回滚用）→
+#     ⚠ **本工具自己不存盘**：第 ⑦ 步「用户满意就保存」那次才存（`apply_surfaces(save=true)`），
+#     报文里明说"还在内存里，切关卡就没了"。
 SURFACE_CREATE_PATH = VIEWS_DIR / "surface_materials_v1.json"
-"""`create_surfaces()` 的台账：**我们建过哪些材质**（路径 / 参数 / 时间）。
+"""阶段五 · **表面材质台账**：我们建过 / 调过 / 改过什么（路径 / 参数 / **旧值** / 时间）。
 
-⚠ 它存在的唯一理由：**新建的是 UE 资产**，而本阶段绝不存盘 —— 所以必须留一笔"这是谁建的、
-  用什么参数建的"，将来要删/要查才有据可依（与阶段六环境台账同一个道理）。
+⚠ 它存在的理由：新建与改动碰的都是 **UE 资产**，而本阶段只在第 ⑦ 步「用户满意」时才存盘 ——
+  所以必须留一笔「这是谁建的 / 改之前是什么」，将来要删、要回滚才有据可依
+  （与阶段六环境台账同一个道理）。
+⚠ 四段共用这一本文件：`created` / `tuned` / `asset_slots` / `focused` —— 写的时候走
+  `_surface_ledger_merge()`（**读-改-写**，只动自己那一段）。
 ⚠ 这是**我们自己的 JSON**（非 UE 资产、非关卡存盘），不违反硬规矩。"""
 
 
@@ -6222,254 +7285,1160 @@ def _surface_creates() -> tuple[dict, str]:
     return {str(k): v for k, v in cre.items() if isinstance(v, dict)}, ""
 
 
-def _create_plan_item(path: str, spec: dict) -> tuple[dict, str]:
-    """把 `create` 段里的一条翻译成**照做清单**；不合法就返回 `(空, 原因)` —— **不猜**。
+# --- 阶段五 · **跑一条 MI 配方**（`parent` 那条；2026-10-04 加 · ⚠ **尚未实测**）------
+# ⚠ 2026-10-07：**实现已搬走**（main.py 里那批 `_instance_plan_item` / `_build_instance_item` /
+#   `_mat_param_read` 是**死代码，已按用户指令删除**）—— 活路径是 `surfaces.create()` 里
+#   "配方带 `parent` ⇒ 派生实例 + 覆盖参数" 那一支。下面这段是**口径记录**，留着有用。-------------  【模块：surfaces】
+# 顺序**不能反**（与阶段六那段同一套口径，键名也是照它抄的）：
+#   ① 父级 `exists()`（这条在批处理里**写之前**统一做掉）→
+#   ② 官方 `MaterialInstanceTools.create(folder_path, asset_name, parent)` —— `parent` 传
+#      **对象路径**（`包.对象`）的 refPath（阶段六 2026-09-29 真跑就是这写法）→
+#   ③ 拿回来的引用**先规范成对象路径**再用（实测坑：官方回来的**本来就是对象路径**，
+#      再套一次 `to_object_path()` 会把后缀拼成 `.MI_A.MI_A.MI_A`）→
+#   ④ 参数名**只认** `list_parameters(父级)` 的返回（不在里面 ⇒ 拒收，不猜；
+#      猜错的后果是官方**静默失败**）→
+#   ⑤ 逐个：**先 `get_*` 读现值 → 同值跳过（幂等）→ `set_*` 写 → `get_*` 读回核对**
+#      （读不回 = 如实报，**不许把「没读到」说成「没问题」**）。
+# ⚠ 四个 `get_*` / `set_*` 的入参键名**统一**是 `instance` + `name`（写入再加 `value`）——
+#   照阶段六 `[完工-17]`（2026-09-29 真跑过）的用法，**别按"每个 setter 键名不同"猜**
+#   （猜错 = 运行时缺必填参数，整条废掉）。
+# ⚠ StaticSwitch 会**触发 shader 重编译**（官方原文）⇒ 写的时候**逐条串行**，逐条读回。
 
-    ⚠ 键名必须落在 `MAT_OUTPUTS` 里（= 官方 `EMaterialProperty` 去掉 `MP_` 前缀）——
-      不在里面就**拒收那一条**，而不是猜它该连到哪个输出。
-    ⚠ 值：**4 个数的数组 → 向量参数**（LinearColor）；**数字 → 标量参数**。
+
+# --- 阶段五 · 第 ⑨ 步：**调已有材质实例的参数**（2026-10-04 加 · ⚠ **尚未实测**）-----------
+# ⚠ 2026-10-07：**实现已搬走**（main.py 里的 `_tune_parameters` / `_tune_kind_of` 是**死代码，
+#   已按用户指令删除**）—— 活路径是 `surfaces.tune()`（读现值 → 同值跳过 → 写 → 读回核对，
+#   台账记旧值）。下面这段是**口径记录**，留着有用。-----  【模块：surfaces】
+# 用户原话：「最后就是调正已有的材质实例的参数，直到用户没有要调整的就结束第五阶段」。
+# 值 → 类型的判据（由**值的形状**定，不由参数名猜）：
+#   数字 ⇒ Scalar · 4 元数组 ⇒ Vector · 字符串且该资产 `exists()` ⇒ Texture · true/false ⇒ StaticSwitch
+# ⚠ StaticSwitch 会**触发 shader 重编译**（官方原文）⇒ 逐条**串行**、逐条报（不并发、不批量吞掉）。
+# ⚠ 参数名**只认** `MaterialInstanceTools.list_parameters(material)` 的返回 —— 写一个它没返回过的
+#   名字等于猜；猜错的后果是**静默失败**（官方不报错、值也没写进去），所以这里**当场拒收**。
+
+
+def _resolve_expression_refs(expressions: Any) -> dict[str, str]:
+    """把 `get_expressions` 的返回整理成 `{节点名: 引用}`（节点名可能带重复，后来的覆盖先前的）。
+
+    ⚠ 官方返回的每一项形状不确定（可能是 `{"refPath": …}`，也可能带 `name` / `objectName`）——
+      这里**只取能取到的**，取不到就跳过（不编一个名字出来）。
     """
-    if "/" not in path:
-        return {}, f"`{path}` 不是包路径（例：`/Game/UEMCP/Materials/M_Road`）"
-    folder, name = path.rsplit("/", 1)
-    if not path.startswith("/Game/") or not name or not folder:
-        return {}, (f"`{path}` 不是 `/Game/...` 形式的**包路径**"
-                    "（例：`/Game/UEMCP/Materials/M_Road`）")
-    params: list[dict] = []
+    out: dict[str, str] = {}
+    for item in (expressions or []):
+        ref = _ref_path(item)
+        if not ref:
+            continue
+        name = ""
+        if isinstance(item, dict):
+            name = str(item.get("name") or item.get("objectName") or "").strip()
+        if not name:
+            name = ref.rsplit(".", 1)[-1]
+        if name:
+            out[name] = ref
+    return out
+
+
+def _looks_like_ref(name: str) -> bool:
+    """这个字符串**像不像一条 UObject 引用路径**（例：`/Game/X.M_X:MaterialExpressionVectorParameter_0`）。
+
+    用途只有一个：`ops` 档允许调用方**直接按 refPath 寻址**（见 `_ref_of`）。判据刻意保守 ——
+    必须以 `/` 开头**且**含 `.`；别的写法一律当"节点名"去找别名 / 图里的名字，不许拿它当引用硬塞给官方。
+    """
+    s = str(name or "").strip()
+    return bool(s) and s.startswith("/") and "." in s
+
+
+def _property_names(listed: Any) -> set[str]:
+    """从 `ObjectTools.list_properties` 的返回里取出**属性名集合**（取不到给**空集**）。
+
+    ⚠ **真实形状（2026-10-07 实测，用官方工具直接看到的原文）**：
+      `{"returnValue": "<一段 JSON 字符串>"}` —— 那段 JSON **顶层键就是属性名**
+      （`defaultValue` / `parameterName` / `group` / `bUseCustomPrimitiveData` …），值是一份
+      JSON-Schema 风格的描述（带中文 `description`）。
+    ⚠ **原来这里把返回当列表遍历**（`for p in listed`）—— 拿到**字符串**时会**逐字符**迭代，
+      于是"属性名集合"变成一堆单字（实测报文里那串 `、",0:C D E I…` 就是它的字符），
+      结果**任何 `set_node` 都被判成"属性不在返回里"**：
+      这条闸以前**只在"本批新加的节点"被整段跳过时才放行**（那正是缺口 #2 的另一面），
+      在**图里已有的节点**上等于**完全不能用**（在材质图上写属性这条路等于堵死）。
+    ⚠ 解析不出来 ⇒ **空集**：调用方按"核不了"处理，**绝不许**当成"属性合法"（fail-closed）。
+    """
+    raw = listed
+    if isinstance(raw, dict) and "returnValue" in raw:
+        raw = raw.get("returnValue")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            return set()
+    names: set[str] = set()
+    if isinstance(raw, dict):
+        for k in raw:
+            kk = str(k)
+            if kk:
+                names.add(kk)
+        return names
+    if isinstance(raw, (list, tuple)):
+        for p in raw:
+            if isinstance(p, dict) and p.get("name"):
+                names.add(str(p["name"]))
+            elif isinstance(p, str):
+                names.add(p)
+        return names
+    return set()
+
+
+def _normalize_node_props(props: Any) -> dict:
+    """把 `ops` 档 `set_node` 的 `properties` 归一成官方认的**顺序 + 形状**（2026-10-07 修）。
+
+    ⚠ 这两条正是「向量参数写不进去」那个 BUG 的两条根因（`docs/阶段五-表面材质.md`）：
+      ① **顺序**：`parameterName` **提到最前**。官方是按 payload 的键序落的，**值写在名前面会把值写坏**
+         （实测：先写值后命名 → `defaultValue` 变成 NaN / 次正规数）。`json.dumps` 保序 ⇒
+         我们 dict 的顺序就是官方看到的顺序。原来这里**原样透传调用方的 dict** ⇒ 顺序全看写的人；
+         更糟的是那个 `op_rows` 回显**照原顺序打印**（文档实测两次都打印 `['defaultValue','parameterName']`），
+         看着像"写对了"，其实正好相反。
+      ② **形状**：`defaultValue` 是 **4 元数组**时换成 `{"r","g","b","a"}` 对象（4 元数组官方**静默失败**）。
+         判据只认一处：`surfaces.linear_color_value()`（不在这里另写一份）。
+    """
+    src = props if isinstance(props, dict) else {}
+    out: dict = {}
+    if "parameterName" in src:
+        out["parameterName"] = src["parameterName"]
+    try:
+        _lcv = _surfaces_module().linear_color_value
+    except Exception:                       # noqa: BLE001 —— 拿不到就只调顺序，别把整个 op 打死
+        _lcv = None
+    for k, v in src.items():
+        if k == "parameterName":
+            continue
+        out[k] = (_lcv(v) if (_lcv is not None and k == "defaultValue") else v)
+    return out
+
+
+async def _read_back_node_props(
+    ctx: Context[AppContext], nref: str, props: dict,
+) -> tuple[str, str, str, int]:
+    """`ops` 档 `set_node` 写完，把**刚写进去的那些属性**从官方 `get_properties` 真读回来核一遍。
+
+    ⚠ **这是 2026-10-07 用户定的 A 案**（他指的方向：「关于读材质、材质实例啥的官方都是有工具的，
+      你别自创什么工具，那你看看官方工具啊，你需要的功能都有」）——
+      读值用的就是**官方的 `ObjectTools.get_properties`**，而且我们**本来就在别的路上调它**
+      （组件 `overrideMaterials` 的读回、`surfaces.create()` 的参数节点读回），
+      只有 `ops` 这一档的读集里没接 ⇒ "刚写进去的值"**从来没被核过**，只核了「节点数 + 连线」。
+      那正是「向量参数写不进去」那个 BUG 能瞒过 **12 个 `status: ok`** 的根子。
+
+    返回 `(判定, detail, error, 用掉几次官方调用)`，判定三档：
+      · `"ok"` —— 写进去的每个属性都读回来了、且**值一样**（`surfaces.value_same()`，与
+        `create` / `tune` / `apply` 三处**同一条判据**，不另写一份）；
+      · `"mismatch"` —— 值读回来了但**不是它** ⇒ 调用方把这条 `set_node` 判 `failed`
+        （"写进去了但读回不是它 = 没成"；官方对这类写入**连错都不报**）；
+      · `"unverified"` —— **没核成**（官方调用失败 / 返回里找不到这个键）⇒ 调用方仍判 `ok`，
+        但 detail 里点名 —— 口径是「读不到 ≠ 没问题」，而它也不该把一次成功的写判成失败。
+
+    ⚠ 读的键就是**我们刚写的那些键**（`set_properties` 的 payload），一个不多一个不少 ——
+      这样"核了什么"与"写了什么"永远对得上。
+    """
+    keys = [str(k) for k in (props or {}) if str(k)]
+    if not keys:
+        return "ok", "", "", 0
+    _sv = _surfaces_module()
+    wrote_txt = "、".join(f"{k}={_sv.value_text(props[k])}" for k in keys)
+    try:
+        raw = await call_official(ctx, "get_properties",
+                                  {"instance": {"refPath": nref}, "properties": list(keys)},
+                                  toolset=TS_OBJECT)
+    except ToolError as exc:
+        return "unverified", f"写了 {wrote_txt} → **没核成**（`get_properties` 失败：{exc}）", "", 1
+    # ⚠ `get_properties` 回来的是一段 **JSON 字符串** —— 解开那件事**只在** `surfaces.prop_of()`
+    #   一处（2026-10-07 同时修：它原来只认 dict / list，拿到字符串会给 `None`，
+    #   于是"读回核对"会**悄悄退化成一条 warning**，看着像"没核成"、其实是**核不了**）。
+    back: list[str] = []
     bad: list[str] = []
-    for k, v in spec.items():
-        if str(k).startswith("_"):
+    missing: list[str] = []
+    for k in keys:
+        got = _sv.prop_of(raw, k)
+        if got is None:
+            missing.append(k)
             continue
-        if k not in MAT_OUTPUTS:
-            bad.append(f"`{k}` 不在允许的参数名里（允许：{'、'.join(MAT_OUTPUTS)}）")
-            continue
-        if isinstance(v, bool):
-            bad.append(f"`{k}` 的值是布尔（{v}）—— 布尔请放进 `_flags`（材质开关）")
-        elif isinstance(v, (list, tuple)):
-            if len(v) != 4:
-                bad.append(f"`{k}` 的数组要**4 个数**（LinearColor r/g/b/a），收到 {len(v)} 个")
-            else:
-                try:
-                    params.append({"output": str(k), "kind": "vector",
-                                   "value": [float(x) for x in v]})
-                except (TypeError, ValueError):
-                    bad.append(f"`{k}` 的数组里有非数字：{v!r}")
-        elif isinstance(v, (int, float)):
-            params.append({"output": str(k), "kind": "scalar", "value": float(v)})
-        else:
-            bad.append(f"`{k}` 的值既不是 4 个数的数组、也不是数字（收到 {type(v).__name__}）")
-    if not params:
-        bad.append("**一个参数都没有**（只写 `_flags` / `_note` 建出来的是一块默认灰材质）")
+        back.append(f"{k}={_sv.value_text(got)}")
+        if not _sv.value_same(got, props[k]):
+            bad.append(k)
+    read_txt = "、".join(back) or "一个都没读回来"
     if bad:
-        return {}, f"`{path}`：配置不合法 —— " + "；".join(bad)
-    raw_flags = spec.get("_flags")
-    flags = ({str(k): v for k, v in raw_flags.items()} if isinstance(raw_flags, dict) else {})
-    return ({"path": path, "folder": folder, "name": name, "params": params,
-             "flags": flags, "note": str(spec.get("_note") or "")}, "")
+        return ("mismatch", f"写了 {wrote_txt} → 读回 {read_txt}",
+                f"属性 {bad} **写进去了但读回不是它**（读回 `{read_txt}`）—— 官方这类写入"
+                "**不报错、值也可能不变**（实测：向量给 4 元数组就是如此），"
+                "所以「写没写成」只能靠这一读；要那个值就先确认形状（向量要给 `{r,g,b,a}`）再重写", 1)
+    if missing:
+        return ("unverified",
+                f"写了 {wrote_txt} → 读回 {read_txt}；⚠ {missing} **没核成**"
+                "（`get_properties` 的返回里找不到这个键）—— **读不回来 ≠ 没问题**", "", 1)
+    return "ok", f"写了 {wrote_txt} → 读回 {read_txt}", "", 1
+
+
+# --- 阶段五 · **材质图编辑原语** `ops`（2026-10-04 加，用户已选"开放带闸门的原语"）--------------  【模块：surfaces】
+# 为什么是"一批"而不是一次一个 op：**整批校验不过 ⇒ 一个 op 都不执行** 只有在成批时才成立
+#   （一次一个的话，前几个已经改进去了，退不回来）。
+# op 词汇（每个 op 对应一个官方工具，**不新造能力**）：
+#   读：list_params / list_nodes / list_classes / get_output / get_inputs / list_slots
+#   写：add_node / set_node / connect / connect_output / disconnect / disconnect_output /
+#       delete_node / delete_unused / recompile
+#   排版：layout（2026-10-07 用户指令「不是还有个整理节点的吗，也接到对应位置」接的）
+# ⚠ `delete_unused`（2026-10-07 用户指令「1」接进来的）= 官方
+#   **`MaterialTools.delete_unused_expressions`**：**一次删光所有游离节点**（没接到任何输出的）。
+#   为什么接它：清 `M_Car` 那 3 个游离节点时我们是手工 `delete_node`×3 —— 官方**有现成的**，
+#   而且官方 docstring 明说它**不触发重编译**（本档批次末尾那次自动 `recompile` 正好补上）。
+#   边界照实说：它的入参类型是 `/Script/Engine.Material`（**不是** MaterialFunction）——
+#   对材质函数用可能不被支持，**遇到就如实报**（不硬凑）。
+# ⚠ `layout` = 官方 **`MaterialTools.layout_expressions`**（**自动排版**：把所有节点摆整齐）。
+#   入参是 `material_or_function`（Material **和** MaterialFunction 都吃）。
+#   它**只改节点在编辑器里的摆放位置**（`materialExpressionEditorX` / `…Y`，实测这两个属性名
+#   在官方 `list_properties` 的返回里），**跟 shader 无关** ⇒ 归**第三类**（见 `_MAT_OPS_LAYOUT`）。
+# ⚠ 官方写死：`set_properties` **跳过 `list_properties` 会静默失败** ⇒ 属性名只认它的返回。
+# ⚠ `add_expression` 的类**只认** `list_expression_classes(target, search=…)` 返回里的 `refPath`
+#   —— **不许自己拼 `/Script/Engine.MaterialExpressionXxx`**。
+# ⚠ `connect_to_output` / `get_property_input` 的入参类型是 `/Script/Engine.Material`（官方 docstring）
+#   ⇒ 对 **MaterialFunction** 用它们可能不被支持，**遇到就如实报**（不硬凑、不假装成功）。
+
+_MAT_OPS_WRITE = {
+    "add_node", "set_node", "connect", "connect_output",
+    "disconnect", "disconnect_output", "delete_node", "delete_unused", "recompile",
+}
+_MAT_OPS_READ = {"list_params", "list_nodes", "list_classes", "get_output",
+                 "get_inputs", "list_slots"}
+# ⚠ **第三类：`layout`**（2026-10-07 加）—— 为什么不让它进 `_MAT_OPS_WRITE`：
+#   那一类会**自动补一次 `recompile`**，而 `layout_expressions` 只改**节点在编辑器里的摆放位置**
+#   （`materialExpressionEditorX/Y`），**跟 shader 一点关系都没有** ⇒ 补重编译既白花时间，
+#   又可能让一次"整理节点"因为**别的** shader 报错而**整批判红**（`recompile` 官方原文：
+#   材质编译不过就抛错）—— 那是拿一件无关的事否掉用户真正要做的这件事。
+#   但它**也不是只读**（它真改资产）⇒ **单列一类**：算"写过"（所以照样走读回核对），
+#   但**不触发**自动重编译。
+_MAT_OPS_LAYOUT = {"layout"}
+_MAT_OPS_ALL = _MAT_OPS_READ | _MAT_OPS_WRITE | _MAT_OPS_LAYOUT
+
+
+def _normalize_ops(ops: Any) -> tuple[list[dict], list[str]]:
+    """把 `ops` 归一成 `[(op, dict), …]`；op 名不在词汇表里 / 形状不对 ⇒ 收进拒收原因。
+
+    ⚠ **纯离线**（不碰 UE）—— 所以"整批校验"里这一段可以在**任何**官方调用之前跑完。
+    """
+    out: list[dict] = []
+    bad: list[str] = []
+    for i, raw in enumerate(ops or []):
+        if not isinstance(raw, dict):
+            bad.append(f"第 {i+1} 个 op 不是对象（收到 {type(raw).__name__}）")
+            continue
+        name = str(raw.get("op") or "").strip()
+        if name not in _MAT_OPS_ALL:
+            bad.append(f"第 {i+1} 个 op 名 `{name}` 不认识（认得的："
+                       + "、".join(sorted(_MAT_OPS_ALL)) + "）")
+            continue
+        out.append({"op": name, "raw": raw})
+    if not out:
+        bad.append("`ops` 里**一个合法的 op 都没有**")
+    return out, bad
+
+
+async def _get_existing_expressions(
+    ctx: Context[AppContext], target: str,
+) -> tuple[dict[str, str], int]:
+    """读这张材质图**已有的节点** → `({节点名: 引用}, 用掉几次官方调用)`。
+
+    ⚠ 它是 `connect` / `set_node` 能引用"图里已有的节点"的唯一依据 —— 读不到就**没有**，
+      于是那些引用会被判成不合法（fail-closed，不猜）。
+    """
+    try:
+        got = await call_official(ctx, "get_expressions",
+                                  {"material_or_function": {"refPath": to_object_path(target)}},
+                                  toolset=TS_MATERIAL)
+    except ToolError:
+        return {}, 1
+    return _resolve_expression_refs(got), 1
+
+
+async def _validate_material_ops(
+    ctx: Context[AppContext], target: str, norm: list[dict],
+) -> tuple[dict[int, dict], list[str], int, dict[str, str]]:
+    """**写之前整批校验** `ops` —— 任一条不过就返回拒收原因（调用方据此**一个 op 都不执行**）。
+
+    返回 `({下标: 已解析好的信息}, 拒收原因, 用掉几次官方调用, 图里已有的节点)`。
+
+    ⚠ **第四个返回值是 2026-10-07 加的**：`existing`（`get_expressions` 那次枚举的结果）——
+      写阶段原来**又枚举了一遍**（同一张图、同一个调用、中间没有任何写操作 ⇒ 结果是同一份）。
+      文档「待核实」那一条（"`get_expressions` 枚举两遍"）核实结果：**是冗余**，现在带出来复用。
+
+    校验四件（都与 `docs/阶段五-表面材质.md` 的口径一致）：
+      ① 目标 `exists()`；
+      ② `add_node` 的 `class` 必须在 `list_expression_classes(target, search=<类名>)` 的返回里
+         —— 并且**用返回里的 refPath**（不许自己拼路径）；
+      ③ `set_node` 的属性名必须在 `ObjectTools.list_properties(节点)` 的返回里
+         （官方写死：跳过它会静默失败）—— 靶子既可以是图里已有的节点名，**也可以直接给 `refPath`**；
+      ④ `connect*` 引用的别名必须是**本批更早出现过的 `as`**，或者是**图里已有的节点名 / `refPath`**。
+    """
+    bad: list[str] = []
+    calls = 0
+    resolved: dict[int, dict] = {}
+
+    # ① 目标必须存在
+    calls += 1
+    try:
+        ok = await call_official(ctx, "exists", {"path": target}, toolset=TS_ASSET)
+    except ToolError as exc:
+        return {}, [f"目标 `{target}`：`exists()` 调用失败（{exc}）"], calls, {}
+    if not _exists_true(ok):
+        return {}, [f"目标 `{target}` **不存在**（官方 exists() 返回否）—— "
+                    "**一个 op 都没执行**"], calls, {}
+
+    existing, used = await _get_existing_expressions(ctx, target)
+    calls += used
+
+    aliases: dict[str, str] = {}          # 本批已经定义过的别名 → 用途说明
+    for i, item in enumerate(norm):
+        op, raw = item["op"], item["raw"]
+        as_name = str(raw.get("as") or "").strip()
+        node = str(raw.get("node") or "").strip()
+        src = str(raw.get("from") or "").strip()
+        cls = str(raw.get("class") or "").strip()
+
+        if op == "list_classes" and not str(raw.get("search") or "").strip():
+            bad.append(f"第 {i+1} 个 op `list_classes`：**`search` 必填**"
+                       "（官方那个工具要一个搜索词，不给就查不出东西）")
+
+        if op == "add_node":
+            if not cls:
+                bad.append(f"第 {i+1} 个 op `add_node`：没给 `class`")
+                continue
+            # ② 类名**只认** `list_expression_classes` 的返回
+            calls += 1
+            try:
+                classes = await call_official(ctx, "list_expression_classes",
+                                              {"material_or_function":
+                                               {"refPath": to_object_path(target)},
+                                               "search": cls}, toolset=TS_MATERIAL)
+            except ToolError as exc:
+                bad.append(f"第 {i+1} 个 op `add_node`：`list_expression_classes` 失败（{exc}）")
+                continue
+            ref = ""
+            for c in (classes or []):
+                cref = _ref_path(c)
+                cname = ""
+                if isinstance(c, dict):
+                    cname = str(c.get("name") or c.get("className") or "").strip()
+                if not cname:
+                    cname = cref.rsplit(".", 1)[-1]
+                if cname == cls or (cref and cref.endswith("." + cls)):
+                    ref = cref
+                    break
+            if not ref:
+                bad.append(f"第 {i+1} 个 op `add_node`：类 `{cls}` **不在** "
+                           f"`list_expression_classes(target, search=\"{cls}\")` 的返回里 —— "
+                           "类名只认官方返回，**不许自己拼 `/Script/Engine.…` 路径**")
+                continue
+            resolved[i] = {"class_ref": ref}
+            if as_name:
+                aliases[as_name] = f"第 {i+1} 个 op 加的 `{cls}`"
+            continue
+
+        if op == "set_node":
+            props = raw.get("properties")
+            if not (node and isinstance(props, dict) and props):
+                bad.append(f"第 {i+1} 个 op `set_node`：要 `node` + 非空的 `properties`")
+                continue
+            # ⚠ **本批 `add_node` 刚加出来的节点**：预校验阶段它**还不存在**（`list_properties`
+            #   没有靶子）⇒ 这里不能核属性名。**但这不等于不核**（缺口 #2，2026-10-07 修）：
+            #   那道核**挪到写阶段**、在 `set_properties` 之前拿刚建出来的节点真问一次
+            #   —— 见下面写阶段 `set_node` 分支。原来这里直接 `continue` 就完事了，
+            #   等于这类 op **绕过白名单**，而官方写死"跳过它会静默失败"。
+            if node in aliases:
+                continue
+            # ⚠ **2026-10-07**：靶子可以是"图里枚举出来的名字"，也可以**直接给 `refPath`**
+            #   （文档实测：给 refPath 原来一律被拒 ⇒ 写坏的节点收拾不掉）。这里一律拿
+            #   `_ref` 去问官方 —— 属性名白名单**照核**（有 refPath 就能核，不用跳过）。
+            _node_ref = existing.get(node) or (node if _looks_like_ref(node) else "")
+            if not _node_ref:
+                bad.append(f"第 {i+1} 个 op `set_node`：节点 `{node}` 既不是本批 `as` 过的别名、"
+                           f"也不在图里（图里有：{'、'.join(sorted(existing)) or '一个都没有'}）"
+                           "—— 也可以**直接给 `refPath`**")
+                continue
+            # ③ 属性名**只认** `list_properties` 的返回（官方写死：跳过它会静默失败）
+            calls += 1
+            try:
+                listed = await call_official(ctx, "list_properties",
+                                             {"instance": {"refPath": _node_ref}},
+                                             toolset=TS_OBJECT)
+            except ToolError as exc:
+                bad.append(f"第 {i+1} 个 op `set_node`：`list_properties` 失败（{exc}）")
+                continue
+            # ⚠ 属性名集合走 `_property_names()`（真实形状是"一串 JSON 字符串、顶层键=属性名"）——
+            #   2026-10-07 实测：这里原来当列表遍历 ⇒ 拿到字符串就逐字符迭代 ⇒ **任何 set_node 都被拒**。
+            have = _property_names(listed)
+            unknown = sorted(k for k in props if k not in have)
+            if unknown:
+                bad.append(f"第 {i+1} 个 op `set_node`：属性 {unknown} **不在** `list_properties` 的"
+                           f"返回里（这块节点上是：{'、'.join(sorted(have)) or '一个都没有'}）—— "
+                           "官方写死：跳过 `list_properties` 的 `set_properties` 会**静默失败**")
+                continue
+            continue
+
+        if op == "connect":
+            if not (src and node):
+                bad.append(f"第 {i+1} 个 op `connect`：要 `from` + `to`")
+                continue
+            # ⚠ 两条都**多认一种写法：直接给 `refPath`**（见 `_looks_like_ref` / `_ref_of`）——
+            #   文档实测的坑就是"refPath 一律被拒"，于是坏节点收拾不掉。
+            if src not in aliases and src not in existing and not _looks_like_ref(src):
+                bad.append(f"第 {i+1} 个 op `connect`：`from` 的 `{src}` **既不是本批更早 `as` 过的"
+                           f"别名、也不在图里** —— 别名只能引用更早出现的（不许先后颠倒）；"
+                           "也可以**直接给 `refPath`**")
+            if node not in aliases and node not in existing and not _looks_like_ref(node):
+                bad.append(f"第 {i+1} 个 op `connect`：`to` 的 `{node}` **既不是本批 `as` 过的、"
+                           "也不在图里**（也可以直接给 `refPath`）")
+            continue
+
+        if op == "connect_output":
+            prop = str(raw.get("property") or "").strip()
+            if not src:
+                bad.append(f"第 {i+1} 个 op `connect_output`：要 `from`")
+                continue
+            if src not in aliases and src not in existing and not _looks_like_ref(src):
+                bad.append(f"第 {i+1} 个 op `connect_output`：`from` 的 `{src}` **既不是本批 `as` "
+                           "过的、也不在图里**（也可以直接给 `refPath`）")
+                continue
+            if not prop:
+                bad.append(f"第 {i+1} 个 op `connect_output`：要 `property`"
+                           "（如 `BaseColor` / `MP_BaseColor`）")
+                continue
+            if prop not in MAT_OUTPUTS and f"MP_{prop}" not in [f"MP_{x}" for x in MAT_OUTPUTS]:
+                bad.append(f"第 {i+1} 个 op `connect_output`：`property` = `{prop}` 不在允许的材质"
+                           f"输出里（允许：{'、'.join(MAT_OUTPUTS)}）")
+            continue
+
+        if op in ("disconnect", "disconnect_output", "delete_node"):
+            if op == "delete_node" and not node:
+                bad.append(f"第 {i+1} 个 op `delete_node`：要 `node`")
+                continue
+            if op == "disconnect" and not (node and str(raw.get("input") or "").strip()):
+                bad.append(f"第 {i+1} 个 op `disconnect`：要 `node` + `input`")
+            if op == "disconnect_output" and not str(raw.get("property") or "").strip():
+                bad.append(f"第 {i+1} 个 op `disconnect_output`：要 `property`")
+            # ⚠ **2026-10-07 补：`node` 必须真能解析出引用** —— 原来这一支**根本不查**，
+            #   于是 `delete_node` 把空引用递给官方（文档实测报
+            #   `Parameter error: None is not valid value for property 'expression'.`），
+            #   **写坏的节点收拾不掉、只能往上叠新的**（`M_Car` 里那 4 个同名节点就是这么来的）。
+            #   判据与写阶段**同一支**（`_ref_of`：别名 / 图里的名字 / 直接给 `refPath`）。
+            if op in ("disconnect", "delete_node") and node:
+                if not (node in aliases or node in existing or _looks_like_ref(node)):
+                    bad.append(f"第 {i+1} 个 op `{op}`：节点 `{node}` **既不是本批 `as` 过的别名、"
+                               f"也不在图里**（图里有：{'、'.join(sorted(existing)) or '一个都没有'}）"
+                               "—— 也可以**直接给 `refPath`**")
+            continue
+
+        # 读 op / `recompile` / `delete_unused` / `layout` 没有额外要校验的
+        # ⚠ `delete_unused` 也一样：官方 `delete_unused_expressions(material)` 只吃**目标材质本身**
+        #   （没有节点参数可核），删哪些由官方按"有没有接到输出"自己判 —— 我们只负责读回**数目与名字**。
+        # ⚠ `layout` 同理：官方 `layout_expressions(material_or_function)` 只吃**目标本身**，
+        #   摆哪儿由官方算 ⇒ 我们没有可核的输入（它的**结果**本档也核不了，见写阶段那条注释）。
+    return resolved, bad, calls, existing
+
+
+async def _run_material_ops(
+    ctx: Context[AppContext], target: str, ops: Any,
+) -> tuple[list[dict], list[str], str, int]:
+    """**材质图编辑的一批**：整批校验 → 按序执行 → 读回核对。
+
+    返回 `(逐 op 结果, 拒收原因, 读回结论, 用掉几次官方调用)`。
+    ⚠ **任一条校验不过 ⇒ 一个 op 都不执行**（连只读 op 也不跑 —— "一批"的语义就是要原子）。
+    ⚠ 写批次**末尾自动 `recompile`**（除非调用方显式写了 `recompile`）—— 没重编译的改动
+      在 UE 里看不见（用户会以为"改了没生效"）。
+    ⚠ 2026-10-04：原来的 `dry_run` 形参已随演练一并删除（用户指令「把演练这一步删掉」）——
+      本函数**只被** `create_surfaces()` 的 `ops` 档调用，没有第二个调用方。
+    """
+    warns: list[str] = []
+    calls = 0
+    norm, bad = _normalize_ops(ops)
+    if bad:
+        return [], bad, "", calls
+    resolved, bad2, used, existing = await _validate_material_ops(ctx, target, norm)
+    calls += used
+    if bad2:
+        return [], bad2, "", calls
+
+    has_write = any(x["op"] in _MAT_OPS_WRITE for x in norm)
+
+    # 写批次末尾自动 `recompile`（除非调用方显式写了）
+    plan = list(norm)
+    if has_write and not any(x["op"] == "recompile" for x in norm):
+        plan.append({"op": "recompile", "raw": {"op": "recompile"}})
+
+    results: list[dict] = []
+    alias_ref: dict[str, str] = {}          # 本批 `as` → 真实引用
+    # ⚠ **图里已有的节点直接复用校验阶段那次枚举**（2026-10-07）：两次调用之间**没有任何写操作**
+    #   （校验只调 `exists` / `list_expression_classes` / `list_properties`，全是只读）⇒ 同一份结果。
+    #   原来这里又 `_get_existing_expressions()` 一遍 —— 白花一次官方调用（文档「待核实」第 3 条）。
+    #   ⚠ 本批 `add_node` 加出来的节点由 `alias_ref` 负责（它们在枚举里本来就不存在）。
+    existing = dict(existing)
+    connected: list[tuple[str, str]] = []    # (property, 别名/节点名) —— 读回用
+    connected_expr: list[tuple[str, str, str]] = []   # (to 节点, input 名, from 别名/节点) —— 读回用
+    # ⚠ **2026-10-07 用户定 A 案**：`set_node` 写完**自动把值读回**（`_read_back_node_props`）。
+    #   这三个就是它的账：核过几个 / 哪几个读回不是写进去的 / 哪几个没核成。
+    #   为什么要有它们：原来这一档只核「节点数 + 连线」，**值本身从来没核过** ——
+    #   那正是「向量参数写不进去」那个 BUG 能瞒过 12 个 `status: ok` 的根子。
+    value_ok = 0
+    value_bad: list[str] = []
+    value_unknown: list[str] = []
+    laid_out = False                          # 本批跑过 `layout`（它的**结果**本档核不了，要在报文里点名）
+    wrote = False
+
+    def _ref_of(name: str) -> str:
+        # ⚠ **2026-10-07 补第三条路：直接给 refPath 也认**。文档实测的坑（同一节「顺带抓到的两条」）：
+        #   拿 `refPath` 或图里节点的名字去 `delete_node` / `set_node` / `connect_output` **一律被拒**
+        #   （校验文案写着"或已在图里的"，实际只认本批 `as` 过的别名 + 我们枚举出来的那些名字）
+        #   ⇒ **写坏的节点收拾不掉，只能往上叠新的**（`M_Car` 里那 4 个同名节点就是这么来的）。
+        #   ⚠ 这种写法**没法在图里先核一遍**（我们没解析它）—— 所以**原样交给官方由它判**，
+        #     报错原样带出来；**不自己拼路径、也不假装核过**。
+        return (alias_ref.get(name) or existing.get(name)
+                or (name if _looks_like_ref(name) else ""))
+
+    for idx, item in enumerate(plan):
+        op, raw = item["op"], item["raw"]
+        # ⚠ 2026-10-04：原来这里有一句 `if dry_run and not is_read:`（演练里只跑只读 op、
+        #   其余标 `dry` 跳过）—— 演练删掉之后每个 op 都真跑，那一档整段去掉。
+        try:
+            if op == "list_params":
+                calls += 1
+                got = await call_official(ctx, "list_parameters",
+                                          {"material": {"refPath": to_object_path(target)}},
+                                          toolset=TS_MATINST)
+                names = [str(x.get("name")) for x in (got or []) if isinstance(x, dict) and x.get("name")]
+                results.append({"op": op, "status": "ok", "ref": "",
+                                "detail": "参数：" + ("、".join(names) or "一个都没有"), "error": ""})
+            elif op == "list_nodes":
+                calls += 1
+                got = await call_official(ctx, "get_expressions",
+                                          {"material_or_function":
+                                           {"refPath": to_object_path(target)}}, toolset=TS_MATERIAL)
+                nodes = _resolve_expression_refs(got)
+                existing.update(nodes)
+                results.append({"op": op, "status": "ok", "ref": "",
+                                "detail": f"{len(nodes)} 个节点：" + ("、".join(sorted(nodes)) or "—"),
+                                "error": ""})
+            elif op == "list_classes":
+                calls += 1
+                got = await call_official(ctx, "list_expression_classes",
+                                          {"material_or_function":
+                                           {"refPath": to_object_path(target)},
+                                           "search": str(raw.get("search") or "")}, toolset=TS_MATERIAL)
+                names = []
+                for c in (got or []):
+                    nm = str(c.get("name") or "") if isinstance(c, dict) else ""
+                    names.append(nm or _ref_path(c).rsplit(".", 1)[-1])
+                results.append({"op": op, "status": "ok", "ref": "",
+                                "detail": f"{len(names)} 个类", "error": ""})
+            elif op == "get_output":
+                prop = str(raw.get("property") or "")
+                calls += 1
+                got = await call_official(ctx, "get_property_input",
+                                          {"material": {"refPath": to_object_path(target)},
+                                           "material_property": (prop if prop.startswith("MP_")
+                                                                 else f"MP_{prop}")},
+                                          toolset=TS_MATERIAL)
+                results.append({"op": op, "status": "ok", "ref": _ref_path(got),
+                                "detail": f"`{prop}` 上接着的是 {_ref_path(got) or '（空）'}",
+                                "error": ""})
+            elif op == "get_inputs":
+                nref = _ref_of(str(raw.get("node") or ""))
+                if not nref:
+                    results.append({"op": op, "status": "failed", "ref": "",
+                                    "detail": "", "error": f"节点 `{raw.get('node')}` 找不到引用"})
+                else:
+                    calls += 1
+                    # ⚠ `get_expression_inputs` 必填 `material_or_function` + `expression`（缺一个就报错）
+                    got = await call_official(ctx, "get_expression_inputs",
+                                              {"material_or_function":
+                                               {"refPath": to_object_path(target)},
+                                               "expression": {"refPath": nref}},
+                                              toolset=TS_MATERIAL)
+                    results.append({"op": op, "status": "ok", "ref": nref,
+                                    "detail": f"{len(got or [])} 个输入", "error": ""})
+            elif op == "list_slots":
+                mesh = _norm_material_path(raw.get("mesh"))
+                calls += 1
+                got = await call_official(ctx, "get_material_slots",
+                                          {"mesh": {"refPath": to_object_path(mesh)}},
+                                          toolset=TS_STATIC_MESH)
+                names = [str(x.get("name") or "") if isinstance(x, dict) else str(x or "")
+                         for x in (got or [])]
+                results.append({"op": op, "status": "ok", "ref": mesh,
+                                "detail": "槽位：" + ("、".join(n for n in names if n) or "一个都没有"),
+                                "error": ""})
+            elif op == "add_node":
+                calls += 1
+                got = await call_official(ctx, "add_expression", {
+                    "material_or_function": {"refPath": to_object_path(target)},
+                    "expression_class": {"refPath": resolved.get(idx, {}).get("class_ref", "")},
+                    # ⚠ `x` / `y` 官方 schema 是 **integer** —— 传 float 可能被拒
+                    "x": int(raw.get("x") or 0), "y": int(raw.get("y") or 0),
+                }, toolset=TS_MATERIAL)
+                ref = _ref_path(got)
+                if not ref:
+                    results.append({"op": op, "status": "failed", "ref": "",
+                                    "detail": "", "error": "官方没返回节点引用"})
+                    continue
+                wrote = True
+                as_name = str(raw.get("as") or "").strip()
+                if as_name:
+                    alias_ref[as_name] = ref
+                results.append({"op": op, "status": "ok", "ref": ref,
+                                "detail": f"加了 `{raw.get('class')}`"
+                                          + (f"，别名叫 `{as_name}`" if as_name else ""), "error": ""})
+            elif op == "set_node":
+                nref = _ref_of(str(raw.get("node") or ""))
+                if not nref:
+                    results.append({"op": op, "status": "failed", "ref": "",
+                                    "detail": "", "error": f"节点 `{raw.get('node')}` 找不到引用"})
+                    continue
+                props = _normalize_node_props(raw.get("properties"))
+                # ⚠ **缺口 #2（2026-10-07 修）——本批新加节点的属性名白名单，核在这里**：
+                #   预校验阶段那些节点还不存在（见那一支的说明）⇒ 那时核不了。现在它**已经建出来了**
+                #   （上面 `add_node` 那一支刚跑过），所以**在写之前**真问一次 `list_properties`：
+                #   名字不在返回里 ⇒ **这个 op 不写**、如实报 `failed`。
+                #   ⚠ 为什么是"逐 op 拒"而不是"整批不执行"：整批已经开写了（`add_node` 已经真建了），
+                #     回头撤不掉 —— 所以这里只保证"**这一条不静默写坏**"，并在报文里说清。
+                #   ⚠ 在-图里-已存在的节点**不在这里核**（预校验阶段已经核过一遍，别白花官方调用）。
+                # ⚠ **2026-10-07 修（真跑撞出来的）**：这里原来写的是 `in aliases` —— 那是**校验层**
+                #   的变量名，**写阶段根本没有它** ⇒ `NameError: name 'aliases' is not defined`
+                #   （报文里只剩一句没有正文的 `Error executing tool`；完整栈在 harness 日志里）。
+                #   写阶段对应的名字是 **`alias_ref`**（`as` 别名 → 真引用，`add_node` 执行时写入）。
+                #   ⚠ 区别如实说：`alias_ref` 只装**本批已经执行过的** `add_node` 的别名 ——
+                #     若 `set_node` 引用了**更晚**才 add 的别名，`_ref_of()` 会先判"找不到引用"，
+                #     如实报 failed（不会静默写坏）。
+                if str(raw.get("node") or "").strip() in alias_ref:
+                    calls += 1
+                    try:
+                        listed = await call_official(ctx, "list_properties",
+                                                    {"instance": {"refPath": nref}},
+                                                    toolset=TS_OBJECT)
+                    except ToolError as exc:
+                        results.append({"op": op, "status": "failed", "ref": nref, "detail": "",
+                                        "error": f"`list_properties` 失败（{exc}）—— "
+                                                 "属性名没核过，**不写**"})
+                        continue
+                    # ⚠ 同一支判据 `_property_names()`（别在这儿再写一份 —— 那正是这个 bug 的老家）
+                    have = _property_names(listed)
+                    unknown = sorted(k for k in props if k not in have)
+                    if unknown:
+                        results.append({
+                            "op": op, "status": "failed", "ref": nref, "detail": "",
+                            "error": f"**本批新加的节点**上，属性 {unknown} **不在** "
+                                     f"`list_properties` 的返回里（这块节点上是："
+                                     f"{'、'.join(sorted(have)) or '一个都没有'}）—— 官方写死："
+                                     "跳过 `list_properties` 的 `set_properties` 会**静默失败** ⇒ 不写"})
+                        continue
+                calls += 1
+                await call_official(ctx, "set_properties", {
+                    "instance": {"refPath": nref},
+                    "values": json.dumps(props, ensure_ascii=False)},
+                    toolset=TS_OBJECT)
+                wrote = True
+                # ⚠ **写后读回值本身**（2026-10-07 用户定 A 案：接官方 `get_properties`）——
+                #   ✅ **实测 2026-10-07**（用户重启后真跑一批 `set_node`，目标 `M_Car`）：
+                #     `op_rows` 出了 `写了 parameterName=BaseColor、defaultValue=[0.65, 0.06, 0.06, 1]
+                #     → 读回 parameterName=BaseColor、defaultValue=[0.65, 0.06, 0.06, 1]`
+                #     （标量那条是 `写了 defaultValue=0.4 → 读回 defaultValue=0.4`），
+                #     批次总结 `值核过 2 个 set_node`，`official_calls` 12（= 原 10 + 每条 `set_node` 各 1）。
+                #   这一段原来**没有**：这一档只核「节点数 + 连线」，于是"值到底写进去没有"
+                #   没人问 —— 「向量参数写不进去」那个 BUG 就是靠这个盲区瞒过 12 个 `status: ok` 的。
+                #   判据与三档语义都在 `_read_back_node_props()` 里（唯一一处）。
+                verdict, vdetail, verr, vused = await _read_back_node_props(ctx, nref, props)
+                calls += vused
+                if verdict == "ok":
+                    value_ok += 1
+                elif verdict == "mismatch":
+                    value_bad.append(str(raw.get("node") or nref))
+                else:
+                    value_unknown.append(str(raw.get("node") or nref))
+                results.append({"op": op,
+                                "status": ("failed" if verdict == "mismatch" else "ok"),
+                                "ref": nref,
+                                "detail": vdetail or f"写了 {sorted(props)}",
+                                "error": verr})
+            elif op == "connect":
+                fref, tref = _ref_of(str(raw.get("from") or "")), _ref_of(str(raw.get("to") or ""))
+                if not (fref and tref):
+                    results.append({"op": op, "status": "failed", "ref": "",
+                                    "detail": "", "error": "from / to 有取不到引用的"})
+                    continue
+                calls += 1
+                await call_official(ctx, "connect_expressions", {
+                    "from_expression": {"refPath": fref},
+                    "from_output_name": str(raw.get("output") or ""),
+                    "to_expression": {"refPath": tref},
+                    "to_input_name": str(raw.get("input") or "")}, toolset=TS_MATERIAL)
+                wrote = True
+                # ⚠ **2026-10-07 加：expression→expression 这条也要读回**（文档「待核实」第 3 条
+                #   核实结果：**读回只核了 `connect_output`**，这条从来没核过 ⇒
+                #   "改了没生效"在这一路上不会被发现）。记下三元组，批次末尾统一核。
+                connected_expr.append((str(raw.get("to") or ""), str(raw.get("input") or ""),
+                                       str(raw.get("from") or "")))
+                results.append({"op": op, "status": "ok", "ref": fref,
+                                "detail": f"{raw.get('from')}.{raw.get('output')} → "
+                                          f"{raw.get('to')}.{raw.get('input')}", "error": ""})
+            elif op == "connect_output":
+                fref = _ref_of(str(raw.get("from") or ""))
+                prop = str(raw.get("property") or "")
+                if not fref:
+                    results.append({"op": op, "status": "failed", "ref": "",
+                                    "detail": "", "error": f"`{raw.get('from')}` 找不到引用"})
+                    continue
+                calls += 1
+                await call_official(ctx, "connect_to_output", {
+                    "expression": {"refPath": fref},
+                    "output_name": str(raw.get("output") or ""),
+                    "material_property": (prop if prop.startswith("MP_") else f"MP_{prop}")},
+                    toolset=TS_MATERIAL)
+                wrote = True
+                connected.append((prop if prop.startswith("MP_") else f"MP_{prop}",
+                                  str(raw.get("from") or "")))
+                results.append({"op": op, "status": "ok", "ref": fref,
+                                "detail": f"{raw.get('from')}.{raw.get('output')} → {prop}",
+                                "error": ""})
+            elif op == "disconnect":
+                nref = _ref_of(str(raw.get("node") or ""))
+                if not nref:
+                    # ⚠ 2026-10-07：**空引用绝不递给官方**（文档实测那次报的是
+                    #   `None is not valid value for property 'expression'` —— 那种错看不出是"节点没找到"）。
+                    results.append({"op": op, "status": "failed", "ref": "",
+                                    "detail": "", "error": f"`{raw.get('node')}` 找不到引用"})
+                    continue
+                calls += 1
+                # ⚠ 官方真名是 `disconnect_expressions`（入参 `to_expression` + `to_input_name`）
+                #   —— 2026-10-04 对照 `describe_toolset` **实证**改：原先写的
+                #   `disconnect_expression_input` 这个工具**根本不存在**（编的名字 = 运行时必然报"没有这个工具"）。
+                await call_official(ctx, "disconnect_expressions", {
+                    "to_expression": {"refPath": nref},
+                    "to_input_name": str(raw.get("input") or "")}, toolset=TS_MATERIAL)
+                wrote = True
+                results.append({"op": op, "status": "ok", "ref": nref,
+                                "detail": f"断开了 {raw.get('input')}", "error": ""})
+            elif op == "disconnect_output":
+                prop = str(raw.get("property") or "")
+                calls += 1
+                # ⚠ 官方真名是 `disconnect_from_output`，且入参键是 `material`（**不是** `material_or_function`）
+                await call_official(ctx, "disconnect_from_output", {
+                    "material": {"refPath": to_object_path(target)},
+                    "material_property": (prop if prop.startswith("MP_") else f"MP_{prop}")},
+                    toolset=TS_MATERIAL)
+                wrote = True
+                results.append({"op": op, "status": "ok", "ref": target,
+                                "detail": f"断开了 {prop} 这个输出", "error": ""})
+            elif op == "delete_node":
+                nref = _ref_of(str(raw.get("node") or ""))
+                if not nref:
+                    # ⚠ 2026-10-07：原来是**直接把空引用递过去** —— 官方报
+                    #   `Parameter error: None is not valid value for property 'expression'.`
+                    #   （文档实测），而人从那条错里读不出"其实是节点没找到"。
+                    results.append({"op": op, "status": "failed", "ref": "",
+                                    "detail": "", "error": f"`{raw.get('node')}` 找不到引用"})
+                    continue
+                calls += 1
+                # ⚠ `delete_expression` 必填**两个**入参：`material_or_function` + `expression`
+                await call_official(ctx, "delete_expression",
+                                    {"material_or_function": {"refPath": to_object_path(target)},
+                                     "expression": {"refPath": nref}}, toolset=TS_MATERIAL)
+                wrote = True
+                results.append({"op": op, "status": "ok", "ref": nref,
+                                "detail": "删掉了这个节点", "error": ""})
+            elif op == "delete_unused":
+                # ⚠ **2026-10-07 用户指令「1」接进来的官方现成工具**（原话方向：「官方都是有工具的，
+                #   你别自创什么工具」）—— `MaterialTools.delete_unused_expressions`：
+                #   **一次删光所有没接到任何输出的游离节点**。原来清 `M_Car` 那 3 个是手工
+                #   `delete_node`×3（还得先自己 `list_nodes` 认出谁是游离的）。
+                # ⚠ 它**不触发重编译**（官方 docstring 原文）—— 本批末尾那次自动 `recompile` 补上。
+                # ⚠ 删的是**哪些**由官方判（"有没有接到输出"是它的判据，不是我们另算一份）⇒
+                #   所以本 op **不接受节点参数**；删了谁由批次末尾的读回**按名字**报出来。
+                calls += 1
+                await call_official(ctx, "delete_unused_expressions",
+                                    {"material": {"refPath": to_object_path(target)}},
+                                    toolset=TS_MATERIAL)
+                wrote = True
+                results.append({"op": op, "status": "ok", "ref": target,
+                                "detail": "清掉了游离节点（官方 `delete_unused_expressions`）—— "
+                                          "删了谁看批次末尾的读回", "error": ""})
+            elif op == "layout":
+                # ⚠ **2026-10-07 用户指令「不是还有个整理节点的吗，也接到对应位置」接的** ——
+                #   官方 `MaterialTools.layout_expressions`：**自动把所有节点摆整齐**。
+                #   为什么它单列一类（`_MAT_OPS_LAYOUT`）：它只改**节点在编辑器里的位置**
+                #   （`materialExpressionEditorX/Y`），**跟 shader 无关** ⇒ **不该**触发本档那次
+                #   自动 `recompile`（白花时间，还可能因为别的 shader 报错把这次"整理"整批判红）。
+                #   ⚠ 入参是 `material_or_function` —— Material **和** MaterialFunction 都吃
+                #   （这一点比 `delete_unused` 宽）。
+                #   ⚠ **本档核不了它的结果**：官方那个工具"Returns nothing"（什么都不回），
+                #     而位置要逐个节点读（`get_properties` 一次只吃一个 instance）⇒ 本档读回只核
+                #     **节点数 / 连线 / 值**（`read_back` 里那一句说的就是这个范围）。
+                #     位置有没有变，**去 UE 里看**（那两个属性名是实测可读的，见本节顶部注释）。
+                calls += 1
+                await call_official(ctx, "layout_expressions",
+                                    {"material_or_function":
+                                     {"refPath": to_object_path(target)}}, toolset=TS_MATERIAL)
+                wrote = True
+                laid_out = True
+                results.append({"op": op, "status": "ok", "ref": target,
+                                "detail": "排版了节点（官方 `layout_expressions`）—— "
+                                          "⚠ 位置本档核不了，去 UE 里看", "error": ""})
+            elif op == "recompile":
+                calls += 1
+                await call_official(ctx, "recompile",
+                                    {"material_or_function":
+                                     {"refPath": to_object_path(target)}}, toolset=TS_MATERIAL)
+                wrote = True
+                results.append({"op": op, "status": "ok", "ref": target,
+                                "detail": "重编译了", "error": ""})
+        except ToolError as exc:
+            results.append({"op": op, "status": "failed", "ref": "",
+                            "detail": "", "error": str(exc)})
+
+    # ---- 读回核对（只有真写过的批次才核）------------------------------------------------------
+    read_back = ""
+    if not wrote:
+        read_back = "这一批**没有写 op**（全是只读）—— 没有需要读回的东西。"
+    else:
+        try:
+            calls += 1
+            got = await call_official(ctx, "get_expressions",
+                                      {"material_or_function":
+                                       {"refPath": to_object_path(target)}}, toolset=TS_MATERIAL)
+            now_nodes = _resolve_expression_refs(got)
+            parts = [f"节点现在 {len(now_nodes)} 个（批前 {len(existing)} 个）"]
+            ok_all = True
+            # ⚠ **2026-10-07 加：删了"谁"要按名字报**（只报"少了 3 个"读不出删的是不是你想删的）——
+            #   拿批前那份枚举减一下就有，不额外花官方调用。`delete_unused`（官方按"接没接到输出"
+            #   自己判该删哪些）尤其需要这一条：它删的范围不是我们点名的。
+            _gone = sorted(n for n in existing if n not in now_nodes)
+            if _gone:
+                parts.append("删掉了 " + "、".join(_gone))
+            # ⚠ **本批跑过 `layout` 就要点名"它的结果没核"** —— 否则上面那句"读回核对：…"会被
+            #   读成"排版成功了"。官方 `layout_expressions` 什么都不回，位置只能逐个节点读。
+            if laid_out:
+                parts.append("⚠ `layout` 只核了**别的**（节点数 / 连线 / 值）—— "
+                             "**节点位置本档核不了**，排版对不对去 UE 里看")
+            # ⚠ 2026-10-07（用户定 A 案）：`set_node` 的**值**也核了（每一条 op 自己读回，见
+            #   `_read_back_node_props`）—— 这里把账并进总结，免得"核没核过值"要去逐条翻 op_rows。
+            if value_ok or value_bad or value_unknown:
+                _vt = f"值核过 {value_ok} 个 `set_node`"
+                if value_unknown:
+                    _vt += f"、{len(value_unknown)} 个**没核成**（{value_unknown}）"
+                if value_bad:
+                    _vt += f"、⚠ {len(value_bad)} 个**读回不是写进去的**（{value_bad}）"
+                    ok_all = False
+                parts.append(_vt)
+            for prop, aname in connected:
+                calls += 1
+                gi = await call_official(ctx, "get_property_input", {
+                    "material": {"refPath": to_object_path(target)},
+                    "material_property": prop}, toolset=TS_MATERIAL)
+                want = _ref_of(aname) or alias_ref.get(aname, "")
+                gotref = _ref_path(gi) if isinstance(gi, dict) else ""
+                if want and gotref and gotref != want:
+                    ok_all = False
+                    parts.append(f"`{prop}` 读回的**不是**我们连的那个（读回 {gotref}）")
+                elif not gotref:
+                    ok_all = False
+                    parts.append(f"`{prop}` **读回是空的** —— 读不回 = 没核成（不是没问题）")
+                else:
+                    parts.append(f"`{prop}` 接上了")
+            # ⚠ **2026-10-07 加：`connect`（expression → expression）也核**（文档「待核实」第 3 条）。
+            #   判据：读 `get_expression_inputs(target, to 节点)`，看**那个 input 槽**上挂的是不是
+            #   `from` 那个节点 —— 官方 `get_expression_inputs` 的返回里每项带
+            #   `input_name` / `expression`（`_ref_path` 解包后就是 refPath）。
+            for to_name, input_name, from_name in connected_expr:
+                tref = _ref_of(to_name) or alias_ref.get(to_name, "")
+                want = _ref_of(from_name) or alias_ref.get(from_name, "")
+                if not tref:
+                    ok_all = False
+                    parts.append(f"`{to_name}` 的输入 `{input_name}` **没核成**（找不到那个节点的引用）")
+                    continue
+                calls += 1
+                try:
+                    ins = await call_official(ctx, "get_expression_inputs", {
+                        "material_or_function": {"refPath": to_object_path(target)},
+                        "expression": {"refPath": tref}}, toolset=TS_MATERIAL)
+                except ToolError as exc:
+                    ok_all = False
+                    parts.append(f"`{to_name}.{input_name}` **没核成**（`get_expression_inputs` 失败：{exc}）")
+                    continue
+                hit = ""
+                for it in (ins or []):
+                    if not isinstance(it, dict):
+                        continue
+                    if str(it.get("input_name") or "") != input_name:
+                        continue
+                    hit = _ref_path(it) or _ref_path(it.get("expression") if isinstance(it, dict) else None)
+                if not hit:
+                    ok_all = False
+                    parts.append(f"`{to_name}.{input_name}` **读回是空的** —— 读不回 = 没核成（不是没问题）")
+                elif want and hit != want:
+                    ok_all = False
+                    parts.append(f"`{to_name}.{input_name}` 读回的**不是**我们连的那个（读回 {hit}）")
+                else:
+                    parts.append(f"`{to_name}.{input_name}` 接上了")
+            read_back = ("读回核对：" + "；".join(parts)
+                         + ("。" if ok_all else " ⚠ **有对不上的**（见上）。"))
+        except ToolError as exc:
+            read_back = (f"⚠ **读回核对失败**（{exc}）—— 这一批**没核成**"
+                         "（不许把「没读到」说成「没问题」）。")
+    return results, [], read_back, calls
 
 
 @mcp.tool()
 async def create_surfaces(
     ctx: Context[AppContext],
     only: Annotated[list[str], Field(
-        description=("只建这几个**包路径**（如 `[\"/Game/UEMCP/Materials/M_Road\"]`）；"
-                     "留空 = 建 `create` 段里的全部（**已存在的一律跳过**，幂等）"))] = [],
-    dry_run: Annotated[bool, Field(
-        description=("true = 只算「会建哪些材质 / 连哪几个输出」并逐个 `exists()` 验一遍，"
-                     "**一个字节都不写**（先看一遍再动手用这个）"))] = False,
+        description=("`mode=\"create\"`：只建这几个**包路径**（如 `[\"/Game/UEMCP/Materials/M_Road\"]`）；"
+                     "留空 = 建材质清单里**待自建**的那些 + `create` 段里的全部"
+                     "（**已存在的一律跳过**，幂等）。"
+                     "⚠ 点名的可以是**材质**、也可以是**材质实例**（带 `parent` 的那条），"
+                     "按包路径匹配、不看类型"))] = [],
+    # ⚠ 2026-10-04 用户指令：**删掉演练这一步**（原话「把演练这一步删掉，不需要演练」）——
+    #   原来的 `dry_run` 形参已整段移除，本工具**一调就是真做**。
+    mat_mode: Annotated[str, Field(
+        description=("这一趟做哪一档（**默认 `create`，旧行为不变**）：\n"
+                     "· `create` —— 建材质清单里标了 `missing_self_build` 的（第 ⑤ 步）+ "
+                     "`create` 段里的配方；\n"
+                     "· `tune` —— 对**已存在**的材质 / 材质实例读-改-写参数（第 ⑨ 步）；\n"
+                     "· `ops` —— 材质图编辑**原语**（每次调用 = 一批，整批校验）"))] = "create",
+    tune: Annotated[dict | None, Field(
+        description=("⚠ **只给 `mode=\"tune\"` 用**（第 ⑨ 步：调已有材质 / 材质实例的参数）："
+                     "`{\"<包路径>\": {\"<参数名>\": 值}}`。值定类型：数字⇒Scalar、4 元数组⇒Vector、"
+                     "字符串且该资产 `exists()`⇒Texture、true/false⇒StaticSwitch。"
+                     "⚠ 参数名**必须先在** `list_parameters` 的返回里出现过，否则**拒收**；"
+                     "先读现值（同值跳过）→ 写 → **读回核对**；台账记**旧值**（可回滚）；"
+                     "静态开关会**触发 shader 重编译** ⇒ 逐条串行"))] = None,
+    # ⚠ **2026-10-07 加**（用户实测反馈：「你在调节为蓝色时**没有视角锁定到跑车**，我根本察觉不到
+    #   你改了它」）—— 第 ⑨ 步的验收就是"用户看得见改了哪儿"，所以**默认开**。
+    #   形参默认 `None` = **没传** ⇒ tune 档按 `True`（本档默认），别的档显式传 ⇒ 当场拒收
+    #   （"参数不许被静默吞掉"）。
+    focus: Annotated[bool | None, Field(
+        description=("⚠ **只给 `mode=\"tune\"` 用**：调完**切到那些物体的视角 + 选中高亮**"
+                     "（官方 `FocusOnActors` + `SelectActors`）—— 第 ⑨ 步「用户得看得见改了哪儿」。"
+                     "**默认开**（不传就是开）；显式传 `false` 才关。⚠ Actor 从**搭建台账**按 "
+                     "`element_key` 取（不按名字猜）；台账缺失 / 跨图 / **PIE 激活**（官方原文："
+                     "`FocusOnActors` 在 PIE 时不能调）⇒ **切不了就如实报在 warnings 里**"))] = None,
+    focus_max: Annotated[int | None, Field(
+        description=("⚠ **只给 `mode=\"tune\"` 用**：最多聚焦几个（默认 3）—— 一次聚焦几十个的话"
+                     "用户**只看得见最后一个**，那等于没切"), ge=0, le=200)] = None,
+    ops: Annotated[list[dict] | None, Field(
+        description=("⚠ **只给 `mode=\"ops\"` 用**（材质图编辑原语，**每次调用 = 一批**）：\n"
+                     "读：`{\"op\":\"list_params\"}` / `list_nodes` / "
+                     "`{\"op\":\"list_classes\",\"search\":\"Texture\"}` / "
+                     "`{\"op\":\"get_output\",\"property\":\"BaseColor\"}` / "
+                     "`{\"op\":\"get_inputs\",\"node\":…}` / `{\"op\":\"list_slots\",\"mesh\":\"/Game/…\"}`；\n"
+                     "写：`{\"op\":\"add_node\",\"class\":\"MaterialExpressionTextureSample\","
+                     "\"x\":…,\"y\":…,\"as\":\"tex\"}` / `{\"op\":\"set_node\",\"node\":\"tex\","
+                     "\"properties\":{…}}` / `{\"op\":\"connect\",\"from\":\"tex\",\"output\":\"RGB\","
+                     "\"to\":\"mul\",\"input\":\"A\"}` / `{\"op\":\"connect_output\",\"from\":\"tex\","
+                     "\"output\":\"RGB\",\"property\":\"BaseColor\"}` / `{\"op\":\"disconnect\","
+                     "\"node\":…,\"input\":…}` / `{\"op\":\"disconnect_output\",\"property\":…}` / "
+                     "`{\"op\":\"delete_node\",\"node\":…}` / `{\"op\":\"delete_unused\"}`"
+                     "（官方 `delete_unused_expressions`：**一次删光游离节点**） / "
+                     "`{\"op\":\"layout\"}`（官方 `layout_expressions`：**自动排版节点**） / "
+                     "`{\"op\":\"recompile\"}`。"
+                     "⚠ **写之前整批校验，任一条不过 ⇒ 一个 op 都不执行**；"
+                     "⚠ **每个 `set_node` 写完会用官方 `get_properties` 把值读回来核**"
+                     "（`写了 X → 读回 Y`；对不上 ⇒ 这条判 `failed`，读不回来 ⇒ 记「没核成」）"))] = None,
+    mat_target: Annotated[str, Field(
+        description=("⚠ **只给 `mode=\"ops\"` 用**：要编辑的材质 / 材质函数 / 材质实例的**包路径**"
+                     "（如 `/Game/…/M_Road`）。⚠ `connect_to_output` / `get_property_input` 的入参"
+                     "类型是 `/Script/Engine.Material` ⇒ 对 **MaterialFunction** 用它们**可能不被支持**，"
+                     "遇到会**如实报**，不硬凑"))] = "",
 ) -> CreateSurfacesReport:
     """
-    【场景⑤ 表面与环境】什么时候用我：材质表指向的材质**还不存在**时（那会让 `apply_surfaces` 整批拒收 → 白模）—— 我按配置把它们建出来。阶段五 · **第 0 步**：把 `config/surface_materials.json` 的 `create` 段里、**当前还不存在**的材质建出来。
-    
-    为什么要有它：`apply_surfaces()` 只能贴**已存在**的材质 —— 现场那 6 个 `/Game/UEMCP/Materials/M_*`
-    工程里没有 → 它逐个 `exists()` 不过 → **整批拒收、一个都不贴**（结果就是白模）。
-    缺的这一半（**建材质**）官方本来就有工具（`MaterialTools`：`create_material` /
-    `add_expression` / `connect_to_output` / `recompile`）—— **缺的是编排**。
+    【场景⑤ 表面与环境】什么时候用我：缺材质要建、要调已有材质实例的参数、要改材质图时 —— 三档都在我这儿。**阶段五 · 第 ⑤ 步（建待自建）· 第 ⑨ 步（调参数）· 材质图原语**。
 
-    它做什么（一条一条，**顺序不能反**）：
-      ① 读 `create` 段（每次重读，改配置不用改代码、不用重启）；**整批校验**：
-         有任意一条不合法（参数名不在允许集 / 值不是数字或 4 元数组 / 路径不是包路径）⇒
-         **拒收，一个都不建**（与 `apply_surfaces` / `confirm_assets` 同一条纪律）；
-      ② 逐个 `exists()`：**已存在 = 跳过**（幂等，绝不覆盖你已有的材质）；
-      ③ 建：`create_material` → 每个参数 `add_expression`（向量 / 标量参数节点）+
-         `set_properties`（参数名 + 默认值）+ `connect_to_output`（连到 `MP_<键名>`）→
-         `_flags`（`twoSided` / `blendMode` 这类材质开关）→ `recompile`；
-      ④ **读回核对**：`list_parameters`（参数在不在）+ `get_property_input`（输出接上没）——
-         对不上的**原地报出来**（`items[].error`），不掩饰；
-      ⑤ 落台账 `views/surface_materials_v1.json`（**我们建了什么**，给回滚/追查用）。
+    ⚠ **没有演练这一步**（2026-10-04 用户指令：「把演练这一步删掉，不需要演练」）：
+      本工具**一调就是真做**（原 `dry_run` 形参已删除）。三档的闸门一条都没放松
+      （整批校验不过 ⇒ 一个字节都不写、先读现值、写后读回、台账记旧值），
+      所以稳妥的用法是**缩小范围**：`only=[…]` 点名几条、或 `tune={…}` 只给一个参数。
 
-    ⚠ **只建"空材质 + 几个参数节点"**，不是材质图：要贴图 / 混合 / 蒙版请你在 UE 材质编辑器里做，
-      再把路径填进 `materials` 段（那才是 `apply_surfaces` 用的那张表）。
-    ⚠ **绝不存盘**（阶段五纪律）：新建的材质**只在内存里** —— 切关卡 / 关编辑器就没了，
-      建完请你在 UE 里按 **Ctrl+S**。
+    三档（`mode`，**默认 `create` = 2026-10-04 之前的行为**）：
+
+    **`mode="create"`（默认，第 ⑤ 步）** —— 把**缺的材质 / 材质实例**建出来：
+      ① 读**材质清单**里标了 `missing_self_build` 的行（**白膜**搜不到材质和实例的那些 ——
+         用户口径：「是白膜还是保留原来的，搜不到材质或者材质实例就标记待自建」）+
+         `config/surface_materials.json` 的 `create` 段（**建法配方表**，键 = 要建的包路径）；
+         ⚠ 清单里有、但 `create` 段里**没有配方**的 ⇒ **不猜怎么建**，逐条点名（并说明怎么补配方）；
+         ⚠ 标了**无**（`none`）的行 —— **非白膜**（别人建好的资产）问完确实没有材质的那些 ——
+         **直接跳过**：别人的资产我们**不去给它造材质 / 实例**；本档不报错、也不建。
+      ② 读配方（每次重读，改配置不用改代码、不用重启）；**整批校验**：
+         有任意一条不合法（参数名不在允许集 / 值不是数字或 4 元数组 / 路径不是包路径 /
+         **一条里同时给了 `parent` 与材质输出键** / **给了 `_flags` 而这条是 MI** /
+         **`parent` 不存在**）⇒ **拒收，一个都不建**（与 `apply_surfaces` / `confirm_assets`
+         同一条纪律）；
+      ③ 逐个 `exists()`：**已存在 = 跳过**（幂等，绝不覆盖你已有的材质）；
+      ④ **按这条里有没有 `parent` 分两条路**（2026-10-04 加第二条 —— 用户口径
+         「建材质和材质实例直接合并」）：
+         · **不带 `parent`** ⇒ 建**材质**：`create_material` → 每个参数 `add_expression`
+           （向量 / 标量参数节点）+ `set_properties`（参数名 + 默认值）+
+           `connect_to_output`（连到 `MP_<键名>`）→ `_flags` → `recompile`；
+         · **带 `parent`** ⇒ 从那个父级（**官方 `parent` 类型是 `MaterialInterface`** ⇒
+           父级**可以是 M，也可以是 MI**，后者就是"派生"）建**材质实例**：
+           `MaterialInstanceTools.create(folder_path, asset_name, parent)` →
+           这条里其余**非 `_` 键 = 要覆盖的参数**（数字 ⇒ Scalar / 4 元数组 ⇒ Vector /
+           字符串 ⇒ Texture（值要 `exists()`）/ true|false ⇒ StaticSwitch）；
+           **参数名只认** `list_parameters(父级)` 的返回（不在里面 ⇒ 拒收，不许猜）→
+           逐个 **先 `get_*` 读现值 → 同值跳过（幂等）→ `set_*` → 读回核对**；
+           ⚠ **MI 没有材质图** ⇒ 一条里同时给 `parent` 与材质输出键会被**拒收**（说清为什么）；
+      ⑤ **读回核对**：材质查 `list_parameters`（参数在不在）+ `get_property_input`（输出接上没）；
+         MI 查 `exists()`（建出来了没有）+ 每个覆盖参数的 `get_*` ——
+         对不上的**原地报出来**（`items[].error`），不掩饰（**读不回 ≠ 没问题**）；
+      ⑥ 落台账 `views/surface_materials_v1.json` 的 `created` 段（每条记 `kind` / `parent`；
+         我们建了什么，给回滚用）。
+      ⚠ 建完**本工具不自动存盘**；第 ⑦ 步「用户满意就保存」那次才存（`apply_surfaces(save=true)`
+        或你在 UE 里 Ctrl+S）。
+      ⚠ 报文**分档报数**：`materials_created` / `instances_created` 与各自的 `*_already`
+        （建了几块 Material、几个 MI、各自幂等跳过几个），不用一个含糊的总数糊过去。
+
+    **`mode="tune"`（第 ⑨ 步）** —— 对**已存在**的材质 / 材质实例**读-改-写**参数：
+      `create_surfaces(tune={"/Game/…/MI_X": {"Roughness": 0.8, "BaseColor": [..4 个数..]}})`
+      · 闸门：目标 `exists()` → 参数名**只认** `list_parameters` 的返回（不在里面 ⇒ **拒收**）
+        → **先读现值**（同值**跳过**，幂等）→ 写 → **读回核对**（读不回 = 如实报）；
+      · 台账 `tuned` 段**记旧值** —— 那是**回滚依据**；
+      · ⚠ StaticSwitch 会**触发 shader 重编译**（官方原文）⇒ 逐条**串行**、逐条报；
+      · ✅ **调完自动「切到那个物体视角 + 选中高亮」**（`focus` 默认开）—— 判据是
+        **用户得看得见改了哪儿**（2026-10-07 用户实测反馈：「你在调节为蓝色时**没有视角锁定到
+        跑车**，我根本察觉不到你改了它，你说变成了蓝色我才去找到它」）。Actor 从**搭建台账**
+        按 `element_key` 取（不按名字猜）；台账缺失 / 跨图 / PIE 激活 ⇒ **切不了就如实报**。
+
+    **`mode="ops"`（材质图编辑原语，用户已选"开放带闸门的原语"）** —— `create_surfaces(mat_target="/Game/…/M_X", ops=[…])`：
+      · **每次调用 = 一批**（只有成批才留得住"整批校验不过 ⇒ 一个 op 都不执行"）；
+      · **写之前整批校验**：目标 `exists()` → 每个 `add_node` 的 `class` 必须在
+        `list_expression_classes(target, search=<类名>)` 的返回里（**拿返回里的 refPath**，
+        不许自己拼路径）→ 每个 `set_node` 的属性名必须在 `ObjectTools.list_properties(node)`
+        的返回里（官方写死：跳过它会**静默失败**）→ `connect*` 引用的别名必须在本批**更早**
+        出现过（或已在图里）；
+      · 写批次**末尾自动 `recompile`**（除非显式写了），然后**读回**（`get_expressions` 比节点数 +
+        **按名字报删掉了谁** + 每个 `connect_output` 用 `get_property_input` 核对）；
+        **读回不是它 = 如实报**；
+      · `delete_unused` = 官方 **`delete_unused_expressions`**（**一次删光游离节点**，
+        官方 docstring 说不触发重编译 ⇒ 由本档末尾那次自动 `recompile` 补）——
+        ⚠ 它**不接受节点参数**：删哪些由官方按"有没有接到输出"自己判，我们**按名字读回**给你看。
+      · `layout` = 官方 **`layout_expressions`**（**自动把所有节点摆整齐**，Material / MaterialFunction
+        都吃）—— ⚠ **它不触发自动 `recompile`**（只改节点在编辑器里的位置、跟 shader 无关；
+        见 `_MAT_OPS_LAYOUT` 那段注释）；⚠ **它的结果本档核不了**（官方那个工具什么都不回，
+        位置要逐个节点读）⇒ 位置对不对**去 UE 里看**。
+      · ⚠ **2026-10-07 加（用户定 A 案）：每个 `set_node` 写完，自动用官方
+        `ObjectTools.get_properties` 把刚写的那些属性**真读回来核值**（`写了 X → 读回 Y`）
+        —— 读回不是它 ⇒ 这条 op 判 `failed`；读不回来 ⇒ 记「没核成」、**不假装核过**。
+        这一档原来只核「节点数 + 连线」，值没人问 —— 「向量参数写不进去」那个 BUG 就是
+        靠这个盲区瞒过 12 个 `status: ok` 的。
+
+    ⚠ 本版建的是**空材质 + 几个参数节点**（`MAT_EXPR_*` 那两个类）；要**复杂的材质图**用
+      `mode="ops"`（官方 `MaterialTools` 22 个工具都在那一档里）；**派生材质实例**给 `create`
+      段那条加 `parent`（官方 `MaterialInstanceTools.create` 的 `parent` 类型是 `Interface`
+      ⇒ **父级可以是 M 或 MI**）—— **这些都不是"做不了"**
+      （2026-10-04 用户原话：「把查实能做的但是说成做不了的全部删掉」）。
     ⚠ **尚未实测**（2026-10-04 写好）：`parameterName` / `defaultValue` 这两个**表达式属性名**
-      是按官方常规命名写的（见顶部 `MAT_PARAM_*` 常量）—— 真跑若报错，官方原文会带出来，
-      改那两个常量即可，**不用改逻辑**。第一次真跑请先 `dry_run=true`。
+      是按官方常规命名写的（见顶部 `MAT_PARAM_*` 常量）；`tune` / `ops` 两档**也还没真跑过**；
+      **`parent` 这条（建 MI）同样尚未实测** —— 它的键名 / 写法照的是本文件 `[完工-17]`
+      （阶段六云 MI，**2026-09-29 真跑过**）那一段，所以"写法有出处、但这一档没跑过"。
+      真跑若报错，官方原文会带出来。
     """
     warns: list[str] = []
     calls = 0
-
-    table, note = _surface_creates()
-    if note:
-        warns.append(note)
-
-    plans: list[dict] = []
-    bads: list[str] = []
-    for path in sorted(table):
-        if only and path not in only:
-            continue
-        item, why = _create_plan_item(path, table[path])
-        (bads if why else plans).append(why or item)
-    if bads:
+    mode_key = str(mat_mode or "create").strip().lower() or "create"
+    if mode_key not in ("create", "tune", "ops"):
         raise ToolError(
-            "拒绝建材质：**配置里有不合法的条目** —— 一个都没建：\n· " + "\n· ".join(str(b) for b in bads)
-            + "\n（形状见 `config/surface_materials.json` 的 `_doc`；参数名必须是官方 "
-              "`EMaterialProperty` 去掉 `MP_` 前缀的那个名字。）")
+            f"`mode` 只认 `create` / `tune` / `ops`，收到 {mat_mode!r} —— "
+            "**一个字节都没写**（不认识的档位当场拒收，不猜你想干什么）。")
 
-    todo: list[dict] = []
-    already: list[str] = []
-    for it in plans:
-        calls += 1
-        got = await call_official(ctx, "exists", {"path": it["path"]}, toolset=TS_ASSET)
-        (already if bool(got) else todo).append(it["path"] if bool(got) else it)
+    # 这一档不该出现的参数：当场拒收（参数不许被静默吞掉 —— AGENTS 2026-10-03 第 6 条）
+    _misplaced: list[str] = []
+    if mode_key != "tune" and tune:
+        _misplaced.append("`tune`（只给 `mode=\"tune\"` 用）")
+    if mode_key != "tune" and focus is not None:
+        _misplaced.append("`focus`（只给 `mode=\"tune\"` 用）")
+    if mode_key != "tune" and focus_max is not None:
+        _misplaced.append("`focus_max`（只给 `mode=\"tune\"` 用）")
+    if mode_key != "ops" and (ops or str(mat_target or "").strip()):
+        _misplaced.append("`ops` / `mat_target`（只给 `mode=\"ops\"` 用）")
+    if mode_key != "create" and only:
+        _misplaced.append("`only`（只给 `mode=\"create\"` 用）")
+    if _misplaced:
+        raise ToolError(
+            f"拒收：`mode={mode_key}` 却传了 " + "、".join(_misplaced)
+            + " —— 这些参数在这一档里**没有任何意义**（**参数不许被吞掉**），"
+              "所以当场拒收（一个字节都没写）。")
 
-    if dry_run:
+    # ---- ⓐ tune：调**清单里那些实例**的参数（第 ⑨ 步）------------------------------------
+    # ⚠ 2026-10-04 晚：**整段实现搬去 `surfaces.py`**，并加了一道**硬拦**（用户 2026-10-04 定）：
+    #   目标**必须是"清单里某一行的靶子"** —— 不在 ⇒ **拒收**，并列出清单里可调的那几块。
+    #   由来：上一个会话真发生过"手一滑把共享母料（Megascans MI）给调了"，而我当时**没有问过用户**。
+    #   闸门其余部分没放松：参数名只认官方 `list_parameters`；类型对不上拒收；先读现值 →
+    #   同值跳过 → 写 → **读回核对**；台账记**旧值**（回滚依据）。
+    # ⚠ **这一档必须包在 `if mode_key == "tune":` 里**（2026-10-04 晚**复查时抓到**）：
+    #   原来这三行是**裸的**（没有 `if`）⇒ 它会对**每一档**都先跑一遍 `tune()` 并 return
+    #   —— `create` 会撞 `tune` 的"空表拒收"、`ops` 永远到不了 ⇒ **`create` / `ops` 两档全废**，
+    #   而报文看起来只是"tune 拒收"（人不容易想到是分派掉了）。回归见预检 ⑫h。
+    if mode_key == "tune":
+        repo = await _surfaces_repo(ctx)
+        # ⚠ **`focus` 的档位判据在这里**（2026-10-07）：`None` = 没传 ⇒ 本档默认**切视角**
+        #   （第 ⑨ 步的验收就是"用户看得见改了哪儿"—— 用户原话：「你在调节为蓝色时**没有视角锁定到
+        #   跑车**，我根本察觉不到你改了它」）；显式给了值又**不是 tune** ⇒ 上面已经拒收。
+        rep = await _surfaces_module().tune(repo, tune,
+                                            focus=(True if focus is None else bool(focus)),
+                                            focus_max=(3 if focus_max is None else int(focus_max)),
+                                            ledger=_load_build_state())
+        return _tune_report(rep)
+
+
+    # ---- ⓑ ops：材质图编辑原语（整批校验；任一条不过 ⇒ 一个 op 都不执行）------------------------
+    if mode_key == "ops":
+        target = _norm_material_path(mat_target)
+        if not target:
+            raise ToolError(
+                "`mode=\"ops\"` 必须给 `mat_target`（要编辑的材质 / 材质函数 / 材质实例的包路径）—— "
+                "**一个 op 都没执行**。")
+        results, bad_o, read_back, used_o = await _run_material_ops(ctx, target, ops)
+        calls += used_o
+        if bad_o:
+            raise ToolError(
+                f"**拒收：整批校验没过 ⇒ 一个 op 都不执行**（{len(bad_o)} 条）：\n  - "
+                + "\n  - ".join(bad_o))
+        if any(r.get("status") == "failed" for r in results):
+            warns.append("⚠ 有 op **没成** —— 逐条原因在 `op_rows[].error` 里（不掩饰）。")
+        warns.append("⚠ `ops` 改的是**材质资产**（材质图）—— 影响所有用它的实例；"
+                     "本工具**不自动存盘**，要留住请在 UE 里按 Ctrl+S。")
+        if "有对不上的" in read_back or "没核成" in read_back:
+            warns.append("⚠ **读回核对没全过** —— 见 `read_back` 那一段（读不回 ≠ 没问题）。")
         return CreateSurfacesReport(
-            stage="阶段五 · 第 0 步（建材质 · 演练）", dry_run=True,
-            planned=len(todo), created=0, already=len(already),
-            items=[CreatedMaterial(path=it["path"], folder=it["folder"], name=it["name"],
-                                   outputs=[p["output"] for p in it["params"]],
-                                   flags=dict(it["flags"]), status="would_create",
-                                   note=str(it["note"])) for it in todo],
-            ledger_path="", official_calls=calls,
-            next_step=(f"演练：会建 {len(todo)} 块材质（已存在 {len(already)} 块，跳过）。"
-                       "要真做就去掉 `dry_run` 重调；⚠ 建完**不会自动存盘**，记得在 UE 里 Ctrl+S。"),
-            warnings=warns + ["演练：**一个字节都没写**（连材质都没建）。"])
+            stage="阶段五 · 材质图编辑原语（一批）",
+            mode="ops", target=target, dry_run=False,
+            # ⚠ 2026-10-04：原来这里按 `status == "dry"` 分过演练档；演练删掉之后
+            #   **一批里每个 op 都真跑**，所以 `planned` 就是这批 op 的条数、`already` 不再有 dry 那档。
+            planned=len(results),
+            created=sum(1 for r in results if r.get("status") == "ok"),
+            already=0,
+            failed=sum(1 for r in results if r.get("status") == "failed"),
+            items=[], official_calls=calls,
+            op_rows=[MaterialOpResult(op=str(r.get("op") or ""), status=str(r.get("status") or ""),
+                                      ref=str(r.get("ref") or ""), detail=str(r.get("detail") or ""),
+                                      error=str(r.get("error") or "")) for r in results],
+            read_back=read_back,
+            next_step=(
+                "看完 `op_rows` 与 `read_back`：对不上就按官方原文修 op 再重跑；"
+                "⚠ 不存盘的话切关卡就没了。"),
+            warnings=warns)
 
-    ledger_prev: list[dict] = []
-    try:
-        _prev = json.loads(SURFACE_CREATE_PATH.read_text(encoding="utf-8-sig"))
-        if isinstance(_prev, dict) and isinstance(_prev.get("created"), list):
-            ledger_prev = list(_prev["created"])
-    except (OSError, ValueError):
-        ledger_prev = []
-
-    items: list[CreatedMaterial] = []
-    created = failed = 0
-    for it in todo:
-        errs: list[str] = []
-        ref = ""
-        try:
-            calls += 1
-            got = await call_official(
-                ctx, "create_material",
-                {"folder_path": it["folder"], "asset_name": it["name"]}, toolset=TS_MATERIAL)
-            ref = _ref_path(got)
-            if not ref:
-                raise ToolError("官方没返回材质引用（建失败）")
-            for i, p in enumerate(it["params"]):
-                calls += 1
-                expr = await call_official(ctx, "add_expression", {
-                    "material_or_function": {"refPath": ref},
-                    "expression_class": {"refPath": (MAT_EXPR_VECTOR if p["kind"] == "vector"
-                                                     else MAT_EXPR_SCALAR)},
-                    "x": -400, "y": 180 * i}, toolset=TS_MATERIAL)
-                eref = _ref_path(expr)
-                if not eref:
-                    raise ToolError(f"加参数节点 `{p['output']}` 没返回引用")
-                raw = ({"r": p["value"][0], "g": p["value"][1], "b": p["value"][2], "a": p["value"][3]}
-                       if p["kind"] == "vector" else p["value"])
-                calls += 1
-                await call_official(ctx, "set_properties", {
-                    "instance": {"refPath": eref},
-                    "values": json.dumps({MAT_PARAM_NAME_PROP: p["output"],
-                                          MAT_PARAM_VALUE_PROP: raw})}, toolset=TS_OBJECT)
-                calls += 1
-                await call_official(ctx, "connect_to_output", {
-                    "expression": {"refPath": eref}, "output_name": "",
-                    "material_property": f"MP_{p['output']}"}, toolset=TS_MATERIAL)
-            if it["flags"]:
-                calls += 1
-                await call_official(ctx, "set_properties", {
-                    "instance": {"refPath": ref}, "values": json.dumps(it["flags"])},
-                    toolset=TS_OBJECT)
-            calls += 1
-            await call_official(ctx, "recompile",
-                                {"material_or_function": {"refPath": ref}}, toolset=TS_MATERIAL)
-        except ToolError as exc:
-            errs.append(str(exc))
-        # 读回核对（建失败就不用核了 —— 那一条已经记了原因）
-        if not errs and ref:
-            try:
-                calls += 1
-                got_params = await call_official(
-                    ctx, "list_parameters", {"material": {"refPath": ref}}, toolset=TS_MATINST)
-                have = {str(x.get("name") or "") for x in (got_params or []) if isinstance(x, dict)}
-                miss = [p["output"] for p in it["params"] if p["output"] not in have]
-                if miss:
-                    errs.append("读回：参数**没建出来**（" + "、".join(miss) + "）")
-                for p in it["params"]:
-                    calls += 1
-                    gi = await call_official(ctx, "get_property_input", {
-                        "material": {"refPath": ref},
-                        "material_property": f"MP_{p['output']}"}, toolset=TS_MATERIAL)
-                    wired = bool(isinstance(gi, dict) and _ref_path(gi.get("expression")))
-                    if not wired:
-                        errs.append(f"读回：输出 `MP_{p['output']}` **没接上**")
-            except ToolError as exc:
-                errs.append(f"读回核对失败（{exc}）—— **这一条没核成**（不是没问题）")
-        if it["flags"]:
-            warns.append(f"⚠ 「{it['name']}」的 `_flags`（{it['flags']}）是**指令值、没读回核对**"
-                         "（本版只读回参数与连线；开关对不对请你在 UE 里看一眼）。")
-        items.append(CreatedMaterial(
-            path=it["path"], folder=it["folder"], name=it["name"],
-            outputs=[p["output"] for p in it["params"]], flags=dict(it["flags"]),
-            status=("ok" if not errs else "failed"), error="；".join(errs), note=str(it["note"])))
-        if errs:
-            failed += 1
-        else:
-            created += 1
-
-    ledger_path = ""
-    if not dry_run:
-        try:
-            save_json(SURFACE_CREATE_PATH, {
-                "stage": "阶段五 · 建材质台账（我们自己的文件；记我们建过哪些材质）",
-                "at": datetime.now(timezone.utc).isoformat(),
-                "note": ("`created` = 本工具**建出来**的材质（路径 + 参数 + 开关）。"
-                         "⚠ 它们**只在 UE 内存里**，存不存盘由用户在编辑器里定；"
-                         "要撤掉就在 UE 里删掉这些资产（我们不改资产、也不删资产）。"),
-                "created": ledger_prev + [
-                    {"path": x.path, "outputs": list(x.outputs), "flags": dict(x.flags),
-                     "status": x.status, "at": datetime.now(timezone.utc).isoformat()}
-                    for x in items if x.status == "ok"],
-            })
-            ledger_path = str(SURFACE_CREATE_PATH)
-        except OSError as exc:
-            warns.append(f"⚠ 台账没写成（{exc}）—— 这次**没留下**「建了什么」的记录。")
-
-    if failed:
-        warns.append(f"⚠ 有 {failed} 块**没建成功 / 没核过** —— 逐条原因在 `items[].error` 里（不掩饰）。")
-    warns.append("**全程未存盘**（阶段五纪律）：新建的材质**只在内存里** —— "
-                 "切关卡 / 关编辑器就没了，请在 UE 里按 **Ctrl+S**。")
-    warns.append("⚠ 建出来的是**空材质 + 参数节点**（不是材质图）；"
-                 "要贴到白膜上，得把路径填进 `config/surface_materials.json` 的 **`materials`** 段"
-                 "（键 = `element_key`，值 = 刚建的包路径），再跑 `apply_surfaces()`。")
-
-    return CreateSurfacesReport(
-        stage="阶段五 · 第 0 步（建材质）", dry_run=False,
-        planned=len(todo), created=created, already=len(already), failed=failed,
-        items=items, ledger_path=ledger_path, official_calls=calls,
-        next_step=(
-            (f"建成 {created} 块、失败 {failed} 块、已存在跳过 {len(already)} 块。"
-             "① **先在 UE 里按 Ctrl+S**（不存盘切关卡就白建）；② 把路径填进 "
-             "`config/surface_materials.json` 的 `materials` 段；③ 跑 `apply_surfaces(dry_run=true)` "
-             "看一遍，再去掉 `dry_run` 真贴。")
-            if created else
-            (f"这次没有材质要建（已存在 {len(already)} 块、计划里 0 块）。"
-             "若你要建新的：往 `create` 段里加一条（形状见该文件 `_doc`），再重调本工具。")),
-        warnings=warns,
-    )
+    # ---- ⓒ create（默认档）：建材质 / 派生实例（第 ⑤ 步）------------------------------------
+    # ⚠ 2026-10-04 晚：**整段实现搬去 `surfaces.py`**，并按用户更正后的口径重写：
+    #   ① **只有 `missing_self_build`（白膜搜不到）才建材质**（配方来自 `create` 段）——
+    #      建完**紧接着给它派生一份实例**（"材质和材质实例都建出来"）；
+    #   ② **有材质、缺实例**（`from_material`）的行：**只派生实例**，父级 = 拿到的那块材质 / 实例；
+    #   ③ 派生完把**父级参数现值读出来、写进新实例当覆盖**（"数值提升为实例参数"）；
+    #   ④ 已有的东西一律**跳过**（幂等）—— 绝不覆盖用户已有的资产；
+    #   ⑤ 标了**无**（`none`）的行**整行跳过**（非白膜、别人建好的资产 —— 我们不去给它造）。
+    #   闸门没放松：整批校验不过 ⇒ 一个字节都不写；参数名只认官方 `list_parameters` 的返回。
+    repo = await _surfaces_repo(ctx)
+    rep = await _surfaces_module().create(repo, only)
+    return _create_report(rep)
 
 
 # --- [完工-06] 工具 2：确认元素清单 ---  【模块：assets】
@@ -6640,6 +8609,49 @@ async def confirm_elements(
 #   ③ 提问文案不再说「跳过这个元素」（用户口径是登记成白膜，不是跳过）。
 # 实测 2026-09-23 12:07（不传参读元素清单）、12:12（keywords=["grass"]）两次调用。
 
+def match_assets_by_keyword(kw: str, inventory: dict,
+                            types: tuple[str, ...] | list[str] | None = None) -> list[FoundAsset]:
+    """**按名字找资产 —— 全工程唯一一份**（资产名 → 逐段文件夹名，同一支排序）。
+
+    ⚠ **2026-10-04 晚从 `plan_assets` 里提出来**（用户指令：「**严格按照第一阶段的代码，
+      能复用就复用**」）：原来这段匹配循环只活在 `plan_assets` 里，阶段五的 `probe` 于是
+      **另写了一份**（裸子串 + 整条文件夹串 + 匹配时就截断）—— 两套判据，同一关键词
+      在两处会给出不同答案。现在**两边都调它**：
+        · 阶段一 `plan_assets`（对元素关键词找资产）；
+        · 阶段五 `probe`（对元素关键词找**材质 / 材质实例**，`types` 收窄成那两类）。
+
+    两条路（缺一不可，阶段一实测）：① 按**资产名**；② 按**文件夹名** ——
+    官方只匹配资产名，哈希名资产（`MI_sjfnch0a`）靠②才捞得回来。
+    匹配判据 = `token_match()`（**词边界**，对冲官方"纯子串"：搜 `Tree` 会命中 `street_lamp`）。
+
+    **返回全部命中**（不截断、**排序**：资产名命中的靠前、路径短的靠前）——
+    要不要只展示前 N 个由**调用方**决定（阶段一的做法：问题里报**真总数**）。
+    """
+    kw_l = str(kw or "").lower().strip()
+    if not kw_l:
+        return []
+    want_types = tuple(types) if types else tuple(inventory.keys())
+    found: list[FoundAsset] = []
+    for type_name in want_types:
+        for p in (inventory.get(type_name) or []):
+            if not isinstance(p, str):
+                continue
+            name = p.rsplit("/", 1)[-1]
+            matched_by, seg = "", ""
+            if token_match(kw_l, name):
+                matched_by = "资产名"
+            else:
+                for part in p.split("/"):
+                    if part and token_match(kw_l, part):
+                        matched_by, seg = "文件夹名", part
+                        break
+            if matched_by:
+                found.append(FoundAsset(name=name, path=p, asset_type=type_name,
+                                        matched_by=matched_by, matched_segment=seg))
+    found.sort(key=lambda a: (a.matched_by != "资产名", len(a.path)))
+    return found
+
+
 @mcp.tool()
 async def plan_assets(
     ctx: Context[AppContext],
@@ -6723,26 +8735,8 @@ async def plan_assets(
 
     for kw in elements_kw:
         kw_l = kw.lower().strip()
-        found: list[FoundAsset] = []
-
-        for type_name, paths in inventory.items():
-            for p in paths:
-                name = p.rsplit("/", 1)[-1]
-                matched_by, seg = "", ""
-                if token_match(kw_l, name):
-                    matched_by = "资产名"
-                else:
-                    for part in p.split("/"):
-                        if part and token_match(kw_l, part):
-                            matched_by, seg = "文件夹名", part
-                            break
-                if matched_by:
-                    found.append(
-                        FoundAsset(
-                            name=name, path=p, asset_type=type_name,
-                            matched_by=matched_by, matched_segment=seg,
-                        )
-                    )
+        # ⚠ 匹配**调那份唯一实现**（`match_assets_by_keyword`，与阶段五 `probe` 共用）
+        found: list[FoundAsset] = match_assets_by_keyword(kw_l, inventory)
 
         for f in [x for x in found if x.asset_type in SIZE_QUERY_TYPES][:max_per_element]:
             try:
@@ -7101,7 +9095,7 @@ async def _asset_row(
         exists = await call_official(
             ctx, "exists", {"path": item.asset_path}, toolset=TS_ASSET
         )
-        ok = exists is True or (isinstance(exists, str) and exists.lower() == "true")
+        ok = _exists_true(exists)
     except ToolError as exc:
         err = str(exc)
 
@@ -7618,9 +9612,7 @@ async def get_asset_list(
                     ctx, "exists", {"path": path}, toolset=TS_ASSET
                 )
                 calls += 1
-                entry.ok = exists is True or (
-                    isinstance(exists, str) and exists.lower() == "true"
-                )
+                entry.ok = _exists_true(exists)
             except ToolError as exc:
                 calls += 1
                 entry.error = str(exc)
@@ -8030,13 +10022,20 @@ def _session_prereq_guard() -> None:
     )
 
 
-def _pending_change_quote() -> str:
-    """**改动窗口里那条「用户原话」** —— 判据只有这一处（`_change_request_guard` 与
-    `generate_plan` 的微调分支**共用**它，不许各写一遍）。
+def _pending_change_quote() -> tuple[str, str]:
+    """**改动窗口里那条「原话」+ 它是谁说的**（`(quote, by)`）—— 判据只有这一处
+    （`_change_request_guard` 与 `generate_plan` 的微调分支**共用**它，不许各写一遍）。
 
     取法：验收台账 `change_window_open` 为真 ⇒ 取**最后一条** `kind == "change_requested"` 事件，
     把它的 `items` 拼成一句（`items` 为空就退它的 `reason`）；窗口关着 / 没有那条事件 / 台账
-    读不动 ⇒ 空串。
+    读不动 ⇒ `("", "")`。
+
+    ⚠ **`by` 必须一起返回**（2026-10-05 加，修一条真缺陷）：那句话可能是 **agent 自己**写的
+      （`request_plan_change(items=["自查：…"], by="agent 自查")` —— 这条路是本项目**鼓励**的，
+      它让「改什么 / 谁要的」有留痕）。但 **「有留痕」≠「用户点头」**：以前这里只回一句字符串，
+      于是自查的话会被 `mark_tuned()` 写成 `confirmed_by=「用户（微调）」`、又被
+      `_precheck_build()` 当"用户原话"放行 ⇒ **系统把 agent 的话洗成了人的确认**。
+      现在由调用方按 `by` 决定"能不能当凭据"（见 `planning.mark_tuned(by=…)` 与 `_precheck_build()`）。
 
     ⚠ **绝不按几何指纹筛** —— 2026-10-04 修的就是这个 bug：`request_plan_change` 记改动要求时
       写进去的指纹是**改之前**那一版的；而这里问的是「这一版**要**改成什么」。
@@ -8050,20 +10049,21 @@ def _pending_change_quote() -> str:
     planning = _planning_modules()
     try:
         acc = planning.load_acceptance()
-    except Exception:                       # noqa: BLE001 —— 台账读不动不拦人（给空串）
-        return ""
+    except Exception:                       # noqa: BLE001 —— 台账读不动不拦人（给"空原话"）
+        return "", ""
     if not isinstance(acc, dict) or not acc.get("change_window_open"):
-        return ""
+        return "", ""
     last: dict | None = None
     for ev in (acc.get("events") or []):
         if isinstance(ev, dict) and str(ev.get("kind") or "") == "change_requested":
             last = ev                      # 取**最后一条**：一轮里可以连着记好几次
     if not last:
-        return ""
+        return "", ""
+    _by = str(last.get("by") or "").strip()
     items = [str(x).strip() for x in (last.get("items") or []) if str(x).strip()]
     if items:
-        return "；".join(items)
-    return str(last.get("reason") or "").strip()
+        return "；".join(items), _by
+    return str(last.get("reason") or "").strip(), _by
 
 
 def _change_request_guard(planning, plan: dict) -> None:
@@ -8100,7 +10100,8 @@ def _change_request_guard(planning, plan: dict) -> None:
         #   记的是 `items` / `reason`，两者都空就等于**什么都没留下** —— 那种情况在这里
         #   **当场拒收**，而不是先落盘成 `awaiting_figure`、让用户白重画两张图之后才发现
         #   取不到原话（2026-10-04 实测撞到的坏路径：`tuned_count` 恒 0）。
-        if not _pending_change_quote():
+        _pq, _pby = _pending_change_quote()
+        if not _pq:
             raise ToolError(
                 "拒收：**改动窗口开着，但台账里那几条改动要求一条可用的原话都没有** —— "
                 "一个字节都没写。\n"
@@ -8108,7 +10109,11 @@ def _change_request_guard(planning, plan: dict) -> None:
                 "　 用户提的 → `request_plan_change(items=[他的原话], by=`用户`)`；\n"
                 "　 你自己发现要修的 → `request_plan_change(items=[`自查：…`], by=`agent 自查`)`。\n"
                 "· 为什么现在拦（而不是落盘之后再说）：拿不到原话，这一版就记不成「微调版」，"
-                "只会被打回「等出图」—— 那就得**白重画两张图**（实测踩过）。")
+                "只会被打回「等出图」—— 那就得**白重画两张图**（实测踩过）。\n"
+                "· ⚠ 记 `by=\"agent 自查\"` **可以**打开窗口（那让 plan 有留痕），但**那不算用户点头** ——"
+                "落关卡时 `_precheck_build()` 会按 `provenance` 拦下它（要落得让他本人开口）。"
+                + (f"\n· 台账里最后那条记录是 **{_pby}** 说的 —— 自查的话可以让 plan 留痕，"
+                   "但**不是用户点头**。" if _pby and _pby != "用户" else ""))
         return                              # 已经记过"要改什么 / 谁要的" → 窗口开着，放行
     new_hash = planning.plan_geometry_hash(plan)
     old: dict | None = None
@@ -8271,7 +10276,11 @@ def _stage2_next_step(plan: dict, acc: PlanAcceptance, empty: bool = False) -> s
         return (
             f"**当前是【四 · 微调】那一版**（{head}**这一次没有图**）—— 依据是 "
             "`confirmation.user_quote`（用户原话）+ `confirmation.rows`（改了哪几行、为什么）。"
-            "下一步：落关卡时**只点名那几行** —— `execute_build(only_labels=[…])`；"
+            "下一步：落关卡时**只动这几行** —— 直接 `execute_build()`（默认增量按 "
+            "`plan↔台账` 差异走，差异就是这一轮被要求改的行）；要再收窄到更少几行就 "
+            "`execute_build(only_labels=[…])`。"
+            "**增行 / 删行 / 换 `element_key`** 这类结构改动**必须不点名**走（点名叫不动它们："
+            "台账里没有那一行）—— 2026-10-07 拆掉「必须点名」那条闸就是为了这个。"
             "**不要重画图、也不要 `confirm_plan`**（那道看图闸只属于前三阶段）。"
             "⚠ 验收方式 = **用户在 UE 里自己看**：要**报数字**给他（例：`Y −33.0 → −32.0`），"
             "别说一句「改好了」。"
@@ -8634,29 +10643,62 @@ def _stage_overview() -> list[dict]:
                    "evidence": e4, "next": n4})
 
     # ---------- ⑤ 表面材质 ----------
-    mat_table, mat_why = _surface_materials()
+    # ⚠ 2026-10-04 晚改：**唯一权威 = 材质清单**（`catalog/material_list.json`，每行只记**材质实例**）。
+    #   原来这里还读一眼已退役的 `config` `materials` 段（那段已从配置里删掉）——
+    #   现在**不再读它**，免得报文里出现"那张表有几个键"这种没有意义的数字。
     cre_table, cre_why = _surface_creates()
-    n_mat = len(mat_table) if isinstance(mat_table, dict) else 0
+    # ⚠ **2026-10-07 修**（用户指令「修吧」；当天**实测撞到**）：这里原来只取 `_material_rows()`
+    #   的**行数** ⇒ 清单**读不动**（文件在、JSON 坏 / 顶层不是对象）与"**没有**清单"
+    #   在报文里长得**一模一样**（都写成"没有签字的材质清单"）—— 而当天那份文件明明在磁盘上。
+    #   按本项目口径「**读不到 ≠ 没有**」：现在把 `_load_material_doc()` 的原因一并带出来
+    #   （行数仍走同一支判据 `manifest_rows_of`，不另算一份）。
+    m_doc, m_why = _load_material_doc()
+    m_rows = _surfaces_module().manifest_rows_of(m_doc)
+    # ⑤ 那一行的"清单这边到底什么状态"—— **只有这一处算**（下面两个分支共用）。
+    _m_state = (
+        "没有签字的材质清单" if not MATERIAL_LIST_PATH.exists() else
+        (f"⚠ **材质清单读不动**（{m_why or '顶层不是对象 / 没有 items'}）—— "
+         f"`{MATERIAL_LIST_PATH.name}` **在磁盘上**，这与「没有清单」是两回事"
+         "（口径：**读不到 ≠ 没有**；修好它再往下走）" if not m_doc else
+         "材质清单在、但**一行都没有**（`items` 是空的）"))
     n_cre = len(cre_table) if isinstance(cre_table, dict) else 0
+    n_mrows = len(m_rows)
+    # "有实例"才是这一阶段的完成判据（用户口径：清单只记材质实例、贴的就是它）
+    n_inst = sum(1 for r in m_rows if _instance_row(r))
+    n_mself = sum(1 for r in m_rows
+                  if str(r.get("status") or "").strip().lower() == MAT_STATUS_SELF_BUILD)
+    n_mpend = sum(1 for r in m_rows
+                  if str(r.get("status") or "").strip().lower() == MAT_STATUS_PENDING)
     led5, led5_why = _safe_json(SURFACE_CREATE_PATH)
     made5 = (led5 or {}).get("created") if isinstance(led5, dict) else None
     made5 = made5 if isinstance(made5, list) else []
-    how5 = ("；".join(x for x in (mat_why, cre_why) if x) if (mat_why or cre_why) else "")
-    if how5:
-        s5, e5 = STAGE_STATE_NOT_STARTED, f"config/surface_materials.json：{how5}"
-        n5 = "先把 materials / create 两段配好（配置读不动时一个元素都不会贴）"
-    elif n_mat or n_cre or made5:
-        s5 = STAGE_STATE_DONE if n_mat else STAGE_STATE_DOING
-        e5 = (f"config/surface_materials.json：materials {n_mat} 个键 / create {n_cre} 个键；"
+    tune5 = (led5 or {}).get("tuned") if isinstance(led5, dict) else None
+    tune5 = tune5 if isinstance(tune5, list) else []
+    if n_mrows:
+        s5 = STAGE_STATE_DONE if (n_inst and not n_mself and not n_mpend) else STAGE_STATE_DOING
+        e5 = (f"材质清单 {MATERIAL_LIST_PATH.name}：{n_mrows} 行（**有材质实例 {n_inst}** / "
+              f"待自建 {n_mself} / 待问用户 {n_mpend}）；建法配方 create 段 {n_cre} 条；"
+              f"调参台账记了 {len(tune5)} 条")
+        n5 = ("把 `pending_user` 那几条逐条问用户 → `apply_surfaces(mode=\"confirm\", …)` 定稿"
+              if n_mpend else
+              ("`create_surfaces()` 把待自建的建出来 → 填回清单 → "
+               "`apply_surfaces(only=[…], focus=true)` 真贴"
+               if n_mself else
+               "`apply_surfaces(only=[…], focus=true)` 真贴 → "
+               "聚焦给用户看 → 满意后 `save=true`；"
+               "第 ⑨ 步 `create_surfaces(mat_mode=\"tune\", tune={…})` 调参数"))
+    elif n_cre or made5:
+        s5 = STAGE_STATE_DOING
+        e5 = (f"{_m_state}；建法配方 `config/surface_materials.json` → create {n_cre} 个键；"
               f"建材质台账 {SURFACE_CREATE_PATH.name} "
               + (f"在（记了 {len(made5)} 块）" if isinstance(led5, dict) else f"不在（{led5_why}）"))
-        n5 = ("create_surfaces() 把缺的材质建出来 → 填进 materials 段 → apply_surfaces() 贴"
-              if n_cre else "apply_surfaces(dry_run=true) 先看一遍，再去掉 dry_run 真贴")
+        n5 = ("**该走材质清单了**：`apply_surfaces(mode=\"probe\")` 对着资产清单找**材质实例** → "
+              "问用户 → `mode=\"confirm\"` 定稿（清单只记材质实例）")
     else:
         s5, e5 = STAGE_STATE_NOT_STARTED, (
-            f"config/surface_materials.json：materials 0 个键 / create 0 个键；"
-            f"建材质台账 {SURFACE_CREATE_PATH.name}（{led5_why}）")
-        n5 = "先在配置里给元素填材质路径（或写 create 段），再 create_surfaces() / apply_surfaces()"
+            f"{_m_state}；建法配方 config/surface_materials.json：create {n_cre} 个键")
+        n5 = ("第 ① 步：`apply_surfaces(mode=\"probe\")` 对着资产清单逐条找材质（没有资产清单会拒收）"
+              + (f"；⚠ create 段读不动：{cre_why}" if cre_why else ""))
     stages.append({"no": 5, "name": STAGE_NAMES_8[4], "state": s5,
                    "evidence": e5, "next": n5})
 
@@ -8736,12 +10778,17 @@ STAGE_OVERVIEW_NOTE = (
 # 为什么单独抽出来：G15（改数据那条闸）与 G16（落关卡那条闸）**认的是同一份报告**
 #   （`views/evaluate_v1.json`）—— 两处各写一遍判据 = 迟早两处会说不同的话。
 def _evaluate_bad_rows(rep: dict) -> list[dict]:
-    """现场对账报告里**非一致**的行（`ok` / `same` / 空 之外的一切）。
+    """现场对账报告里**非一致**的行（`verdict != "ok"` 的一切）。
 
-    ⚠ 判据只有这一份：G15 / G16 都调它。`status` 的取值由 `evaluate_layout()` 写。
+    ⚠ 判据只有这一份：G15 / G16 都调它。
+    ⚠ **键名以报告自己写的 `LayoutRowVerdict` 为准 = `verdict`**（2026-10-04 修 ——
+      原先读的是 `status`，而报告里**根本没有这个键**：`views/evaluate_v1.json` 逐行写的是
+      `"verdict": "drifted"`）。于是 `bad` 恒空 ⇒ 两道闸那句"报告里没有非一致的行"**永远是全绿**，
+      哪怕报告里明明 26 行 drifted —— 正是本项目最忌讳的「**没报 = 没问题**」。
+    ⚠ **缺 `verdict` 的行也算"非一致"**（宁可多提醒一行，也不许把"没读到结论"说成"没问题"）。
     """
     rows = [r for r in (rep.get("rows") or []) if isinstance(r, dict)]
-    return [r for r in rows if str(r.get("status") or "") not in ("ok", "same", "")]
+    return [r for r in rows if str(r.get("verdict") or "").strip().lower() != "ok"]
 
 
 def _evaluate_rows_notice(rep: dict, ok_text: str) -> str:
@@ -8752,7 +10799,7 @@ def _evaluate_rows_notice(rep: dict, ok_text: str) -> str:
     bad = _evaluate_bad_rows(rep)
     if not bad:
         return ok_text
-    show = "；".join(f"「{r.get('label')}」{r.get('status')}" for r in bad[:8])
+    show = "；".join(f"「{r.get('label')}」{r.get('verdict') or '（没读到结论）'}" for r in bad[:8])
     more = f"（还有 {len(bad) - 8} 行）" if len(bad) > 8 else ""
     return ("⚠ 现场对账**不是全绿**（这是放行时的提醒，不是拦）："
             f"{len(bad)} 行与台账 / plan 不一致：{show}{more}。"
@@ -9065,7 +11112,9 @@ _PATCH_BOX_FIELDS = {"label", "element_key", "shape", "pos", "footprint_m",
 给资产行写 `height_m`、给白膜行写 `scale`/`asset_path` 都是**类型不对**的改法，
 不该被静默接受（它们会被 `normalize_*` 或后续阶段当成有效数据读走）。
 ⚠ 资产行的 `scale_z`（Z 方向倍率，2026-09-30 加）= **只拉高 / 压低、占地不动**；
-   白膜行对应的字段是 `height_m`（直接就是高度），所以 `scale_z` **不在**白膜行的白名单里。"""
+   白膜行对应的字段是 `height_m`（直接就是高度），所以 `scale_z` **不在**白膜行的白名单里。
+⚠ 两种行都认 `z_m`：**这一行的底面绝对标高**（米）—— 2026-10-07 用户定案 B 把它从
+   「资产 = 原点标高 / 白膜 = 中心标高」统一成**底面标高**（阶段三自己在它之上推中心 / 原点）。"""
 
 
 def _apply_plan_patch(cur_plan: dict, patch: list) -> tuple[list[dict], list[dict], list[str]]:
@@ -9131,6 +11180,25 @@ def _apply_plan_patch(cur_plan: dict, patch: list) -> tuple[list[dict], list[dic
             row = asset_rows[idx] if where == "asset" else box_rows[idx]
             before = {f: row.get(f) for f in changes}
             row.update(changes)
+            # ⚠ **改名撞车闸**（2026-10-05 加）：`label` 是**匹配键**（`uid = element_key|label`）——
+            #   把一行改成**另一行已有的名字**，会让两行共用一个 uid：逐行签名（按 label 建字典）
+            #   后一条**静默覆盖**前一条 ⇒ 验收基线少一行、而图里只要名字出现过一次就算覆盖
+            #   ⇒ **图里永远看不出漏了一行**；台账 `res_by_uid` 又会按 uid 折叠掉一行的结果。
+            #   改完**立刻**在内存副本上查一次（查到就拒收 ⇒ 一个字节都没写）。
+            #   ⚠ 出口还有第二道（`build_plan()` 装配处，管整表重发那条路），两道都要留。
+            if "label" in changes:
+                _new_lab = str(row.get("label") or "").strip()
+                if not _new_lab:
+                    raise ToolError(
+                        f"补丁第 {k} 条（set）把 `label` 改成了**空** —— label 是匹配键"
+                        "（补丁定位 / 点名重摆都认它），空名字等于这一行以后再也点不到。")
+                _clash = [w for w, j in _hits(_new_lab) if not (w == where and j == idx)]
+                if _clash:
+                    raise ToolError(
+                        f"补丁第 {k} 条（set）把 `{label}` 改名成 `{_new_lab}`，但**表里已经有这个名字**"
+                        f"（{len(_clash)} 行）—— 重名会让两行共用一个 `uid`（`element_key|label`）："
+                        "逐行签名会被覆盖、**图里看不出漏了一行**、台账对账会折叠。"
+                        "请换一个**没被用过**的名字（同类多行必须能区分）。")
             notes.append("改 " + str(row.get("label")) + "："
                          + "、".join(f"{f} {before[f]} → {changes[f]}" for f in changes))
         elif kind in ("add_asset", "add_whitebox"):
@@ -9198,7 +11266,13 @@ async def generate_plan(
             "`rot_deg`（绕 Z 逆时针，度）、`scale`（模型缩放倍率）、`note`；"
             "**选填 `scale_z`**（**Z 方向倍率**，默认 1.0）= **只拉高 / 压低、占地不动** —— "
             "要「楼别一样高、但街道布局不变」就用它（改 `scale` 是整体缩放，**占地会跟着变**）；"
-            "到 UE 那层是 `RelativeScale3D = [scale, scale, scale × scale_z]`。"
+            "到 UE 那层是 `RelativeScale3D = [scale, scale, scale × scale_z]`；"
+            "**必填 `z_m`**（**这一行的底面绝对标高**，米）= 这东西**坐在多高** —— "
+            "**每行都要写**（2026-10-08 起，用户指令「赶紧改位置表结构增加Z」：Z 只在表里、"
+            "代码不按 `element_key` 猜）；给 `0` 就是坐在路面上、"
+            "给 `-0.1` 就是沉到路面下 10 cm、站在两侧地面上的给 `0.15`。"
+            "⚠ **是底面、不是中心 / 不是原点**（2026-10-07 定案 B），"
+            "中心与原点由阶段三自己推（原点比底面高的资产见 `ASSET_PIVOT_LIFT_CM`）。"
             "⚠ **没有 count 字段**：摆 20 栋就写 20 行 —— 一条记录只能有一个 pos。"
         )),
     ] = None,
@@ -9209,6 +11283,11 @@ async def generate_plan(
             "`element_key`、`label`、`shape`（cube / plane）、`height_m`（**厚度，米，> 0，必填**）、"
             "`pos`、`footprint_m`、`rot_deg`、`size_source`（**必须写明是「预估」**）、`note`；"
             "`asset_path` 留空。"
+            "**必填 `z_m`**（**这一行的底面绝对标高**，米 —— 2026-10-08 起每行必填，"
+            "用户指令「赶紧改位置表结构增加Z」）：竖直方向**只认它**，阶段三不按 `element_key` 猜。"
+            "参照值：路面上的 0.00、站在地面上的 0.15、人行道底面贴路面 0.00、"
+            "世界地基 −0.05（厚 0.2）、车行道 −0.15（厚 0.15）。"
+            "⚠ 写成「中心标高」会差半个厚度（那是 2026-10-07 定案 B 之前的旧口径，已改）。"
             "⚠ **`height_m` 是必填，`plane` 也不例外**：UE 的图元工具只有 "
             "`add_cube` / `add_cone` / `add_cylinder` / `add_sphere` —— **没有 plane 工具**"
             "（2026-10-03 调官方工具集清单确认），所以「面」落进 UE 也只能是 cube，"
@@ -9425,10 +11504,17 @@ async def generate_plan(
     # 清单与资产库指纹是不是同一次签字（收尾清单 #3；本工具离线，查不了"库后来变过没有"）
     warnings.extend(_planning_snapshot_check())
 
-    plan = planning.build_plan(
-        norm_assets, norm_boxes, world_full,
-        params=(patched_params if patched_params is not None else (params or {})),
-        previous=previous)
+    # ⚠ **装配这道也会抛**（2026-10-05 加）：`build_plan()` 出口现在查 **label 唯一性**
+    #   （重名会让两行共用一个 `uid`：图里看不出漏了一行、台账对账会折叠，见那边的说明）——
+    #   这里照 `normalize_world()` 的先例把它转成**工具报文**，别让裸 `ValueError`
+    #   变成用户看见的"没有正文的错"。
+    try:
+        plan = planning.build_plan(
+            norm_assets, norm_boxes, world_full,
+            params=(patched_params if patched_params is not None else (params or {})),
+            previous=previous)
+    except ValueError as exc:
+        raise ToolError(f"放置表不成立：{exc} —— 一个字节都没写。") from exc
 
     # ⚠ **改几何之前先有"改什么 / 谁要的"的记录**（2026-09-26 加，把软约束变硬）——
     #   见 `_change_request_guard()`：拒收时**一个字节都没写**（本闸放在 `_write_plan()` 之前）。
@@ -9465,6 +11551,15 @@ async def generate_plan(
             "数字对不上是允许的，但要请用户确认过。"
         )
 
+    # ⚠ 「这一版是不是微调版」的**原话 + 改过的行号**（非空 ⇒ 走到下面要 `mark_tuned`，但
+    #   **调用点在 G15 那道闸之后** —— 见那段说明，2026-10-04 修的时序 bug；
+    #   ⚠ 2026-10-07 起这里只剩 G15 一道 —— 「冻结 v1」那道随 v1 回退一起删了）。
+    #   ⚠ **必须在函数作用域初始化**（就是这里）：下面那个 `if _prev_path.exists():` 不成立时
+    #   （第一次规划、盘上还没有 plan）也要有这个名，否则后面 `if _tuned_quote:` 会 `NameError`。
+    _tuned_quote = ""
+    _tuned_by = ""                      # 那句话是谁说的（2026-10-05 加）—— 与 `_tuned_quote` 同一条
+    _tuned_labels: list[str] = []       # 纪律：必须在函数作用域先初始化，否则后面会 NameError
+
     # 几何一模一样 → 沿用上次确认（重算一遍不该把确认弄丢）
     _prev_path = planning.active_plan_path()     # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
     if _prev_path.exists():
@@ -9485,6 +11580,27 @@ async def generate_plan(
             # ---------- 第四阶段 · 微调（2026-10-04 用户拍板）----------
             # 「整体搭建之后的小改」：**不画图、不要二次确认**，但必须有**用户原话** ——
             # 那句话的来源就是 `request_plan_change()` 记下的改动要求。
+            #
+            # ⚠ **2026-10-07 补缺口 #2：纪元 2 里改一份已确认的 plan，必须用 `patch` 送** ——
+            #   整表重发**也能落盘**，但"改了哪几行"只从 `patch` 里取（就是下面那个 for）⇒
+            #   会落成 `rows=[]`：有原话、没有图、**没记改了哪几行**。它不是几何错，是**凭据缺口**：
+            #   后面点名重摆（`only_labels`）、增量对账、出图要点名哪几行，全都靠这几行。
+            #   为什么只卡**纪元 2**：纪元 1（从零搭建 / 阶段二验收那一轮）整表重发是**正路**
+            #   （那时还没有"只改几行"的语义）；纪元 2 之后每一版都是"微调"。
+            #   ⚠ `patch` 的四种操作 `set`/`add_asset`/`add_whitebox`/`remove` 能表达
+            #     增行 / 删行 / 换 `element_key` —— 结构改动**也走得通**，所以这条闸不堵任何路。
+            if not patch and planning.active_epoch() >= 2:
+                raise ToolError(
+                    "拒收：**纪元 2 里改一份已确认的 plan，必须用 `patch=[…]` 送（不许整表重发）** —— "
+                    "一个字节都没写。\n"
+                    "· 为什么：这一版的凭据是「**用户原话 + 改了哪几行**」（微调版没有图）。"
+                    "而「改了哪几行」只从 `patch` 里取 —— 整表重发能改成功，但会落成 `rows=[]`："
+                    "有原话、没图、**没记改了哪几行**，后面点名重摆 / 增量对账就没有依据。\n"
+                    "· 怎么改：`generate_plan(patch=[{\"op\":\"set\",\"label\":\"那一行的 label\","
+                    "\"set\":{\"pos\":[…]}}, …])`；增行 / 删行 / 换 `element_key` 也走得通 —— "
+                    "`add_asset` / `add_whitebox` / `remove` 三种操作。\n"
+                    "· 只想把**一模一样**的表重发一遍（几何没变）→ 那条路不受影响"
+                    "（它不会落成微调版，也不会重复记一遍改动）。")
             # ⚠ **取原话走 `_pending_change_quote()`（唯一判据）** —— 2026-10-04 修的就是这里：
             #   原先用 `planning.pending_changes(plan)`，而那个函数按**改完之后**的新指纹去筛
             #   台账事件，可 `request_plan_change` 记要求时写的是**改之前**的旧指纹 ⇒
@@ -9492,9 +11608,14 @@ async def generate_plan(
             #   「等出图」，逼用户白重画两张图）。`_change_request_guard()` 用的是同一个函数
             #   （它已经在前面把"窗口开着但没原话"当场拒收了，所以这里也读得到）。
             # ⚠ 拿不到原话就**照旧按"确认作废"处理**：绝不自己编一句（编了就是伪造人的确认）。
-            _quote = _pending_change_quote()
+            _quote, _by = _pending_change_quote()
             if _quote:
-                _tuned_labels: list[str] = []
+                # ⚠ **这一版的微调留痕（`mark_tuned`）不在这里调**（2026-10-04 修时序）：
+                #   它会把验收台账的基线改成"这一版"（`plan.py:977` `record_acceptance()`），
+                #   而下面还有一道**会抛**的闸（G15）—— 那道一拒，就会留下
+                #   "从未落盘的几何"当已确认基线。这里只留**原话 + 行号**，真正调用挪到闸之后。
+                _tuned_quote = _quote
+                _tuned_by = _by
                 for _op in (patch or []):
                     if not isinstance(_op, dict):
                         continue
@@ -9505,15 +11626,6 @@ async def generate_plan(
                             _lab = str(_row.get("label") or "")
                     if _lab:
                         _tuned_labels.append(_lab)
-                plan = planning.mark_tuned(
-                    plan, _quote,
-                    rows=[{"label": _l, "why": _quote} for _l in _tuned_labels])
-                warnings.append(
-                    "**这一版记成了「微调版」**（第四阶段 · 微调）：几何按用户原话改过、"
-                    "**这一次没有图** —— 依据是 `confirmation.user_quote` + `confirmation.rows`。"
-                    f"改了 {len(_tuned_labels)} 行：" + "、".join(f"「{x}」" for x in _tuned_labels[:8])
-                    + "。落关卡时**只能点名**这几行（`execute_build(only_labels=[…])`）。"
-                    "⚠ 要回「正常验收」（出图那种）：重画两张图 → `confirm_plan()`。")
             else:
                 warnings.append(
                     "这一版与上一次确认的**不是同一版**：上次确认**已作废**，"
@@ -9527,19 +11639,42 @@ async def generate_plan(
     if _live_note:
         warnings.append(_live_note)
 
-    # ⚠ **冻结的 v1 不许再写**（2026-10-04 加：防手滑的闸）——
-    #   判据：**纪元 2 已经开了**（`views/plan_v2.json` 在）而**活动目标退回了 v1**。
-    #   正常路径上不会发生（写盘走 `active_plan_path()` 咽喉，v2 在就写 v2）；能撞上它的
-    #   只有一种情况：**`plan_v2.json` 读不动**（半截写入 / 手改坏）⇒ 咽喉退回 v1。
-    #   那时**必须拒收** —— 否则新改动会写进那份**已冻结、只读**的 v1（留档就不是当初那一版了），
-    #   而 v2 里的坏文件还留在盘上冒充"现在算数的那一份"。
-    if planning.PLAN_V2_PATH.exists() and planning.active_plan_path() == planning.OUT_JSON:
-        raise ToolError(
-            "拒收：**纪元 2 已开，但 `views/plan_v2.json` 读不动**（活动目标退回了冻结的 v1）"
-            " —— 一个字节都没写。\n"
-            f"· 先把那份 v2 修好、或把它移走（移走 = 回到纪元 1，之后可重新换纪元），再重调本工具。\n"
-            f"· ⚠ `{planning.OUT_JSON.name}` 自换纪元起**冻结只读** —— 新改动一律写 "
-            f"`{planning.PLAN_V2_PATH.name}`；要看清现在算哪一份就调 `get_plan()`（它报当前纪元）。")
+    # ⚠ 这里原来有一道「**冻结的 v1 不许再写**」的闸（2026-10-04 加）—— 判据是
+    #   "`plan_v2.json` 在、而活动目标退回了 v1"，命中的唯一情形是"v2 读不动 ⇒ 咽喉退回 v1"。
+    #   **2026-10-07 删除**：咽喉的判据改成**只认"文件在不在"**（`plan_v2.json` 在 ⇒ 永远是它，
+    #   没有"能不能解析"那一层）⇒ `plan_v2.json` 在时**不可能**指回 v1，这个条件**恒不成立** ——
+    #   闸留着只会让人以为"代码里还有 v1 这条路"。
+    #   现在"v2 读不动"由咽喉如实表现为"没有规划"（`active_plan()` 返回空 dict），各闸自己拒收。
+    #   ⚠ **仍存的边界（如实记着，未修）**：`plan_v2.json` **文件被删掉**时，咽喉会指回 v1
+    #     （那是"纪元 1 的正常目标"，见 `active_plan_path()`）—— 与"文件在、内容坏"是两回事；
+    #     要连这一种也闸住，得另立一个**不随产物删除而消失**的"纪元 2 开过"标记（现在没做）。
+
+    # ⚠ **2026-10-04 修（时序 bug）**：`mark_tuned()` 原来在**上面那道 G15 闸之前**调用 ——
+    #   而它**不只是造对象**：`plan.py:933` 的 docstring 写着"只造对象、不写盘"，实际它
+    #   在返回前就 `record_acceptance()`（把 `accepted_rows` 基线更新成**这一版**、并关掉
+    #   改动窗口）+ 累加 `tuned_count`。于是那道闸一拒，
+    #   **plan 一个字节没写、台账却已经把"从未落盘的几何"记成了已确认基线** ⇒ 下一轮
+    #   `change_set()` 拿幽灵基线比、`required_labels` 点名**错的行**，微调计数也虚增一次。
+    #   现在挪到那道闸**之后**、`_write_plan()` **之前** —— 闸拒了就不留任何台账痕迹。
+    #   ⚠ 挪到这儿**不影响** G15 的判据：`_live_state_guard()` 只比**逐行签名 + 几何指纹**，
+    #     而 `plan_geometry_hash()` **排除 `confirmation`** ⇒ 微调前后算出来是同一个指纹。
+    #   ⚠ **2026-10-07**：原来这里还并列着第二道闸（「冻结 v1 不许再写」）—— 它随 v1 回退一起删除，
+    #     所以上面这些"两道闸"的说法现在只剩一道（判据本身一个字没变）。
+    #   ⚠ 仍存的边界（如实记着）：`_write_plan()` 自己失败（写盘 OSError）时台账那笔已经写了 ——
+    #     要彻底收口得把台账那段也搬进 `write_plan()`，那是**另一次改动**（没做）。
+    if _tuned_quote:
+        plan = planning.mark_tuned(
+            plan, _tuned_quote, by=_tuned_by,
+            rows=[{"label": _l, "why": _tuned_quote} for _l in _tuned_labels])
+        warnings.append(
+            "**这一版记成了「微调版」**（第四阶段 · 微调）：几何按"
+            + ("**用户原话**改过、" if _tuned_by in ("", "用户")
+               else f"**{_tuned_by}**的话改过（⚠ 这**不算用户点头** —— 落关卡时会被拦下）、")
+            + "**这一次没有图** —— 依据是 `confirmation.user_quote` + `confirmation.rows`。"
+            f"改了 {len(_tuned_labels)} 行：" + "、".join(f"「{x}」" for x in _tuned_labels[:8])
+            + "。落关卡时**只动这几行**（默认增量按 `plan↔台账` 差异走；"
+              "`execute_build(only_labels=[…])` 可点名再收窄）。"
+            "⚠ 要回「正常验收」（出图那种）：重画两张图 → `confirm_plan()`。")
 
     planning.VIEWS_DIR.mkdir(parents=True, exist_ok=True)
     written = _write_plan(plan)
@@ -9636,7 +11771,7 @@ async def get_plan(
     ] = True,
 ) -> PlanStatus:
     """
-    【场景① 开场先看】什么时候用我：每轮开场、以及**每次写完放置表之后**（回读闸）—— ⚠ 状态只认**我这个返回值**，不认"我读过 views/plan_v1.json"。取当前规划几何 + 判定**它还作不作数**。**动第三阶段之前必须先调它。**
+    【场景① 开场先看】什么时候用我：每轮开场、以及**每次写完放置表之后**（回读闸）—— ⚠ 状态只认**我这个返回值**，不认"我读过活动那份 plan 文件"。取当前规划几何 + 判定**它还作不作数**。**动第三阶段之前必须先调它。**
         ⚠ **闸的钥匙**（不是可选步骤）：`_readback_guard` 要它 —— 这一版 plan 写盘之后没调它，`generate_plan` / `execute_build` 一律拒收。
 
     回答三件事：
@@ -9673,7 +11808,7 @@ async def get_plan(
       （与 get_asset_list 配套）。
     ⚠ **只读**（**不改几何、不确认、不猜**）—— 唯一例外：它会在**验收台账**里记一条
       「这一版你回读过了」，用来放行**回读闸**（见 `_readback_guard()`）。它**不碰 UE、
-      不改 `plan_v1.json`**，所以不会让任何确认作废。
+      不改活动那份 plan**，所以不会让任何确认作废。
     ⚠ **调本工具 = 回读**：写盘之后不调它，`generate_plan` 与 `execute_build` 都会被拒收。
     ⚠ `gate.confirmed = false` → **一律不许进第三阶段**（AGENTS.md「规划图闸门」）。
     """
@@ -9706,13 +11841,18 @@ async def get_plan(
 
     warnings: list[str] = []
     # --- 纪元如实报（2026-10-04 加）--------------------------------------------------
-    # 纪元 2 是个**分水岭**：`plan_v1.json` 冻结只读、后续阶段走"不画图、不重确认"那条路。
+    # 纪元 2 是个**分水岭**：几何的权威已移交 `plan_v2.json`、后续阶段走"不画图、不重确认"那条路。
     # 开场（get_plan）不说清，接手的人会拿阶段二那套流程去套（还去重画两张图）。
+    # ⚠ **2026-10-07 改**：原来这里写「`views/plan_v1.json` 已**冻结只读**」—— v1 文件已按用户指令
+    #   删除（留档在 `views/archive/`），那句话成了**过期话术**（读的人会去找一个不存在的文件）。
+    #   现在只说"权威在哪、该怎么走"，不再提那份文件的状态。
     if _epoch >= 2:
         warnings.append(
             f"**纪元 2 已开**（当前纪元 {_epoch}；活动 plan = `views/{_plan_path.name}`）—— "
-            "`views/plan_v1.json` 已**冻结只读**。此后改行走 `request_plan_change` → "
-            "`generate_plan(patch=…)` → `execute_build(only_labels=[…])`，**不画图、不重确认**。")
+            "此后改行走 `request_plan_change` → "
+            "`generate_plan(patch=…)` → `execute_build(only_labels=[…])`，**不画图、不重确认**。"
+            "⚠ **别去找 `plan_v1.json` / `build_state_v1.json`**（纪元 1 那两份已删，留档在 "
+            "`views/archive/`）—— 判据只有一条：`plan_v2.json` 在，就只认它。")
     if status == "initialized":
         warnings.append(
             "**这是初始化状态**（`assets` / `whiteboxes` 都是空的）—— 结构立好了，"
@@ -9966,7 +12106,7 @@ async def confirm_plan(
         ))],
 ) -> PlanResult:
     """
-    【场景③ 规划验收】什么时候用我：用户看过图并点头之后 —— 我必须拿到**他的原话**；没图、没原话都不许调我。把「这份规划被确认了」写回**活动那份 plan**（纪元 1 = `plan_v1.json`）：**谁 / 何时 / 哪一版 / 用户的哪句话**。
+    【场景③ 规划验收】什么时候用我：用户看过图并点头之后 —— 我必须拿到**他的原话**；没图、没原话都不许调我。把「这份规划被确认了」写回**活动那份 plan**（走 `planning.active_plan_path()`；本工程 = `views/plan_v2.json`）：**谁 / 何时 / 哪一版 / 用户的哪句话**。
     
     闸门不过就**拒绝确认**（这就是闸门的意义）：
       ① **空规划不许确认**（两张表都空：一份坐标都没有，确认它毫无意义）；
@@ -10822,7 +12962,7 @@ async def _env_apply_material(
     if asset:
         used += 1
         try:
-            ok = bool(await call_official(ctx, "exists", {"path": asset}, toolset=TS_ASSET))
+            ok = _exists_true(await call_official(ctx, "exists", {"path": asset}, toolset=TS_ASSET))
         except ToolError:
             ok = False
         if not ok:
@@ -11502,15 +13642,21 @@ async def setup_environment(
                 warns.append(f"`overrides` 盖了灯具「{_lname}」：{'、'.join(sorted(_ov))}。")
             spec_all[_key] = _spec
             cls_of[_key] = _lcls
-            hints[_key] = str(_item.get("component") or "LightComponent")
+            # ⚠ **2026-10-04 修（阻断级）**：这几行原来引用 `hints[_key]` —— 而 `hints` 是
+            #   本函数的**局部名**、要到下面第 ④ 步（`hints = {…}`）才赋值 ⇒ 只要
+            #   `config/environments.json` 的 `lights` 非空（现文件是 `[]`，所以还没炸过），
+            #   这里必抛 `UnboundLocalError`，`setup_environment` **一配灯就崩**。
+            #   现在用一个局部变量收着（第 ④ 步的 `hints` 是从 `factors_tbl` 推的，
+            #   而下面已经把 `component` 写进 `factors_tbl` ⇒ 值完全一致，行为不变）。
+            _lcomp = str(_item.get("component") or "LightComponent")
             factors_tbl[_key] = {
-                "cn": _lname, "class": _lcls, "component": hints[_key],
+                "cn": _lname, "class": _lcls, "component": _lcomp,
                 "folder": str(_item.get("folder") or ENV_ACTOR_FOLDER), "spawn": True,
             }
             cn[_key] = _lname
             lights_spec.append({
                 "key": _key, "name": _lname, "class": _lcls,
-                "component": hints[_key],
+                "component": _lcomp,
                 # 创建时的 label/名字：`_env_spawn_actor` 的 `name` 实测**不改对象名**（靠分组认），
                 # 但**分组 + label** 足够让我们下次认出"这一盏就是我们建的那一盏"。
                 "folder": str(_item.get("folder") or ENV_ACTOR_FOLDER),
@@ -11834,7 +13980,7 @@ async def capture_preview(
     ctx: Context[AppContext],
     shots: Annotated[list[PreviewShot] | None, Field(
         description=("机位列表：`pos_m`（站哪儿）/ `look_at_m`（看哪儿）/ `fov`，**都是米**、世界坐标"
-                     "（与 `plan_v1.json` 同一口径）。留空 = 按 plan 的世界范围自动出三个"
+                     "（与**活动那份 plan** 同一口径）。留空 = 按 plan 的世界范围自动出三个"
                      "（俯视 3/4 + 两端人视）"))] = None,
     annotations: Annotated[bool, Field(
         description=("true = 图上叠**世界网格 + Actor 标签**（给我核对构图用）；"
@@ -11951,9 +14097,12 @@ async def capture_preview(
 # ⚠ **定位**（用户 2026-09-30 在选项里选的 A）：只加「评估」这一个工具，回答一句话 ——
 #   「**现在关卡里的东西，跟当初确认的那一版还对得上吗**」。
 #   对的是三份东西：
-#     ① `views/plan_v1.json`        = 确认过的放置表（权威几何，米）；
-#     ② `views/build_state_v1.json` = 阶段三搭建台账（上次到底搭了什么 + Actor 引用）；
+#     ① **活动那份 plan**（`planning.active_plan_path()`；纪元 2 = `views/plan_v2.json`）
+#        = 确认过的放置表（权威几何，米）；
+#     ② **活动那份搭建台账**（`active_ledger_path()`；纪元 2 = `views/build_state_v2.json`）
+#        = 阶段三搭建台账（上次到底搭了什么 + Actor 引用）；
 #     ③ **关卡现状**                = 官方读回来的（变换 / 白膜组件尺寸 / 材质覆盖 / 分组）。
+#   ⚠ 2026-10-07：上面两条原来写死 `plan_v1.json` / `build_state_v1.json` —— 那两份已删，改走两个咽喉。
 # ⚠ **只读**：不碰关卡、不存盘、不改 plan；唯一写的是我们自己的报告 `views/evaluate_v1.json`。
 # ⚠ **闭环不新造工具**（这是我给用户的反驳意见，他采纳了）：`request_plan_change`（记用户要改什么）
 #   → `generate_plan(patch=…)` → **重画图** → `confirm_plan`（用户看图像点头）→
@@ -12092,7 +14241,8 @@ async def evaluate_layout(
     if not gate.get("confirmed"):
         warns.append("⚠ 这一版规划**还没确认过**（阶段二闸门是 false）—— 下面比的是**草稿**，只作参考。")
 
-    rows, _z_rules, compose_warns = _compose_build_rows(plan, load_json(ASSET_LIST_PATH) or {})
+    rows, _z_rules, compose_warns = _compose_build_rows(plan, load_json(ASSET_LIST_PATH) or {},
+                                                        hint_by_key=_surface_hint_by_key())
     warns.extend(compose_warns)         # 含「五层顺序」「白膜厚度兜底」「越界体检」那几条（同一份口径）
 
     ledger = _load_build_state()

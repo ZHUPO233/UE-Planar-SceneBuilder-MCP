@@ -331,8 +331,12 @@
           "layerBottomAltitude": 5.0,
           "layerHeight": 10.0,
           "tracingMaxDistance": 200.0
+        },
+        "material": {
+          "asset": "/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst"
         }
       },
+      "_cloud_material_note": "2026-10-07 加：原始环境里云用的是**引擎那块 MI**（`/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst`）；我们那块 `MI_Cloud_Sunset` 是 2026-09-29 建的。这一条把云材质**指回引擎默认** —— 这样 `noon` 这一档才是完整的「退回原始样子」。",
       "post_process": {
         "props": { "bUnbound": true, "blendWeight": 1.0, "priority": 1 },
         "settings": {
