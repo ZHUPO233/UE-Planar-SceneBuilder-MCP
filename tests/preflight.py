@@ -597,6 +597,12 @@ def main() -> int:
         #   （其余字段用 dataclass 默认值：本档不需要 IO / 路径换算）。
         _sv = importlib.import_module("surfaces")
         _saved_sv_asset = _sv.ASSET_LIST_PATH
+        # ⚠ 2026-10-10：这里**曾**有一段补丁 —— 在系统临时目录里造一份同名 `material_list.json`，
+        #   只为让 `surfaces.manifest_rows()` 第一步的磁盘检查 `MATERIAL_LIST_PATH.exists()` 通过
+        #   （它当时**绕过**了 `repo.load_json()` 那个注入面，于是本文件各段注入的假清单被挡在门外）。
+        #   **根因已于同日就地根治**：`surfaces.load_manifest()` 改成"**先问注入面、再问磁盘**" ——
+        #   与同文件 `snapshot_stale()` 的写法对齐（那一条本来就承诺"比的是注入进来的那一份"）。
+        #   ⇒ 补丁**已撤销**。⚠ 别再往这里加回来：那是**测试去迁就产品怪癖**，不是修问题。
         try:
             import tempfile as _tf5
             with _tf5.TemporaryDirectory() as _td5:
