@@ -804,10 +804,26 @@ def load_manifest(repo: SurfacesRepo) -> tuple[dict, str]:
       旧清单（没有 `instance_status` 那种）会被判成"**这份清单是旧格式，重跑 probe + confirm**"，
       而不是被当成能用的清单 —— 免得拿着半旧的数据往下走。
     """
-    if not MATERIAL_LIST_PATH.exists():
-        return {}, (f"还没有材质清单（`{MATERIAL_LIST_PATH}`）—— 先 `probe` → `confirm` 定稿。")
-    doc = repo.load_json(MATERIAL_LIST_PATH)
+    # ⚠ 2026-10-10（本次改动）：**先问注入面，再问磁盘** —— 与同文件 `snapshot_stale()` 的写法对齐。
+    # 由来：原来第一句就是磁盘检查 `if not MATERIAL_LIST_PATH.exists(): return {}, "还没有材质清单…"`，
+    #   **绕过了 `repo.load_json()` 那个注入面**。而 `tests/preflight.py` 的各段正是靠注入一份假清单
+    #   来**离线**验收闸门的 —— 于是预检被挡在门外：`tune()` 报"一个可调的实例都没有"、
+    #   `snapshot_stale()` 早退回 `None` ⇒ 把 `catalog/` 清空之后 ⑫d / ⑫o / ⑫ / ㉑ 四项变红
+    #   （那是**假红**：磁盘上那份数据是**有意删掉**的，而注入面明明给了清单）。
+    # 改法：**先读**（拿到的可能正是注入面给的那一份），读不到 / 不是 dict 时，
+    #   再按"**磁盘上到底有没有**"分两种原因报出去 —— 真实运行时的行为逐字不变：
+    #     · 文件不在 ⇒ `load_json` 抛 ⇒ 吞掉 ⇒ 报"还没有材质清单（…）—— 先 `probe` → `confirm` 定稿。"
+    #     · 文件在、但读不动 ⇒ 报"材质清单 `…` 读不动（不是一份 JSON 对象）。"
+    #   ⚠ **唯一的行为差异（如实记着，不假装等价）**：原来"文件在、但 `load_json` 自己抛异常"会把
+    #     那个异常**向上抛**给调用方；现在它被吞掉、按"读不动"报出来。这更宽容，也更符合本函数的
+    #     签名承诺（它本来就声明返回 `(文档, 读不到的原因)`），但**它是一处差异**。
+    try:
+        doc = repo.load_json(MATERIAL_LIST_PATH)
+    except Exception:                                    # noqa: BLE001
+        doc = None
     if not isinstance(doc, dict):
+        if not MATERIAL_LIST_PATH.exists():
+            return {}, (f"还没有材质清单（`{MATERIAL_LIST_PATH}`）—— 先 `probe` → `confirm` 定稿。")
         return {}, f"材质清单 `{MATERIAL_LIST_PATH.name}` 读不动（不是一份 JSON 对象）。"
     return doc, legacy_manifest_note(doc, MATERIAL_LIST_PATH.name)
 
