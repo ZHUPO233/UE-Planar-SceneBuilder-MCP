@@ -1,0 +1,43 @@
+UEPLANE — Unreal Engine Plugin
+Commercial License
+
+Copyright (c) 2026 ZHUPO233. All rights reserved.
+
+This plugin is licensed, not sold.
+
+If you obtained UEPLANE through Fab, your use of it is governed by the Fab End User
+License Agreement (https://www.fab.com/eula) under which you obtained it, together
+with the terms below. Where the two conflict, the Fab EULA governs.
+
+
+YOU MAY
+  · use this plugin in unlimited personal and commercial projects, including
+    projects you sell or distribute;
+  · modify it, and keep those modifications private, for use in your own projects.
+
+YOU MAY NOT
+  · redistribute, resell, sublicense, share or otherwise make this plugin (or a
+    modified version of it) available to any other person or company, with or
+    without charge;
+  · include it in a product, template, starter kit or asset pack whose primary
+    value is this plugin or its functionality;
+  · remove or alter this notice, or the copyright headers in the source files.
+
+NO WARRANTY
+THIS PLUGIN IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THIS PLUGIN OR ITS USE.
+
+SUPPORT
+Support and issue reporting: https://github.com/ZHUPO233/UE-Planar-SceneBuilder-MCP/issues
+
+
+--------------------------------------------------------------------------------
+ABOUT THE OTHER HALF OF THIS REPOSITORY
+The UEPLANE standalone MCP server — a separate product, published from the same
+repository under `src/` and friends — is released under the MIT License (see the
+repository's top-level LICENSE file). This license governs the Unreal Engine plugin
+as delivered, and only that.
+--------------------------------------------------------------------------------

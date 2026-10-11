@@ -170,11 +170,34 @@ Requirements: Win64 · Unreal Engine 5.8 · Unreal's native MCP stack (Experimen
 - [x] 无 C++ 第三方库（**根本没有 C++** ⇒ 这项 N/A）
 
 ### 合规
-- [ ] 每个 `.py` 首行有版权头（`.py` 用 `#`，不是 `//`）—— **尚未加**
+- [x] 每个 `.py` 首行有版权头（`.py` 用 `#`，不是 `//`）—— **已加 12 个随包文件**：
+      `# Copyright (c) 2026 ZHUPO233`（**中性版权声明**）
+      ⚠ **故意不写 `All Rights Reserved`** —— 仓库顶层的 `LICENSE` 是 **MIT**，写了就自相矛盾。
+      授权口径见下面「授权」那一节。
 - [x] `Resources/Icon128.png` 是 **128×128**（⚠ 是占位图，见待补清单）
-- [x] **`LICENSE` 不随包**（Fab 只认 Fab License）—— ⚠ 这个决定**同时**写在
-      `MakePlugin.ps1` 与这份清单里（VibeUE 只写了脚本注释，两边对不上）
+- [x] **插件那份 `LICENSE` 不随包** —— 商业许可是 `ue_plugin/LICENSE`，**在插件目录之外**
+      （`MakePlugin.ps1` 只从 `ue_plugin/UEPLANE/` 拷，所以它天然不进包）。
+      ⚠ 这个决定**同时**写在 `MakePlugin.ps1` 与这份清单里（VibeUE 只写了脚本注释，两边对不上）
 - [x] 未重新分发任何 Epic 示例内容 / Megascans
+
+### 授权（**Fab 审核会问，先想清楚**）
+
+本仓库是**双授权**，边界写在顶层 `LICENSING.md`：
+
+| 路径 | 授权 | 是什么 |
+|---|---|---|
+| `src/` / `tests/` / `serve_http.py` / `config/` / `docs/` | **MIT**（顶层 `LICENSE`） | 独立 MCP server |
+| `ue_plugin/` | **商业许可**（`ue_plugin/LICENSE`） | 要卖的 UE 插件 |
+
+⚠ **三条必须心里有数的**（都写在 `LICENSING.md` 里）：
+
+1. **MIT 不可撤回** —— v1.0.1 及以前按 MIT 发出去的 server，收到的人**永久**拥有那些权利，
+   改成闭源也收不回来。所以选的是"双许可"：已经给出去的那份不动、新卖的插件按新条款。
+2. **插件里有四份文件是从 server 同步过去的**（`main.py` / `schemas.py` / `surfaces.py` / `planning/`）
+   —— 那部分核心流程逻辑**曾经以 MIT 发布过**。要让插件**完全闭源**得先做**重构**
+   （让插件不再包含那些文件），**本次没做**，如实记着。
+3. `ue_plugin/LICENSE` 是**平实条款**，不是律师起草的。要应对 Fab 问询或真打官司，建议找律师过一遍。
+
 
 ### 文案（这一节 VibeUE 栽过）
 - [ ] **所有数字口径统一**，且**能从代码数出来**（工具数 = **20**，从 `describe_toolset` 数）
