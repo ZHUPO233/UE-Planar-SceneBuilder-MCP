@@ -92,6 +92,8 @@ call_tool(toolset_name="ueplane.tools.UeplaneTools",
 ```
 
 > If your agent is not good at discovery, give it the toolset name up front — that is all it needs.
+> **`PROMPT.md`** in this folder is a ready-to-paste instruction block that tells an agent exactly
+> where to look; drop it into your client's system prompt or project instructions.
 
 ---
 
