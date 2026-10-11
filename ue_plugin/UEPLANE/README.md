@@ -95,6 +95,17 @@ call_tool(toolset_name="ueplane.tools.UeplaneTools",
 > **`PROMPT.md`** in this folder is a ready-to-paste instruction block that tells an agent exactly
 > where to look; drop it into your client's system prompt or project instructions.
 
+**4. If your agent stops working after you restart the editor.** The editor's MCP server forgets all
+sessions when it restarts, so a client that is still holding the old session id gets refused. Unreal
+does the right thing here — it answers `404` with `Unknown session id …; client should reinitialize` —
+but not every MCP client acts on that yet, and some report only a bare `Error POSTing to endpoint:`.
+
+Fix: reconnect that MCP server in your client, or restart the client. Nothing is lost —
+UEPLANE keeps its state on disk under `Saved/UEPLANE/`, not in the session.
+
+You will hit this whenever the editor restarts: enabling a plugin, switching levels, or recovering
+from a crash. It is a client-side gap, not an Unreal or UEPLANE problem.
+
 ---
 
 ## Getting started
