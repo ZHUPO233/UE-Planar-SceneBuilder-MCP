@@ -47,9 +47,57 @@ Everything UEPLANE writes lives under `Saved/UEPLANE/` — nothing is written in
 
 ---
 
+## Connecting your agent
+
+The endpoint is served by the editor itself, on your machine only.
+
+**1. Start the server once.** In the editor console (`~`):
+
+```
+ModelContextProtocol.StartServer
+```
+
+It is remembered after that and starts with the editor. If you skip this, nothing is listening on the
+port and your client will simply fail to connect.
+
+**2. Point your MCP client at it** (streamable HTTP):
+
+```json
+{
+  "mcpServers": {
+    "unreal-editor": { "url": "http://127.0.0.1:8000/mcp" }
+  }
+}
+```
+
+The port is `8000` by default; the path is `/mcp`. Some clients use a different root key — VS Code's
+`.vscode/mcp.json` uses `servers`, for example.
+
+**3. Expect three meta-tools, not twenty.** Unreal's MCP server runs with tool search on, so
+`tools/list` returns only:
+
+| meta-tool | what it does |
+|---|---|
+| `list_toolsets` | lists every registered toolset |
+| `describe_toolset` | shows one toolset's tools and their parameter schemas |
+| `call_tool` | actually calls one |
+
+So a client discovers UEPLANE first and calls it second:
+
+```
+list_toolsets                                    -> finds "ueplane.tools.UeplaneTools"
+describe_toolset("ueplane.tools.UeplaneTools")   -> the 20 tools, with schemas
+call_tool(toolset_name="ueplane.tools.UeplaneTools",
+          tool_name="official_status", arguments={})
+```
+
+> If your agent is not good at discovery, give it the toolset name up front — that is all it needs.
+
+---
+
 ## Getting started
 
-Point your MCP client at the editor's MCP endpoint (the same one `ModelContextProtocol` serves), then:
+Once connected:
 
 1. `official_status` — link self-check. **Call this first**: it is the key to the gate that every
    editor-touching tool checks, so nothing else will run until it reports a healthy link.
