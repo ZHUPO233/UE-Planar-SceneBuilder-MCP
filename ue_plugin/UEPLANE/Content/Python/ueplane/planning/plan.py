@@ -571,7 +571,7 @@ def clean_numbers(obj):
 
 # --- 放置表装配与校验 ---------------------------------------------------------
 
-def load_previous_elements(path: Path = ELEMENTS_PATH) -> dict:
+def load_previous_elements(path: Path | None = None) -> dict:
     """读阶段一的元素清单（`catalog/elements.json`）→ `(全部行, 人话场景项)`。
 
     为什么要读它（**不是多此一举**）：
@@ -579,7 +579,17 @@ def load_previous_elements(path: Path = ELEMENTS_PATH) -> dict:
       ② 放置表里的 `element_key` **必须**在阶段一确认过的清单里有记录
          （不许凭空多出一个元素 —— 那样等于规划了图里没有的东西）。
     读不到就返回空表：由调用方决定是报错还是只警告（这里**不抛**）。
+
+    ⚠ **`path` 的默认值必须是 `None`、在函数体里解析**（2026-10-11 修；插件化时撞到的**真 bug**）：
+      Python 的**函数默认参数在 `def` 执行那一刻就求值绑定**了。原来写的是
+      `path: Path = ELEMENTS_PATH` —— 于是"把落盘根搬到别处"这类动作（插件版 `init_unreal.py`
+      用 `setattr(module, name, new_path)` 重算路径常量）**改得动模块属性、改不动已经绑死的默认参数**：
+      `main.py` 两处调 `load_previous_elements()` 都不传参 ⇒ 读的永远是**搬走之前**那个路径
+      ⇒ 报「读不到阶段一的元素清单」，而那份文件**明明在**（`Saved/UEPLANE/catalog/elements.json`）。
+      **阶段二被它整个堵死**，而日志里"搬了 7 个路径常量"看着全对 —— 静默失败最难查。
+      ⇒ 口径：**路径常量不许进函数默认参数**，一律在函数体内解析。
     """
+    path = ELEMENTS_PATH if path is None else path
     doc = load_json(path) or {}
     rows = [e for e in (doc.get("elements") or []) if isinstance(e, dict)]
     scene: dict[str, str] = {}
