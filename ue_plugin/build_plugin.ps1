@@ -86,6 +86,38 @@ if (-not $SkipSync) {
     Write-Output "`n已同步 $($Jobs.Count) 个文件（产品 → 插件）"
 }
 
+# ── ③b 语法闸：**部署之前先编译一遍**（2026-10-11 血的教训）──────────────────────
+# 为什么必须有（实测事故）：插件入口 `init_unreal.py` 的说明里写了 `Saved\UEPLANE\...` ——
+#   `\U` 在**非 raw 字符串**里是 Unicode 转义 ⇒ `SyntaxError: truncated \UXXXXXXXX escape`
+#   ⇒ **整个 init_unreal.py 没跑** ⇒ **插件一条工具都没注册**（编辑器里看着"插件已启用"，
+#   实际 `list_toolsets` 里根本没有它）。
+#   而发现它要「部署 → 重启 UE → 试 → 翻日志」，一轮十几分钟，**报错还藏在 UE 日志里**。
+#   `py_compile` 只做语法检查：**不执行、不 import**（所以不需要 `unreal` 模块就能跑）
+#   ⇒ 挡得住这一类（含"必填参数排在默认参数后面"的 SyntaxError）。
+$py = Join-Path $Repo ".venv\Scripts\python.exe"
+if (Test-Path $py) {
+    $pyFiles = @(Get-ChildItem $PluginRoot -Recurse -Filter *.py)
+    $bad = @()
+    foreach ($f in $pyFiles) {
+        # ⚠ 原生命令的 stderr 在 $ErrorActionPreference='Stop' 下会被当成**终止错误** —— 临时放开
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $out = & $py -c "import py_compile,sys; py_compile.compile(sys.argv[1], doraise=True)" $f.FullName 2>&1
+        $code = $LASTEXITCODE
+        $ErrorActionPreference = $prevEap
+        if ($code -ne 0) {
+            $bad += ("{0}`n      {1}" -f $f.FullName.Substring($PluginRoot.Length), (($out | Out-String).Trim() -replace "`r?`n", "`n      "))
+        }
+    }
+    if ($bad.Count) {
+        Write-Error ("**拒绝部署/打包**：插件里有 Python 语法错误 —— 部署出去也只会静默不注册。`n  " + ($bad -join "`n  "))
+        exit 3
+    }
+    Write-Output "语法闸：$($pyFiles.Count) 个 .py 全部通过（py_compile，不执行）"
+} else {
+    Write-Warning "找不到 $py —— **语法闸被跳过了**（这一步本该拦住语法错误，别长期空着）"
+}
+
 # ── ④ 插件必备件自检（上架要用的，缺了就点名）──────────────────────────────────
 $required = @(
     (Join-Path $PluginRoot "UEPLANE.uplugin"),
