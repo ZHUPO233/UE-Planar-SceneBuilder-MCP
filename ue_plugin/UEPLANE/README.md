@@ -161,6 +161,10 @@ effect without editing code or restarting the editor.
   Two tools do touch project assets, and they say so in their own description: one can **create**
   missing material assets, and one can **rename** assets you point it at.
 - Rain, snow and Niagara-based weather are not part of this release.
+- **This plugin is one of two ways to run the same workflow.** The same engine is published as a free,
+  MIT-licensed standalone MCP server in the project repository. The feature set is identical — the
+  plugin simply needs no Python environment, and connects with one URL instead of a command. If you are
+  comfortable setting up a Python MCP server yourself, the free one will do the same job.
 
 ---
 

@@ -103,9 +103,16 @@ Dependencies — no third-party Python packages are bundled. The workflow import
 (unreal, toolset_registry) and ships its own minimal local implementations for the few helpers it
 needs, so nothing has to be installed alongside the plugin.
 
-Setup — point your MCP-capable agent at the editor's MCP endpoint (default
-http://127.0.0.1:8000/mcp). The agent discovers UEPLANE's 20 tools via list_toolsets, then calls
-official_status first (link self-check) and get_plan (state overview).
+Setup — enable the plugin and restart the editor, then start the server once from the editor console
+(ModelContextProtocol.StartServer). Point your MCP-capable agent at the editor's MCP endpoint
+(default http://127.0.0.1:8000/mcp); it discovers UEPLANE's 20 tools via list_toolsets, then calls
+official_status first (link self-check) and get_plan (state overview). PROMPT.md ships in the package
+and can be pasted straight into the agent.
+
+Also available — the same workflow engine is published separately as a free, MIT-licensed standalone
+MCP server. This plugin is that engine delivered without the Python environment: no dependencies to
+install, one URL of client configuration, installed and updated through the launcher. The feature set
+is identical; what you buy is the packaging.
 
 Docs: <你的文档地址>
 ```
@@ -114,9 +121,11 @@ Docs: <你的文档地址>
 - 第 1 段：**"pipeline"** 放在第一个词 —— 买家一眼知道**这是流程工具，不是编辑器遥控器**。
 - 第 2 段：Fab 的三个硬字段（Module / 平台 / 引擎）一次给全；`Module — none` 是**如实**，
   也顺带说明"没有要编译的东西"。
-- 第 3 段：**Prerequisites 单列**，把"依赖 Epic 自己那两个 Experimental 插件"摆在明面上、**不藏**。
+- 第 3 段：**Prerequisites 单列**，把"依赖 Epic 那几个 Experimental 插件"摆在明面上、**不藏**；
+  并把"起一次服务"这个**必做步骤**写进去（不写的话买家会卡在"连不上"）。
 - 第 4 段：**"no third-party Python packages"** 这条是**可核对的真话**（见自查清单），
   而且是对买家最实在的信息：**装上就能用，不用 pip 任何东西**。
+- 第 5 段：**免费/付费分工**，**必须写**（理由见下面「免费版 / 付费版的分工」）。
 - ⚠ 工具数写 **20** —— 这个数字**能从 `describe_toolset` 数出来**，改工具面时必须同步改这里。
 
 ### 商品描述（`FAB-DESCRIPTION.md` 骨架）
@@ -143,11 +152,44 @@ with people in the loop: reference images in, an inspectable and reversible scen
 
 🛠️ HOW TO USE:
 1. Install the plugin and restart the editor (it auto-enables the MCP stack it needs).
-2. Point your MCP agent at the editor's endpoint (default http://127.0.0.1:8000/mcp).
-3. Call official_status, then get_plan, and follow the eight-stage overview.
+2. Start the server once, from the editor console: `ModelContextProtocol.StartServer`.
+3. Point your MCP agent at the editor's endpoint (default http://127.0.0.1:8000/mcp),
+   and paste PROMPT.md into the agent so it goes straight to the toolset.
+4. Call official_status, then get_plan, and follow the eight-stage overview.
+
+💡 WHY BUY THIS WHEN A FREE VERSION EXISTS:
+UEPLANE's workflow engine is also published as a free, MIT-licensed standalone MCP server —
+read it, run it, modify it. The plugin is that same workflow, delivered the convenient way:
+• no Python environment to install or keep working (the standalone server needs one, and fetches
+  packages on first run);
+• one line of client config — a URL — instead of a command with an absolute interpreter path;
+• installs and updates through the launcher, inside the project you already have open.
+You are paying for packaging and support, not for a different feature set.
 
 Requirements: Win64 · Unreal Engine 5.8 · Unreal's native MCP stack (Experimental, by Epic).
 ```
+
+---
+
+### 免费版 / 付费版的分工（**买家必问**，2026-10-11 定的 A 案）
+
+**背景（必须先认清的事实）**：工作区那套 **standalone MCP server 是 MIT 的**，
+v1.0.1 及以前已经发出去，**不可撤回**。而插件里有四份文件是从它同步过去的（见「授权」一节）。
+所以"插件完全闭源"这条路**收不回过去**。
+
+**A 案（已选）：把它当免费入口，明说。**
+
+- **免费**：standalone server（MIT，GitHub 可见、可改、可自建）
+- **付费**：UE 插件（省掉 Python 环境、一条 URL 接上、从启动器安装与更新）
+
+⚠ **必须在商店页写出来**，理由有三条：
+1. **买家一定会发现**（同一个 GitHub 上就有），瞒着只会换来差评与退款；
+2. **写出来反而是卖点** —— 它把"我付的是什么钱"讲清楚了（打包与支持，不是功能）；
+3. 它是**漏斗**：免费用 server 试过、觉得好用的人，正是最愿意为"省事"付钱的人。
+
+⚠ **口径纪律**：不要写"插件功能更多"（**不是事实**），也不要用"专业版/完整版"这类暗示免费版残缺的词。
+**两边的功能面完全一样（同 20 个工具、同一份业务代码）** —— 差的是**部署方式**。
+
 
 ---
 
@@ -157,9 +199,10 @@ Requirements: Win64 · Unreal Engine 5.8 · Unreal's native MCP stack (Experimen
 - [x] 插件目录只有一个 `UEPLANE/`，结构是 `UEPLANE.uplugin` + `Content/` + `Config/` + `Resources/`
 - [x] **无未使用的文件/目录**（`tools/`（验证脚本）、`dist/`、`build_plugin.ps1`、`MakePlugin.ps1`、
       `移植实测记录.md` **都在排除清单里**）
-- [x] `Config/FilterPlugin.ini` 只列"标准结构之外要发的"（目前只有 `/README.md`）
+- [x] `Config/FilterPlugin.ini` 只列"标准结构之外要发的"（目前是 `/README.md` + `/PROMPT.md`）
       —— ⚠ `Content/` 是 UAT **自动包含**的，业务代码在它下面，**不用列**
-- [x] `MakePlugin.ps1` 跑过一遍，**包内无残留**（脚本第 ④ 步会警告；实测包内 17 个文件，无脚本/无缓存）
+- [x] `MakePlugin.ps1` 跑过一遍，**包内无残留**（脚本第 ④ 步会警告；实测包内 **18** 个文件，
+      无脚本 / 无缓存 / 无 `PROMPT.zh-CN.md`）
 
 ### 构建与依赖
 - [ ] 在**干净的 UE 5.8 工程**里解压安装、启用、跑通一遍（**这一条不能省**）
