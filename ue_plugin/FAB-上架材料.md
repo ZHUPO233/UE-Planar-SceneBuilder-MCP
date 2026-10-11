@@ -202,7 +202,12 @@ Requirements: Win64 · Unreal Engine 5.8 · Unreal's native MCP stack (Experimen
 ### 文案（这一节 VibeUE 栽过）
 - [ ] **所有数字口径统一**，且**能从代码数出来**（工具数 = **20**，从 `describe_toolset` 数）
 - [x] 技术信息里**写明"依赖官方 Experimental MCP 栈"**
-- [ ] 中英文都有（Fab 要求 "All text fields must contain an English version"）
+- [x] **买家会读的东西全英文**（Fab 要求 "All text fields must contain an English version"）：
+      `README.md` ✓ / `PROMPT.md` ✓ / `.uplugin` 的 Description ✓ / 商店表单文案 ✓。
+      ⚠ **工具描述本身是中文**（产品 docstring 原文，`_doc` 同步过来的）—— **Agent 读中文没问题**，
+      但买家自己在客户端里看到的说明是中文。要英文化得翻译 20 段，且会破坏"与服务器版同一份描述"
+      —— **知情下选择不改**。
+      中文版 PROMPT 留在仓库 `ue_plugin/PROMPT.zh-CN.md`（**不进包**，给作者自己看）。
 - [ ] `FabURL` / `DocsURL` / `SupportURL` 都能点开
 
 ### 媒体

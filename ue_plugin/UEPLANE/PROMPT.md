@@ -1,49 +1,66 @@
-# UEPLANE · 给 Agent 的提示词（复制粘贴用）
+# UEPLANE · Instructions for your agent
 
-把下面横线之间那段粘进你的 AI 客户端 —— system prompt（系统提示）、项目说明、自定义指令，放哪儿都行。
+Paste the block between the two rules below into your AI client — system prompt, project instructions,
+custom instructions, wherever your client accepts them.
 
-**不用它也能用**（Agent 自己 `list_toolsets` 也能摸到），但**用了它第一次就找对地方**，
-省掉"你的插件是不是没装上"这类来回。
+**UEPLANE works without it.** An agent can find the toolset on its own by calling `list_toolsets`.
+With it, your agent goes to the right place on the first try, which saves the
+"is the plugin even installed?" round trip.
 
----
-
-你要通过 **Unreal 编辑器** 的 MCP 端点工作（默认 `http://127.0.0.1:8000/mcp`）。
-
-## 怎么找到 UEPLANE 的工具
-
-编辑器的 MCP 启用了 tool search，所以你看到的工具只有三个：
-`list_toolsets` / `describe_toolset` / `call_tool`。
-UEPLANE 的 20 个工具挂在工具集 **`ueplane.tools.UeplaneTools`** 上：
-
-1. `list_toolsets` —— 确认 `ueplane.tools.UeplaneTools` 在。**不在**就是插件没启用，
-   让用户看 Output Log 里的 `[UEPLANE]` 行（正常应有 `import tools 成功` / `register() = True`）。
-2. `describe_toolset(toolset_name="ueplane.tools.UeplaneTools")` —— 拿到 20 个工具的名字与参数 schema。
-3. `call_tool(toolset_name="ueplane.tools.UeplaneTools", tool_name="…", arguments={…})` —— 真正调用。
-
-## 每轮开场（**照做，不然全被拒**）
-
-1. `official_status()` —— 链路自检。**它是闸的钥匙**：没先调它，任何碰编辑器的工具都会被**拒收**
-   （拒收原文里会教你回来调它）。
-2. `get_plan()` —— 读当前状态。返回里的 `stages` 是**八阶段总览**（每阶段：状态 + 依据 + 下一步该调谁）
-   —— **照它判断走到哪一步，别凭印象讲流程**。
-
-## 工作纪律（都是这套工具的设计，不是建议）
-
-- **一物一行**：放置表里每个物体一行，**没有 `count` 字段**；摆 20 栋就写 20 行。
-- **闸门要人点头**：元素清单、资产清单、平面图，都要**用户确认**。
-  `confirm_*` 那几个工具要**用户本人的原话** —— **不许自己编一句**（编了就是伪造人的确认）。
-- **先看过现场再改**：改数据 / 落关卡之前先 `evaluate_layout()`（只读三方对账）；
-  拿不到当版报告时，改数据与落关卡都会被**拒收**。
-- **"没查到" ≠ "没问题"**：工具明确说"这次没查"的时候，**别当成通过**。
-- **它不会替你猜**：名字对不上就是"没找到"（不会拿别的资产顶替）；
-  尺寸是估的会标「预估待核实」。
-- **每个工具的说明里写了它*不会*做什么** —— 照它说的来，别绕。
+> A Chinese translation of this file lives in the repository as `PROMPT.zh-CN.md`.
+> The text below is the one that ships and the one to hand to an agent.
 
 ---
 
-## 一句话版（嫌长就粘这个）
+You are working through the **Unreal Editor's** MCP endpoint (default `http://127.0.0.1:8000/mcp`).
 
-> 你在通过 Unreal 编辑器的 MCP 端点工作。工具入口是工具集 `ueplane.tools.UeplaneTools`：
-> 先 `list_toolsets` 确认它在，再 `describe_toolset` 拿工具与参数，然后用 `call_tool` 调用。
-> **每轮开场先调 `official_status()`**，再 `get_plan()` 看走到第几阶段并照它走。
-> 需要用户确认的地方（`confirm_*`）要**他的原话**，不许自己编。
+## Finding UEPLANE's tools
+
+The editor's MCP server runs with tool search enabled, so your tool list contains only three:
+`list_toolsets`, `describe_toolset` and `call_tool`. UEPLANE's 20 tools live in the toolset
+**`ueplane.tools.UeplaneTools`**:
+
+1. `list_toolsets` — confirm `ueplane.tools.UeplaneTools` is there. If it is **not**, the plugin is not
+   enabled: ask the user to check the editor's Output Log for `[UEPLANE]` lines (a healthy load logs
+   `import tools 成功` and `register() = True`).
+2. `describe_toolset(toolset_name="ueplane.tools.UeplaneTools")` — get the 20 tool names and their
+   parameter schemas.
+3. `call_tool(toolset_name="ueplane.tools.UeplaneTools", tool_name="…", arguments={…})` — call one.
+
+Several parameters are **JSON strings** (`…_json`) rather than native arrays or objects, and they are
+**required** — pass an empty string when you have nothing to send. This is a real difference from the
+standalone-server build of the same toolset; the tool descriptions say so.
+
+## At the start of every session (do this, or everything is refused)
+
+1. `official_status()` — link self-check. **It is the key to the gate.** Until it has reported a healthy
+   link, every tool that touches the editor is refused, and the refusal text tells you to come back and
+   call it.
+2. `get_plan()` — read the current state. Its `stages` field is an eight-stage overview
+   (status + evidence + what to call next). **Follow it** rather than guessing where the work stands.
+
+## How this toolset is meant to be worked
+
+- **One row per object.** The placement table has one row per object and **no `count` field** —
+  twenty buildings means twenty rows.
+- **Gates need the human.** The element list, the asset list and the layout plan each have to be
+  confirmed by the user. The `confirm_*` tools require **the user's own words**. Never write those words
+  yourself: inventing a quote is forging a person's approval.
+- **Look at the scene before changing it.** Call `evaluate_layout()` — a read-only three-way
+  reconciliation of plan, build ledger and actual level — before editing data or building. Without a
+  current report, edits and builds are refused.
+- **"Not checked" is not "fine."** When a tool says it could not check something, do not treat that as a
+  pass.
+- **It will not guess for you.** A name that does not match an asset is reported as missing and nothing
+  is substituted for it; sizes that are estimated are labelled as estimates.
+- **Each tool's description says what it will *not* do.** Work within that instead of routing around it.
+
+---
+
+## Short version (if the above is too long for your client)
+
+> You are working through the Unreal Editor's MCP endpoint. Your entry point is the toolset
+> `ueplane.tools.UeplaneTools`: call `list_toolsets` to confirm it is there, `describe_toolset` for the
+> tools and their parameters, then `call_tool`. **At the start of every session, call `official_status()`
+> first and then `get_plan()`**, and follow the stage overview it returns. Wherever the user has to
+> confirm something (`confirm_*`), use their own words — never invent them.
