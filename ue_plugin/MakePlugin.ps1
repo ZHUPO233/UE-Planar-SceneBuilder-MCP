@@ -112,6 +112,16 @@ if ($rc -ge 8) { Write-Error "robocopy 失败（退出码 $rc）"; exit 1 }   # 
 # 把改过版本号的 .uplugin 写回暂存区（源文件不动）
 Set-Content -Path (Join-Path $Staging "$PluginName.uplugin") -Value $upluginText -Encoding UTF8 -NoNewline
 
+# ── ③b 清 Python 缓存（**真清，不只警告**）─────────────────────────────────────
+# 为什么：源码换了、缓存没换 ⇒ 买家加载到**旧代码**（实测踩过）。
+# 而且 robocopy 的 /XD 只挡得住**显式路径**那一层，嵌套的 __pycache__ 会漏进来
+# （2026-10-11 实测：语法闸生成的缓存被带进包，第 ④ 步才警告出来）。
+Get-ChildItem $Staging -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+Get-ChildItem $Staging -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Extension -in ".pyc", ".pyo" } |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+
 # ── ④ 排除项不许残留 ──────────────────────────────────────────────────────────
 $leftover = @()
 foreach ($d in $ExcludeDirs)  { if (Test-Path (Join-Path $Staging $d)) { $leftover += $d } }

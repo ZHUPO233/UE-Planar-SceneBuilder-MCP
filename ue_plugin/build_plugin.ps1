@@ -114,6 +114,9 @@ if (Test-Path $py) {
         exit 3
     }
     Write-Output "语法闸：$($pyFiles.Count) 个 .py 全部通过（py_compile，不执行）"
+    # 语法闸自己的副产物（__pycache__）要清掉 —— 别让它进插件树、更别进包
+    Get-ChildItem $PluginRoot -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 } else {
     Write-Warning "找不到 $py —— **语法闸被跳过了**（这一步本该拦住语法错误，别长期空着）"
 }
