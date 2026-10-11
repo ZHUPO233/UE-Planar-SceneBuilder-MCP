@@ -1,3 +1,4 @@
+# Copyright (c) 2026 ZHUPO233
 # =============================================================================
 # 本 server 是编排层，自己不碰 UE：
 #   Agent(agent) → 本 server → 官方 Unreal MCP（HTTP 127.0.0.1:8000）→ UE 编辑器
@@ -33,13 +34,50 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
 
-import anyio
-from pydantic import BaseModel, Field
+# --- 平台层（bridge.py）：MCP 外壳 / 模型基类 / 官方连接 ------------------------  【模块：bridge】
+# ⚠ 2026-10-11 重构（用户拍板的「core/shell 两层」）：这里过去直接
+#   `import anyio` / `from pydantic …` / `from mcp …` —— 业务层因此**只能在装了这三个包的
+#   Python 里跑**。现在全部收进 `bridge.py` 这一个接缝：
+#   服务器那份 bridge 用真的 mcp / pydantic；插件（UE 编辑器内）那份换成进程内替身 ——
+#   **业务层（本文件 / schemas.py / surfaces.py）两边是同一份，一个字不改。**
+# ⚠ 两段式导入的理由与下面 schemas 那段**逐字相同**（Agent 按脚本方式起本文件，
+#   此时 `__package__` 为空，相对导入必失败）—— 2026-09-23 在这件事上炸过一次，别改回单段。
+#
+# ⚠ 为什么这些名字**必须留在本文件的命名空间里**（不能只 `from bridge import *` 了事）：
+#   `tests/preflight.py` 是 `runpy.run_path(main.py)` 之后**按名字**取的 ——
+#   `mod["mcp"].list_tools()`、往 `mod["apply_surfaces"].__globals__["call_official"]` 打桩、
+#   调 `mod["_mark_link_state"](True)`。导入进来 = 在命名空间里，所以照旧成立。
+try:
+    from . import bridge as _bridge
+except ImportError as _exc_bridge_rel:               # 脚本方式：__package__ 为空
+    _here_bridge = str(Path(__file__).resolve().parent)
+    if _here_bridge not in sys.path:
+        sys.path.insert(0, _here_bridge)
+    try:
+        import bridge as _bridge
+    except ImportError as _exc_bridge_top:
+        # 两个错误都带上（与下面 schemas 那段同一套口径）：只报第一个会让人查错方向
+        raise ImportError(
+            "平台层（bridge.py）导入失败："
+            f"相对导入 → {_exc_bridge_rel}；顶层导入 → {_exc_bridge_top}"
+        ) from _exc_bridge_top
 
-from mcp import Client
-from mcp.server import MCPServer
-from mcp.server.mcpserver import Context
-from mcp.server.mcpserver.exceptions import ToolError
+# ⚠ 逐个**显式再导出**（不用 `import *`）：名字在这里看得见、能 grep、IDE 能跳转。
+BaseModel = _bridge.BaseModel
+Field = _bridge.Field
+Client = _bridge.Client
+MCPServer = _bridge.MCPServer
+Context = _bridge.Context
+ToolError = _bridge.ToolError
+AppContext = _bridge.AppContext
+OFFICIAL_URL = _bridge.OFFICIAL_URL
+official_client = _bridge.official_client
+_mark_link_state = _bridge._mark_link_state
+mcp = _bridge.mcp
+# ⚠ `anyio` 也必须再导出：`call_official()` 的**重连分支**里还有一句
+#   `await anyio.sleep(0.1)`（main.py 里唯一剩下的 anyio 用法）——
+#   2026-10-11 本次重构**差点漏掉它**（那次是逐个核"搬走的名字还有没有人在用"才抓到的）。
+anyio = _bridge.anyio
 
 # --- 数据模型（工具返回结构）在 schemas.py -------------------------------------  【模块：schemas】
 # 为什么是"先相对、失败再顶层"两段式（而不像规划层那样惰性导入）：
@@ -118,8 +156,8 @@ LayoutRowVerdict = _schemas.LayoutRowVerdict
 #   `from .planning import ...` 会抛 "attempted relative import with no known parent package"。
 
 # --- 常量 ---------------------------------------------------------------------  【模块：state（跨模块口径）】
-
-OFFICIAL_URL = "http://127.0.0.1:8000/mcp"
+# ⚠ `OFFICIAL_URL` 已于 2026-10-11 搬到 `bridge.py`（它属于"跟平台有关的东西"，
+#   而且只有那段连接代码在用）—— **定义只有那一处**，本文件顶部已把它再导出了。
 
 
 # --- 让 httpx 别拿系统代理去连本地 UE（2026-09-30 加 · 用户授权）--------------------  【模块：ue_adapter】
@@ -848,154 +886,15 @@ def _safe_actor_name(label: str, index: int, element_key: str) -> str:
     return safe or f"{element_key or 'actor'}_{index:03d}"
 
 
-# --- [完工-01] 官方连接（由专用 task 持有，全程复用一条连接）---  【模块：ue_adapter】
-# 实测 2026-09-23 12:07 起本会话持续服务：数十次官方调用，无 cancel-scope 崩溃。
-#
-# 为什么必须是"专用 task"（2026-09-23 实测定案，别改回去）：
-#   `mcp.Client.__aenter__` 会把 streamable-http 传输压进一个 AsyncExitStack，
-#   而这个传输内部会 `async with anyio.create_task_group()` —— 即进入一个取消域。
-#   anyio 的铁律：取消域只能由进入它的那个 task 退出。旧写法在【工具调用的 task】里
-#   建连接、却在【lifespan 的 task】里关，跨 task 退出必抛
-#   RuntimeError: Attempted to exit a cancel scope that isn't the current tasks's
-#   current cancel scope —— 它穿透 SDK 派发器的 task group，整个 server 进程退出。
-#   修法：建和关都收进同一个 task（`_connection_loop`），取消域进出同源。
-#   ⚠ 别再往 `asyncio.Lock` 上找：去掉锁之后它照样发生，真凶是上面这个"跨 task 关闭"。
-#
-RETRY_SECONDS = 3.0
-"""连不上官方时的重试间隔（秒）。编辑器没开时会一直按这个间隔重试。"""
-
-READY_TIMEOUT = 15.0
-"""工具调用等"连接 task 首次表态"的上限（秒）；超时就抛 ToolError，而不是干等。"""
-
-
-@dataclass
-class AppContext:
-    """服务器生命周期内共享的状态：一条官方连接 + 两个同步信号。
-
-    所有权约定（**改这个文件时请守住**）：
-      - `ue` 只有 `_connection_loop` 这一个 task 会写，其它 task 只读；
-      - 谁都不许在工具调用的 task 里创建或关闭官方客户端 —— 那正是炸进程的原因。
-    """
-
-    ue: Any = None
-    """官方 MCP 客户端。**只能由连接 task 创建和关闭**；工具调用只读它、用它发请求。"""
-
-    ready: Any = None
-    """连接 task 首次表态（连上 or 失败）后 set，让工具调用不必干等。"""
-
-    stop: Any = None
-    """要求连接 task 断开重连的信号。工具调用发现连接死了就 set 它。"""
-
-    error: str = "尚未连上（连接 task 还在重试）"
-    """最近一次连接失败的原因原文，拼进 ToolError 给用户看。"""
-
-
-async def _connection_loop(app: AppContext) -> None:
-    """专用连接 task：**唯一**允许创建/关闭官方客户端的地方。
-
-    循环做三件事：
-      ① 建连接（进入 `async with client`）；
-      ② 把连接借出去 —— 挂在 `app.stop.wait()` 上不动；
-      ③ 被要求重连（`app.stop` 被 set）或连不上时，退出 `async with`
-         （**在同一个 task 里关**），歇一会儿回到 ①。
-
-    ⚠ `app.stop` 每轮都换一个新的 `anyio.Event`：Event 一旦 set 就不会自动复位，
-      不换的话第二轮会立刻又"被要求重连"，变成死循环。
-    ⚠ `except Exception` 接不住 `CancelledError`（它是 `BaseException` 的子类）——
-      这正是我们要的：关机时 task group 取消本 task，取消要能正常往外抛；
-      而 `finally` 照样会执行。
-    """
-    log = logging.getLogger(__name__)
-    while True:
-        app.stop = anyio.Event()
-        app.ue = None
-        client = Client(OFFICIAL_URL)
-        backoff = RETRY_SECONDS
-        try:
-            async with client:
-                app.ue = client
-                app.error = ""
-                log.info("已连上官方 Unreal MCP：%s", OFFICIAL_URL)
-                # 连上就**立刻**表态放行等待者，不能等退出 async with 才表态：
-                # 下面要挂在这里把连接借出去、可能挂很久；若只在 finally 里 set，
-                # 工具调用会一直等 ready 直到 READY_TIMEOUT 超时 —— 而日志里明明
-                # 已经打了"已连上官方 Unreal MCP"（这个坑我实测踩到过）。
-                if app.ready is not None:
-                    app.ready.set()
-                await app.stop.wait()
-                backoff = 0.5
-        except Exception as exc:
-            app.error = f"{type(exc).__name__}: {exc}"
-            log.warning("连不上官方 Unreal MCP（%s）：%s", OFFICIAL_URL, exc)
-        finally:
-            app.ue = None
-            if app.ready is not None:
-                app.ready.set()
-        await anyio.sleep(backoff)
-
-
-async def official_client(ctx: Context[AppContext], check_link: bool = True) -> Any:
-    """取当前可用的官方客户端；没连上就抛 ToolError（给模型看人话，而不是崩栈）。
-
-    连不上是**可预期**的（编辑器没开），所以这里一律转成 ToolError 原文说明，
-    不把底层异常抛给协议层。
-
-    ⚠ `check_link=True`（默认，2026-09-30 加）：**动 UE 之前必须先确认链路**（见 `_link_guard()`）。
-      本函数是**所有碰 UE 的路径的唯一咽喉**，所以这道闸只在这一处实现。
-      ⚠ 只有 `official_status()` 自己传 `False` —— 它就是那把"检查链路的钥匙"，不能自己拦自己。
-    """
-    if check_link:
-        _link_guard()
-    app = ctx.request_context.lifespan_context
-    try:
-        # 等连接 task 首次表态：server 刚起来时它可能还在握手，直接判失败会误报
-        with anyio.fail_after(READY_TIMEOUT):
-            await app.ready.wait()
-    except TimeoutError:
-        raise ToolError(
-            f"等官方连接就绪超时（{READY_TIMEOUT:.0f} 秒）：{app.error or '连接仍无结果'}"
-        ) from None
-    if app.ue is None:
-        raise ToolError(
-            f"连不上官方 Unreal MCP（{OFFICIAL_URL}）："
-            f"{app.error or '连接正在重建，请稍后重试'}。"
-            f"请确认 ① UE 编辑器已打开 ② ModelContextProtocol 插件已启用 "
-            f"③ 端口 8000 在监听。"
-        )
-    return app.ue
-
-
-@asynccontextmanager
-async def app_lifespan(server: MCPServer):
-    """服务器启动时拉起连接 task，关闭时收回（不留孤儿 task）。
-
-    ⚠ 两处必须"同源"，这是修复的全部要点：
-      - task group 在**本 lifespan 的 task** 里进、也在本 task 里出；
-      - 官方客户端的进/出都发生在**子 task**（`_connection_loop`）内部。
-      两者互不越界，所以不会再出现"取消域跨 task 退出"的 RuntimeError。
-
-    ⚠ 这里**不再吞异常**：旧版在 finally 里 `except BaseException` 把关闭连接的
-      错误咽掉，结果只是把崩溃推迟到了 SDK 派发器的 task group（那里没人接），
-      照样炸进程。现在关闭动作归连接 task 所有，它自己的收尾由 anyio 的
-      task group 负责，不需要这里兜。
-    """
-    app = AppContext(ready=anyio.Event(), stop=anyio.Event())
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(_connection_loop, app)
-        try:
-            yield app
-        finally:
-            tg.cancel_scope.cancel()
-
-
-# 顺序很关键：app_lifespan 必须在 MCPServer(...) 之前定义；
-# mcp 必须在任何 @mcp.tool() 之前存在（装饰器在"定义时"就执行）。
-#
-# 为什么没有 instructions=（2026-09-23 实测，别加回来）：本Agent不读 MCP 的
-# instructions（dsh-mcp-client 的 connect() 返回值连赋值都没有）。
-# 真正到模型眼前的是 tools/list（工具名 + 描述 + schema），
-# 所以要求写在各工具的 docstring 里。
-mcp = MCPServer("UEPLANE-SceneLayout", lifespan=app_lifespan)
+# --- [完工-01] 官方连接 —— **已搬到 `bridge.py`**（2026-10-11 重构）--------------  【模块：ue_adapter】
+# 搬走的是：`RETRY_SECONDS` / `READY_TIMEOUT` / `AppContext` / `_connection_loop` /
+#   `official_client` / `app_lifespan` / `mcp = MCPServer(...)`。
+# 为什么搬：它们是**平台/传输**，不是业务 —— 插件那份 bridge 会用进程内调用把它整段换掉，
+#   而本文件不该知道"官方是经 HTTP 还是经进程内"这件事。
+# ⚠ 那段「为什么必须是专用 task」的完整说明（cancel-scope 跨 task 退出会炸进程）
+#   已**逐字搬到 `bridge.py`**，要看去那儿看；别在这儿凭记忆重述。
+# ⚠ 本文件仍在用的那几个名字（`official_client` / `AppContext` / `mcp` / `ToolError`）
+#   由**文件顶部**的 bridge 导入提供 —— 名字没变，所以下面所有工具一个字都不用改。
 
 
 # --- [完工-02] 厚函数（纯逻辑，不碰网络，可直接单测）---  【模块：ue_adapter/assets/state（按函数分）】
@@ -9942,13 +9841,9 @@ def _readback_guard() -> None:
 
 _SESSION_PREREQ_DONE: set[str] = set()
 
-# --- 链路状态（2026-09-30 加：用户要求「每次要动 UE 必须检查连接状态」）--------------  【模块：gate】
-# 记的是 `official_status()` **这次的返回值**，不是"调过没有" —— 只记"调过"等于没检查：
-#   2026-09-30 实测踩到：开机后客户端与 MCP 断连（stdio 子进程没被拉起 / 会话工作区没恢复），
-#   Agent 一上来就调工具，一路以**最难懂的方式**失败，排查花很久。
-# `None` = 本进程里**还没检查过**；`True` = 上次检查**连上了**；`False` = 上次检查没连上（原因见 `_SESSION_LINK_ERR`）。
-_SESSION_LINK_OK: bool | None = None
-_SESSION_LINK_ERR: str = ""
+# ⚠「链路状态」（`_SESSION_LINK_OK` / `_SESSION_LINK_ERR` / `_mark_link_state` / `_link_guard`）
+#   已于 2026-10-11 搬到 `bridge.py` —— 它管的是**传输链路**，不属于业务；判据一个字没改。
+#   本文件顶部已把 `_mark_link_state` 再导出，所以 `official_status()` 照旧调它。
 
 
 def _mark_session_prereq(name: str) -> None:
@@ -9956,46 +9851,10 @@ def _mark_session_prereq(name: str) -> None:
     _SESSION_PREREQ_DONE.add(str(name))
 
 
-def _mark_link_state(ok: bool, err: str = "") -> None:
-    """记下**链路检查的结果**（只有 `official_status()` 会调它）。
-
-    ⚠ 它与 `_mark_session_prereq` 的区别，就是这道闸的全部意义：
-      那个只记"**调过**"，这个记"**通的还是不通的**" —— 见 `_link_guard()`。
-    """
-    global _SESSION_LINK_OK, _SESSION_LINK_ERR
-    _SESSION_LINK_OK = bool(ok)
-    _SESSION_LINK_ERR = str(err or "")
-
-
-def _link_guard() -> None:
-    """**动 UE 之前必须先确认链路**（2026-09-30 用户要求：「每次要动 UE 必须检查连接状态」）。
-
-    谁调它：**所有碰 UE 的路径** —— 就一个咽喉：`official_client()`（官方客户端唯一的取用口，
-    任何要 UE 的工具都得从它这儿过），所以**一处改、全覆盖**。
-
-    判据是"**本进程里 `official_status()` 报过连上**"，不是"调过"：
-      · 还没检查过 → 拒收，让它先调 `official_status()`；
-      · 上次检查没连上 → 拒收，并把**当时的错误原文**摆出来（UE 没开 / 插件没启 / 8000 没听 /
-        **客户端侧 stdio 子进程没起来或工作区没切到本包** —— 这时连工具都看不到）。
-    ⚠ 为什么这么严：2026-09-30 实测，断连时一路以最难懂的方式失败；这条闸把"链路不通"
-      提前到**第一个动作**就说清，代价只是"先调一次只读的 `official_status()`"。
-    """
-    if _SESSION_LINK_OK is True:
-        return
-    if _SESSION_LINK_OK is None:
-        raise ToolError(
-            "拒收：**动 UE 之前必须先确认链路** —— 本 server 进程里还没做过链路检查。\n"
-            "请先调一次 `official_status()`（只读、一次就够）：它报协议版本与工具集数量，"
-            "连不上时给**错误原文**；它通过之后，这一步以及后面每一步才放行。"
-        )
-    raise ToolError(
-        "拒收：**链路没通**（本进程上一次 `official_status()` 报的是连不上）—— 先修好再动 UE：\n"
-        f"· 上次的错误原文：{_SESSION_LINK_ERR or '(没有留下原文)'}\n"
-        "· 常见原因：① UE 编辑器没打开 ② `ModelContextProtocol` 插件没启用 "
-        "③ 端口 8000 没在监听；④ **客户端侧的 stdio 子进程没起来 / 会话工作区没切到本包**"
-        "（这种连 19 个工具都看不到）。\n"
-        "修好后**再调一次 `official_status()`** 确认 —— 这道闸只认它这次的返回值。"
-    )
+# ⚠ `_mark_link_state` 与 `_link_guard` **已搬到 `bridge.py`**（2026-10-11）。
+#   它们管的是"官方链路通不通"，属于传输层；`official_client()` 在 bridge 里就地调 `_link_guard()`。
+#   ⚠ 那道闸的完整说明（为什么必须"报过连上"才算检查过、断连时为什么会以最难懂的方式失败）
+#     已**逐字搬到 `bridge.py`** —— 要看去看那儿，别在这儿凭记忆重述。
 
 
 def _session_prereq_guard() -> None:

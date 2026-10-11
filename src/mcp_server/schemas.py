@@ -1,3 +1,4 @@
+# Copyright (c) 2026 ZHUPO233
 # =============================================================================
 # schemas.py —— 工具返回结构（Pydantic 模型）
 #
@@ -17,7 +18,19 @@
 #   main.py 从本模块再导出（见那里顶部那段注释）。
 # =============================================================================
 
-from pydantic import BaseModel, Field
+# --- 数据模型基类：服务器用真的 pydantic；插件（没有 pydantic）走 bridge 的最小替身 ---
+# ⚠ 2026-10-11 重构（用户拍板的「core/shell 两层」）：本文件只管**业务**，不该知道
+#   "基类是哪来的"。所以这里**两段式**取：先试真的 pydantic（服务器那套不变），
+#   拿不到再问 `bridge`（插件那份 bridge 提供只实现用得到的那几样的替身）。
+# ⚠ 第二段也是两段：模块方式 `from .bridge import`、脚本方式 `from bridge import`
+#   （Agent 按脚本方式起 main.py 时 `__package__` 为空 —— 2026-09-23 在这上面炸过）。
+try:
+    from pydantic import BaseModel, Field
+except ImportError:                                   # 插件环境：装不出 pydantic
+    try:
+        from .bridge import BaseModel, Field
+    except ImportError:                               # 脚本方式：__package__ 为空
+        from bridge import BaseModel, Field
 
 # 我们自己摆的东西都挂在 outliner 的这个根文件夹下（阶段三幂等对账的判据）
 OUR_FOLDER_ROOT = "UEMCP"

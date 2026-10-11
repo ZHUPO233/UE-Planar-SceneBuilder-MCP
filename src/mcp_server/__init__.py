@@ -1,3 +1,4 @@
+# Copyright (c) 2026 ZHUPO233
 """UEPLANE 自建 server 包。
 
 `mcp-server` 这个命令行入口（见 pyproject.toml 的 [project.scripts]）走这里。

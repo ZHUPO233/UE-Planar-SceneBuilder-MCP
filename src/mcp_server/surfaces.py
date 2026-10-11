@@ -1,3 +1,4 @@
+# Copyright (c) 2026 ZHUPO233
 # -*- coding: utf-8 -*-
 """阶段五 · 表面材质（整层）—— 按用户 2026-10-04 更正后的口径**翻新重写**。
 
@@ -58,13 +59,28 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-from pydantic import BaseModel, Field
+# --- 数据模型基类 / MCP 共用类型：与 schemas.py 同一条口径（2026-10-11 重构）---------
+# 先试真的 pydantic / mcp（服务器那套不变），拿不到再问 `bridge`（插件那份提供替身）。
+# ⚠ 每一段都是两层兜底：模块方式用相对导入、脚本方式（`__package__` 为空）用顶层导入。
+try:
+    from pydantic import BaseModel, Field
+except ImportError:                                   # 插件环境：没有 pydantic
+    try:
+        from .bridge import BaseModel, Field
+    except ImportError:                               # 脚本方式
+        from bridge import BaseModel, Field
 
 # ⚠ 这里**只**从 mcp 包拿"跨层共用"的东西：错误类型与上下文类型。
 #   其余（官方调用 / 读写 JSON / 路径转换 / toolset 常量）一律经 `SurfacesRepo` 注入 ——
 #   本文件**绝不 import main**（那会形成循环 import，规划层当年就是被这个逼着改成惰性加载的）。
-from mcp.server.mcpserver import Context
-from mcp.server.mcpserver.exceptions import ToolError
+try:
+    from mcp.server.mcpserver import Context
+    from mcp.server.mcpserver.exceptions import ToolError
+except ImportError:                                   # 插件环境：没有 mcp
+    try:
+        from .bridge import Context, ToolError
+    except ImportError:                               # 脚本方式
+        from bridge import Context, ToolError
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,26 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0.0",
+	"EngineVersion": "5.8.0",
+	"FriendlyName": "UEPLANE",
+	"Description": "Reference-image driven scene reproduction pipeline, running inside the editor. Adds a gated workflow to Unreal's native MCP tool surface: element list -> asset list -> one-row-per-object placement table -> user-approved figures -> level build -> surfaces -> environment, with a durable ledger, per-row incremental rebuilds and human-in-the-loop gates. No C++ modules; the workflow is plain Python on top of Epic's ToolsetRegistry.",
+	"Category": "Editor",
+	"CreatedBy": "ZHUPO233",
+	"CreatedByURL": "https://github.com/ZHUPO233",
+	"DocsURL": "https://github.com/ZHUPO233/UE-Planar-SceneBuilder-MCP",
+	"MarketplaceURL": "",
+	"FabURL": "",
+	"SupportURL": "https://github.com/ZHUPO233/UE-Planar-SceneBuilder-MCP/issues",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [],
+	"Plugins": [
+		{ "Name": "PythonScriptPlugin", "Enabled": true },
+		{ "Name": "ToolsetRegistry", "Enabled": true },
+		{ "Name": "ModelContextProtocol", "Enabled": true },
+		{ "Name": "EditorToolset", "Enabled": true }
+	]
+}
