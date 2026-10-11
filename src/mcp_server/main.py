@@ -10267,8 +10267,10 @@ def _stage_overview() -> list[dict]:
            这里只是**读它**、不重算。**行数**照旧比 —— 报告说明不了"台账该有几行"。
       ④ 验收台账里的 `tuned_count` / `tuned_rows_total`（由 `acceptance_view()` 带出）
           + **当前纪元**（`planning.active_epoch()`）：纪元 1 时写明「**纪元 2 还没开**（阶段三要先确认）」。
-      ⑤ `config/surface_materials.json` 的 `materials` / `create` 键数（用现成的
-         `_surface_materials()` / `_surface_creates()`）+ 建材质台账在不在。
+      ⑤ **材质清单**（`catalog/material_list.json`）在不在 / 解析得动吗 / 有几行 / 几个有实例
+         + 建材质台账（`views/surface_materials_v1.json`）在不在。
+         ⚠ **出厂配置的 `create` 键数不算进度**（2026-10-11 修：原来把它当进度，于是全新工程
+         也显示"进行中"、而"未开始"那支永远走不到）。
       ⑥ `views/environment_state_v1.json` 在不在、最近一次动作的时间。
       ⑦ `views/evaluate_v1.json` 的 `plan_hash` 是不是**当前** plan 的指纹（是 ⇒ 当版）。
       ⑧ `views/exchange/scene_v1.json` 在不在（按需 —— 这一版没把它编排进流程）。
@@ -10546,7 +10548,16 @@ def _stage_overview() -> list[dict]:
                "`apply_surfaces(only=[…], focus=true)` 真贴 → "
                "聚焦给用户看 → 满意后 `save=true`；"
                "第 ⑨ 步 `create_surfaces(mat_mode=\"tune\", tune={…})` 调参数"))
-    elif n_cre or made5:
+    elif m_doc or made5:
+        # ⚠ **2026-10-11 修**（插件版在干净工程里跑出来才发现的）：这里原来是
+        #   `elif n_cre or made5:` —— `n_cre` 是**出厂配置** `config/surface_materials.json`
+        #   的 `create` 段配方条数（我们这个包 11 条）。**那不是"用户做了多少"的证据，是配置。**
+        #   后果：一个**全新工程什么都没做**，也因 `n_cre = 11 > 0` 落进"进行中"，
+        #   而下面那个 `else`（未开始）在真实安装里**永远走不到** —— 事实上的死代码。
+        #   判据改成 `m_doc`（材质清单文件在、也解析得动，哪怕 items 是空的）——
+        #   与 `made5`（建材质台账在）一样，都是**做过的产物**。
+        #   ⚠ 清单**在磁盘上但读不动**时 `m_doc` 为假 → 仍走 else（未开始），
+        #     而 `_m_state` 里那句「⚠ 材质清单读不动…」照旧带出来（口径：读不到 ≠ 没有）。
         s5 = STAGE_STATE_DOING
         e5 = (f"{_m_state}；建法配方 `config/surface_materials.json` → create {n_cre} 个键；"
               f"建材质台账 {SURFACE_CREATE_PATH.name} "
