@@ -296,7 +296,7 @@ UEPLANE/Content/Python/ueplane/{main,schemas,surfaces}.py + planning/
 ### 完整上架流程
 
 1. 改产品代码 → `.\build_plugin.ps1`（同步）→ 在 UE 里验一遍
-2. `.\MakePlugin.ps1 -Version 1.0.0` → 得到 `dist/UEPLANE-1.0.0.zip`
+2. `.\MakePlugin.ps1 -Version 2.0.0` → 得到 `dist/UEPLANE-2.0.0.zip`（版本号以 `.uplugin` 的 `VersionName` 为准）
 3. **在干净工程里解压验证**（第三节那条不能省）
 4. 上传 Fab → 拿到 listing id → 回填 `.uplugin` 的 `FabURL` → 重新打包
 
@@ -306,3 +306,51 @@ UEPLANE/Content/Python/ueplane/{main,schemas,surfaces}.py + planning/
 >
 > ⚠ 这套链条**只在开发机上跑通过**（2026-10-11：包内 17 个文件 / 1.443 MB / 退出码 0）。
 > **没在干净工程里装过**；第一次提交时**把报错原文留档**，下一次就能避开。
+
+---
+
+## 五、GitHub 发版（MCP server ＋ 插件 **同一个仓库**）
+
+> ⚠ 这一节是 **2026-10-17 补的**：在此之前**全仓库没有任何地方写 GitHub 发版流程**
+> （`git push` / `gh release` 在 md 里**零命中**，第四节只讲 Fab）⇒ 每次发版都要临时现想一遍。
+> 别再让它只活在记忆里。
+
+### 两件不同的事，别混
+
+| 动作 | 命令 | GitHub 上会变什么 |
+|---|---|---|
+| 推代码 + 标签 | `git push origin main --tags` | 提交列表 ＋ **Tags**（出现 `v2.0.0`） |
+| **建 Release** | `gh release create …`，或网页 `Draft a new release` | **Releases** 那一栏（访客/买家看的就是它） |
+
+⚠ **只推标签，Releases 页面不会自己多一条** —— "推完了怎么还是 1.0.1"通常是漏了第二步。
+
+### 顺序
+
+```powershell
+cd F:\MCP_Server
+# ① 发版前自检：产品 ↔ 插件拷贝必须一致（不一致就别发）
+cd ue_plugin; .\build_plugin.ps1 -Check; cd ..
+
+# ② 推代码 + 标签
+git push origin main --tags
+
+# ③ 建 Release（有 gh）
+gh release create v2.0.0 --title "UEPLANE v2.0.0" --notes-file dist\release-body-v2.0.0.md
+#   没 gh：仓库 → Releases → Draft a new release → 选 tag `v2.0.0`
+#          → 标题 `UEPLANE v2.0.0` → 正文贴 dist\release-body-v2.0.0.md 全文 → Publish
+```
+
+### 发版前必做（缺一条就别推）
+
+1. **用户跑预检全绿**：`& "F:\MCP_Server\.venv\Scripts\python.exe" "F:\MCP_Server\tests\preflight.py"`
+2. `.\build_plugin.ps1 -Check` **全部一致**
+3. **版本号三处同步**：`pyproject.toml` / `uv.lock` / `ue_plugin/UEPLANE/UEPLANE.uplugin` 的 `VersionName`
+4. `dist\release-body-<版本>.md` 写好（**对比上一版改了什么**）
+5. 打标签前 `git status --porcelain` 为**空**
+
+### ⚠ 推送这一步必须在**你自己的终端**里跑
+
+本机 `credential.helper = manager`；它没登录时 `git push` 会卡在认证。
+在 Agent 的沙箱里跑会被 TLS 挡掉（实测两种后端都不行）：
+`schannel: SEC_E_NO_CREDENTIALS` / `openssl: unable to get local issuer certificate`。
+⇒ **Agent 只负责把提交和标签做在本地，`git push` 由用户执行。**
