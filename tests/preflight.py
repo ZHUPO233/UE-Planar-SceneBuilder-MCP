@@ -906,7 +906,7 @@ def main() -> int:
         _row_i = _rep_i.probe_rows[0]
         _ok_i_self = bool(_row_i.status == _sv_i.MAT_SELF_BUILD
                           and _row_i.instance == ""
-                          and _row_i.material == "/Game/UEMCP/Materials/M_Preflightbox"
+                          and _row_i.material == "/UEPLANE/Materials/M_Preflightbox"
                           and _row_i.material == _sv_i.proposed_self_build_path("preflightbox"))
         _mk_i = mod["MaterialConfirmItem"]
         _none_ok = [_mk_i(element_key="house", label="住宅", target="/Game/Preflight/house1",

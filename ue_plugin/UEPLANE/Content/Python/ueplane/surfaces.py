@@ -475,7 +475,10 @@ def instance_name_for(found_path: str, existing: set[str]) -> str:
 def proposed_self_build_path(key: str) -> str:
     """**白膜行"待自建"时提议建到哪** → `<SELF_BUILD_FOLDER>/M_<元素>`（纯函数）。
 
-    例：`road` → `/Game/UEMCP/Materials/M_Road`；`sidewalk` → `…/M_Sidewalk`。
+    例：`road` → `{SELF_BUILD_FOLDER}/M_Road`；`sidewalk` → `…/M_Sidewalk`。
+    ⚠ **别在这里写死一条具体路径**（2026-10-17 实测：这里原来写 `/Game/UEMCP/Materials/…`，
+      `SELF_BUILD_FOLDER` 改成 `/UEPLANE/Materials` 之后它就成了**同一文件里两套口径**，
+      还连带把预检 ⑫i 钉成了假红）—— 落点只认常量 `SELF_BUILD_FOLDER`。
 
     ⚠ 这只是**提议**（用户口径：白膜搜不到 ⇒ 标待自建，不是"跳过"）——它**不改任何东西**。
       第 ⑤ 步真建的时候要照这个键去 `config/surface_materials.json` 的 `create` 段找配方
@@ -1274,7 +1277,7 @@ async def probe(repo: SurfacesRepo, max_per_element: int = 5) -> SurfaceReport:
         # ⚠ **2026-10-04 晚（用户口径）**：白膜行**保留"先搜"这条老路**（搜到就用）；
         #   **材质和材质实例都搜不到 ⇒ 直接标「待自建」**（**不是"问用户"**）——
         #   用户原话：「是白膜还是保留原来的，搜不到材质或者材质实例就标记待自建」。
-        #   同时给它一个**提议的落点**（`/Game/UEMCP/Materials/M_<元素>`）：第 ⑤ 步照这个键去
+        #   同时给它一个**提议的落点**（`<SELF_BUILD_FOLDER>/M_<元素>`）：第 ⑤ 步照这个键去
         #   `config/surface_materials.json` 的 `create` 段找配方（**配方表里没有就不建、点名**）。
         # ⚠ 匹配走**注入进来的那份唯一实现**（`main.py::match_assets_by_keyword`，
         #   与阶段一 `find_assets` **共用**）：词边界 + 逐段文件夹名 + 记"为什么命中" + 同一支排序；
@@ -1529,7 +1532,7 @@ def validate_rows(items: list[Any] | None, quote: str) -> tuple[list[MaterialRow
                 bad.append(f"{label or key}：标了**待自建**，却**没给「要建的那块材质落在哪个包路径」**"
                            "（`material` 或 `parent` 都空着）—— 第 ⑤ 步照 `create` 段的键去建，"
                            "**没有路径就无从下手**。请把目标路径填进 `material`"
-                           "（例：`/Game/UEMCP/Materials/M_Shrub`），且 `config/surface_materials.json` "
+                           f"（例：`{SELF_BUILD_FOLDER}/M_Shrub`），且 `config/surface_materials.json` "
                            "的 `create` 段里要有同一个键的配方。")
         elif not inst:
             # ⚠ **2026-10-04 晚：这条闸原来写错了，按用户口径改正**（真跑当场撞到）——
