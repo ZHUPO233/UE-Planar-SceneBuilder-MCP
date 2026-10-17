@@ -111,19 +111,19 @@ async def test_pure() -> None:
     tools = getattr(result, "tools", result)
     names = sorted(t.name for t in tools)
     check(
-        "只注册了 20 个工具（阶段一 4 + 取清单 1 + 阶段二 4 + 阶段三 3（`check_build_target` / "
+        "只注册了 21 个工具（阶段一 4 + 取清单 1 + 阶段二 4 + 阶段三 3（`check_build_target` / "
         "`adopt_user_edits` / `execute_build`）+ 阶段四（微调）0（**不新造工具**：复用 `request_plan_change` / "
         "`generate_plan(patch)` / `execute_build(only_labels)`）+ 阶段五 2 + "
         "阶段六 1（`setup_environment`）+ 阶段七 2（`capture_preview`，原挂在阶段六；"
         "`evaluate_layout`）+ 阶段八 2（导出/交换 · 按需 · 往后排：`export_layout` / `check_exchange`，"
-        "原来记在阶段四）+ 自检 1）",
+        "原来记在阶段四）+ `reset_scene` 1 + 自检 1）",
         names == ["adopt_user_edits", "apply_surfaces", "capture_preview",
                   "check_build_target", "check_exchange", "confirm_assets", "confirm_elements",
                   "confirm_plan", "create_surfaces", "evaluate_layout", "execute_build",
-                  "export_layout", "generate_plan",
+                  "export_layout", "find_assets", "generate_plan",
                   "get_asset_list", "get_plan",
-                  "official_status", "plan_assets", "rename_assets",
-                  "request_plan_change", "setup_environment"],
+                  "official_status", "rename_assets",
+                  "request_plan_change", "reset_scene", "setup_environment"],
         f"实际={names}",
     )
 
@@ -353,10 +353,10 @@ async def test_live() -> None:
               "road" in (d.get("no_count") or []) and "house" not in (d.get("no_count") or []),
               f"实际 no_count={d.get('no_count')}")
 
-        # --- plan_assets：不传 keywords，应读回刚确认的清单 ---
-        r2 = await c.call_tool("plan_assets", {})
+        # --- find_assets：不传 keywords，应读回刚确认的清单 ---
+        r2 = await c.call_tool("find_assets", {})
         d2 = r2.structured_content or {}
-        check("plan_assets 读到了用户确认的清单",
+        check("find_assets 读到了用户确认的清单",
               "用户确认过的元素清单" in (d2.get("source") or ""),
               f"实际 source={d2.get('source')}")
         check("查了 6 个元素", d2.get("total_elements") == 6,

@@ -74,15 +74,21 @@ MAIN_PY = ROOT / "src" / "mcp_server" / "main.py"
 #   `execute_build` 读同一份 plan、复用同一条 `_compose_build_rows()` 口径。
 #   现在它是 `main.py` 里的**内部件** `_orders_snapshot()`，由 `execute_build(dry_run=true)`
 #   顺手落一份留痕件（`views/build_orders_v1.json`）—— **21 → 20 个**。
+# ⚠ **2026-10-14**：工具面 +1 ⇒ **21 件**。新增 `reset_scene`（**同一张关卡图上从头再来**：
+#   只归档不删 / 默认不碰 Actor / 两段式要用户本人原话）。
+#   ⚠ 下面那段（第四批 · 阶段五）里那句「不许新造第 21 件」是**当时给阶段五定的口径**
+#     （那四档都挂在现有两件上），
+#     不是永久禁令 —— 阶段三需要一个「同图重来」的出口，那堵墙（不可回到前三阶段）才有一个
+#     合法的门（2026-10-14 用户「俩都做」）。
 EXPECTED_TOOLS = [
     "adopt_user_edits",
     "apply_surfaces", "capture_preview",
     "check_build_target", "check_exchange", "confirm_assets", "confirm_elements",
     "confirm_plan", "create_surfaces", "evaluate_layout", "execute_build", "export_layout",
-    "generate_plan",
+    "find_assets", "generate_plan",
     "get_asset_list", "get_plan",
-    "official_status", "plan_assets", "rename_assets",
-    "request_plan_change", "setup_environment",
+    "official_status", "rename_assets",
+    "request_plan_change", "reset_scene", "setup_environment",
 ]
 
 # ⚠ 2026-10-04（第四批 · 阶段五扩流程）：**工具面一个都没动，总数仍是 20** ——
@@ -228,7 +234,9 @@ def main() -> int:
 
     # --- ⑥ 阶段三「官方脚本批处理」通道（2026-10-04 加 · ⚠ **真跑尚未实测**）---
     # 为什么预检要管它：这一段是**唯一**能把"落位"整批做完的路径，而它有两个静默失效的坑：
-    #   ① `batch` 参数要是被谁改没了 / 改了默认值，行为会**悄悄**退回逐行（报文里看得出来，但没人会天天看）；
+    #   ① `batch` 参数要是被谁改没了 / 改了默认值，行为会**悄悄**变（报文里看得出来，但没人会天天看）；
+    #      ⚠ 2026-10-12：默认值**已按实测从 true 改成 false**（编辑器事件循环重入那次事故）——
+    #        本检查钉的是"默认值 == 当前决定"，所以那一次改动**同时改了这里**（显式留痕，不是悄悄改）。
     #   ② 脚本是**拼字符串**拼出来的（payload 走两层 `json.dumps`）——拼坏了只有真跑时才炸，
     #      那时关卡里可能已经落了一半。所以这里**只验能离线验的东西**：
     #      脚本是合法 Python、且它内嵌的 payload 能原样解回来（中文 label 也要能穿过去）。
@@ -242,7 +250,7 @@ def main() -> int:
         except (TypeError, ValueError):               # 装饰器万一不返回可自省的函数 → 退回读源码
             _src = MAIN_PY.read_text(encoding="utf-8")
             has_batch = "    batch: Annotated[bool, Field(" in _src
-            batch_default = True if has_batch else None
+            batch_default = False if has_batch else None    # 与上面的"当前决定"一致（2026-10-12：false）
 
         fake = [{
             "uid": "ground|假地基", "index": 1, "kind": "whitebox", "label": "假地基",
@@ -286,13 +294,21 @@ def main() -> int:
         ok_row_logic = (calls[:3] == ["add_to_scene_from_class", "add_cube", "set_actor_folder"]
                         and bool(_row0.get("actor")) and bool(_row0.get("ok"))
                         and bool(_row0.get("folder_ok")))
-        check("⑥ 阶段三批处理通道：`batch` 参数在（默认 true）+ 脚本能编出来、payload 能解回来"
+        check("⑥ 阶段三批处理通道：`batch` 参数在（默认 false —— 见下）+ 脚本能编出来、payload 能解回来"
               " + **白膜行三步都走到、引用没丢**（回归 2026-10-04 那次真跑事故）",
-              bool(has_batch and batch_default is True and ok_payload and ok_calls and ok_row_logic),
+              # ⚠ **2026-10-12 改：默认值从 true 改成 false**（用户实测事故驱动）。
+              #   事故：默认参数调 `execute_build()` 时，官方 `execute_tool_script` 从**编辑器事件循环里**
+              #   发起 ⇒ 被拒 `Cannot run the event loop while another loop is running` ⇒
+              #   `placement="batch_failed"`、`placed=0`、**关卡里落了没有是"未知"**（不是 0）。
+              #   同一次实测里 `batch=false`（逐行）**全程可用**：78/78 落成、verified 78、mismatches 0。
+              #   ⇒ 默认走已被证明能用的那条；`true` 保留（环境允许时可显式传）。
+              # ⚠ 断言的**用意不变**：仍然是"别让人**悄悄**改默认值 / 把参数拿掉" ——
+              #   所以这里钉的是"默认值 == 当前决定（False）"，谁要改就得**同时改这一行**（= 显式留痕）。
+              bool(has_batch and batch_default is False and ok_payload and ok_calls and ok_row_logic),
               f"has_batch={has_batch} default={batch_default!r} payload_ok={ok_payload} "
               f"tools_ok={ok_calls} calls={calls[:4]} row0={_row0}")
     except BaseException as exc:                      # noqa: BLE001
-        check("⑥ 阶段三批处理通道：`batch` 参数在（默认 true）+ 脚本能编出来、payload 能解回来"
+        check("⑥ 阶段三批处理通道：`batch` 参数在（断言：默认 false）+ 脚本能编出来、payload 能解回来"
               " + **白膜行三步都走到、引用没丢**（回归 2026-10-04 那次真跑事故）",
               False, f"{type(exc).__name__}: {exc}")
 
@@ -482,7 +498,7 @@ def main() -> int:
         _orig_v1 = _pl2.OUT_JSON
         _ok_fresh = _ok_v1only = _ok_v2 = _ok_broken = _ok_both = False
         try:
-            with _tempfile.TemporaryDirectory() as _td:
+            with _tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td:
                 _fake_v2 = Path(_td) / "plan_v2.json"
                 _fake_v1 = Path(_td) / "plan_v1.json"
                 _pl2.PLAN_V2_PATH = _fake_v2
@@ -569,6 +585,15 @@ def main() -> int:
     #   ⚠ **只读**（`mod["ToolError"]` / `mod["_mark_link_state"](True)` 这类）照旧走 `mod` 无妨 ——
     #     取到的是同一个函数对象，它自己写状态时写的也是真字典。
     _G = mod["apply_surfaces"].__globals__
+    # WARNING 2026-10-14: pin ensure_scene to a no-op for the whole offline run.
+    # Why: preflight runs OFFLINE and the data root is the repo (F:\MCP_Server). Once anyone runs the
+    # standalone server version once, active.json exists there -> ensure_scene would BIND to some
+    # scene dir (scenes/<key>/...) and the offline checks would then read/write THERE, while the rule
+    # is "preflight must not write the workspace". Pinning it cannot hide anything real: this group
+    # tests stage-5 gates, not scene binding.
+    async def _noop_ensure_scene(*_a, **_k):
+        return ""
+    _G["ensure_scene"] = _noop_ensure_scene
     try:
         import asyncio as _aio5
 
@@ -597,6 +622,11 @@ def main() -> int:
         #   （其余字段用 dataclass 默认值：本档不需要 IO / 路径换算）。
         _sv = importlib.import_module("surfaces")
         _saved_sv_asset = _sv.ASSET_LIST_PATH
+        # ⚠ **2026-10-12 加**：资产表现在与位置表同待遇 —— 纪元 2 的活动那份是
+        #   `asset_list_v2.json`，读取走 `surfaces.active_asset_list_path()`（v2 在 ⇒ 就它）。
+        #   所以"指到不存在的地方"这一个测法**必须把 v2 也一起指走**，
+        #   否则本机恰好存在 v2 时，这条断言会读到真清单、测不出"没有清单就拒收"。
+        _saved_sv_asset_v2 = _sv.ASSET_LIST_V2_PATH
         # ⚠ 2026-10-10：这里**曾**有一段补丁 —— 在系统临时目录里造一份同名 `material_list.json`，
         #   只为让 `surfaces.manifest_rows()` 第一步的磁盘检查 `MATERIAL_LIST_PATH.exists()` 通过
         #   （它当时**绕过**了 `repo.load_json()` 那个注入面，于是本文件各段注入的假清单被挡在门外）。
@@ -607,6 +637,7 @@ def main() -> int:
             import tempfile as _tf5
             with _tf5.TemporaryDirectory() as _td5:
                 _sv.ASSET_LIST_PATH = Path(_td5) / "no_such_asset_list.json"
+                _sv.ASSET_LIST_V2_PATH = Path(_td5) / "no_such_asset_list_v2.json"   # 两份都指走
                 _stub, _seen = _mk_stub({})
                 _G["call_official"] = _stub
                 _repo = _sv.SurfacesRepo(
@@ -625,6 +656,7 @@ def main() -> int:
                 _ok_nocall = not _seen
         finally:
             _sv.ASSET_LIST_PATH = _saved_sv_asset
+            _sv.ASSET_LIST_V2_PATH = _saved_sv_asset_v2
         check("⑫a `probe` 在没有资产清单时**拒收**（不静默出空清单、且一次官方调用都没发生）",
               bool(_ok_guard and _ok_nocall), f"guard={_ok_guard} calls={_seen} why={_why_guard}")
 
@@ -810,10 +842,10 @@ def main() -> int:
               "（不自己拼 `/Script/Engine.…`）",
               bool(_ok_op_cls), f"bad={_op_bad2[:1]} rows={len(_op_rows2)} calls={_seen}")
 
-        # ⑫g 工具总数**仍是 20**（这一版四档都挂在现有两件工具上，**不新造第 21 件**）
+        # ⑫g 工具总数**现在是 21**（2026-10-14 加了 `reset_scene`；此前 20 —— 阶段五四档仍挂在现有两件工具上）
         _n_tools = len(names)
-        _ok_count = (_n_tools == 20)
-        check("⑫g 工具总数仍是 **20**（阶段五四档都挂在 `apply_surfaces` / `create_surfaces` 上）",
+        _ok_count = (_n_tools == 21)
+        check("⑫g 工具总数是 **21**（阶段五四档挂在 `apply_surfaces` / `create_surfaces` 上 + 2026-10-14 的 `reset_scene`）",
               bool(_ok_count), f"实际={_n_tools}")
 
         # ⑫h **分派不能掉**（2026-10-04 晚**复查代码时抓到的真 bug 的回归**）：
@@ -1644,6 +1676,184 @@ def main() -> int:
               False, f"{type(exc).__name__}: {exc}")
 
     print()
+
+    # --- ㉒ 2026-10-14 新增：**「按名字找资产」的判据只剩一份**（薄壳 + 对拍）---------------------
+    #   由来：`candidates_for()` 原来是 `match_assets_by_keyword()` 的**第二份手抄**
+    #   （两条路 + `token_match` + 同一支排序，逐行对得上），而那份 docstring 写着
+    #   「全工程唯一一份」—— 两句话打架。后果：同一个关键词，`plan_assets`（阶段一 · 权威）
+    #   与 `get_asset_list`（新候选提示）可能给出**不同答案**，而预检里没有任何东西会红。
+    #   现在它是**薄壳**，并额外把**真总数**带出来：`(取前 N 个, 真总数)`。
+    #   这一组就是**防它再分叉**的那道闸 —— 谁把匹配逻辑搬回薄壳里，㉒a 当场红。
+    _inv22 = {"mesh": ["/Game/A/house1", "/Game/B/street_lamp_01_4k",
+                       "/Game/C/realistic_tree"],
+              "material": ["/Game/D/MI_Asphalt",
+                           "/Game/E/Fine_American_Road/MI_sjfnch0a"]}
+    _full22 = mod["match_assets_by_keyword"]("house", _inv22)
+    _pair22 = mod["candidates_for"]("house", _inv22, 1)
+    check("㉒a `candidates_for()` 是**薄壳**：`(取前 N 个, 真总数)` —— 前半 == "
+          "`match_assets_by_keyword()[:N]`，后半 == 它的全长",
+          bool(isinstance(_pair22, tuple) and len(_pair22) == 2
+               and [a.path for a in _pair22[0]] == [a.path for a in _full22[:1]]
+               and _pair22[1] == len(_full22)),
+          f"pair={_pair22!r} full={len(_full22)}")
+    _tree22 = [a.path for a in mod["match_assets_by_keyword"]("tree", _inv22)]
+    check("㉒b 词边界仍在：`tree` 命中 `realistic_tree`、**不命中 `street_lamp_01_4k`**"
+          "（官方是裸子串，会命中 s·tree·t）",
+          any("realistic_tree" in p for p in _tree22)
+          and not any("street_lamp" in p for p in _tree22),
+          f"hits={_tree22}")
+    _road22 = [a.path for a in mod["match_assets_by_keyword"]("fine_american_road", _inv22)]
+    check("㉒c 按**文件夹名**那条路仍在（哈希名资产 `MI_sjfnch0a` 只能靠它捞回来）",
+          any("MI_sjfnch0a" in p for p in _road22), f"hits={_road22}")
+    check("㉒d 空关键词与 `None` 都安全返回（旧 `candidates_for(None, …)` 会 AttributeError）",
+          mod["candidates_for"]("", _inv22) == ([], 0)
+          and mod["candidates_for"](None, _inv22) == ([], 0), "")
+    # --- ㉓ 2026-10-14 新增：**场景身份 + 一键重置**的覆盖断言（改动单 §3.7）----------------------
+    #   ㉓a **首行绑定**：每个 `@mcp.tool()` 的函数体第一句必须是 `await ensure_scene(ctx…)` ——
+    #        那是"把路径常量绑到本场景"的唯一入口。漏一个，那件工具就读**上一个场景**的状态，
+    #        而报文看起来一切正常（最坏那种错）。表驱动比人记靠谱。
+    #   ㉓b `scene_key()` 往返 + **不撞 key**（截断必须带哈希）
+    #   ㉓c **漏绑断言**：`scene.relocate()` 跑完之后，`base/catalog`、`base/views` 底下
+    #        **一个 Path 常量都不许剩** —— 这是"换场景只搬两条根、`REPO_ROOT`/`config/` 不动"
+    #        那个设计的守卫（`REPO_ROOT` 一动，`config/` 就被连累）。
+    #   ㉓d `reset_scene()` 的三道闸 + 归档履历 —— **源码 pin**：它要 UE 与真实关卡，离线驱动不了；
+    #        与 ⑭ 那条「源码 pin · **不是行为验证**」同一个档，不冒充行为验证。
+    import inspect as _inspect10
+    _sn23 = mod["_scene_module"]()
+    _bad23a = []
+    for _n23 in names:
+        _fn23 = mod.get(_n23)
+        if not callable(_fn23):
+            continue
+        try:
+            _src23 = _inspect10.getsource(_fn23)
+        except (OSError, TypeError):
+            _bad23a.append(_n23 + "(source?)")
+            continue
+        _parts23 = _src23.split('"""')
+        _body23 = _parts23[2].lstrip() if len(_parts23) >= 3 else ""
+        # ⚠ 2026-10-15 补：**光看"首行调了 ctx"不够 —— 还得看 `ctx` 在不在签名里**。
+        #   实测踩到：`get_plan` 是 20 件里**唯一不接 `ctx`** 的（它本来不需要 UE），
+        #   于是那行 `await ensure_scene(ctx)` 里的 `ctx` 是**未定义的名字** ⇒ `NameError`，
+        #   一调就崩、还把 server 进程打断重启。而"首行判据"完全放过了它。
+        _hasctx23 = "ctx" in _inspect10.signature(_fn23).parameters
+        if (not _body23.startswith("await ensure_scene(ctx")) or not _hasctx23:
+            _bad23a.append(_n23 + ("" if _hasctx23 else "(签名里没有 ctx!)"))
+    check("㉓a 每个注册工具的**函数体第一句**都是 `await ensure_scene(ctx…)`"
+          "（漏一个 = 那件工具读上一个场景的状态，而报文看起来正常）",
+          not _bad23a, f"没绑的={_bad23a}")
+    _k23 = _sn23.scene_key
+    check("㉓b `scene_key()`：往返稳定、空串有名字、两条长路径**不撞同一个 key**（截断必须带哈希）",
+          _k23("/Game/demo/Landscape/MCP100") == "Game_demo_Landscape_MCP100"
+          and _k23("") == "_unbound"
+          and _k23("/Game/" + "A" * 400 + "/x") != _k23("/Game/" + "A" * 400 + "/y"),
+          f"k={_k23('/Game/demo/Landscape/MCP100')}")
+    import types as _types23
+    import tempfile as _tf23
+    _tmp23 = _tf23.TemporaryDirectory()
+    try:
+        _P23 = mod["Path"]
+        _base23 = _P23(_tmp23.name) / "base"
+        _sdir23 = _base23 / "scenes" / "S1"
+        _fake23 = _types23.ModuleType("fake23")
+        _fake23.CAT = _base23 / "catalog" / "elements.json"
+        _fake23.VIEW = _base23 / "views" / "plan_v1.json"
+        _fake23.CFG = _base23 / "config" / "x.json"
+        _sn23.relocate(_fake23, [(_base23 / "catalog", _sdir23 / "catalog"),
+                                 (_base23 / "views", _sdir23 / "views")], "fake23")
+        # ⚠ 2026-10-14 修正：判据要拿**那两条旧根**比，不能拿 `_base23` 比 ——
+        #   `_sdir23`（场景目录）本身就在 `_base23` 底下（`base/scenes/S1/…`），
+        #   所以 `startswith(str(_base23))` 对「搬走的」和「没搬的」**都成立** ⇒ 永远全列出。
+        _oldroots23 = (str(_base23 / "catalog"), str(_base23 / "views"))
+        _left23 = [a for a in dir(_fake23)
+                   if not a.startswith("_")
+                   and isinstance(getattr(_fake23, a), _P23)
+                   and str(getattr(_fake23, a)).startswith(_oldroots23)]
+        check("㉓c `relocate()` 搬完 `catalog` / `views` 两条旧根底下**一个 Path 常量都不许剩**"
+              "（`config/` 必须留在原地 —— 它不按场景分）",
+              (not _left23) and str(_fake23.CFG).startswith(str(_base23 / "config")),
+              f"还剩={_left23} CFG={_fake23.CFG}")
+    finally:
+        # ⚠ 2026-10-14：清理失败**不该把预检带崩**（实测：权限受限的环境里 `cleanup()` 会抛
+        #   `PermissionError: [WinError 5]`，而它在 `finally` 里，一抛就把后面几条断言全吞掉 ——
+        #   ㉓d / ㉓e 的结果根本印不出来）。判定与清理无关，所以这里吞掉。
+        try:
+            _tmp23.cleanup()
+        except Exception:                    # noqa: BLE001
+            pass
+    _rs23 = _inspect10.getsource(mod["reset_scene"])
+    check("㉓d `reset_scene()`：原话必填（两段式）+ 同一场景核对 + 距提问够久 + 只归档不删 + 留履历"
+          "（**源码 pin** · 不是行为验证）",
+          ('if not str(user_quote or "").strip():' in _rs23)
+          and ('asked.get("asked_at")' in _rs23)
+          and ('asked.get("scene_key")' in _rs23)
+          and ("MIN_CONFIRM_DELAY_S" in _rs23)
+          and ("shutil.move" in _rs23)
+          and ("append_reset_history" in _rs23)
+          and ("purge_actors" in _rs23),
+          "缺其中一条就该回去补")
+
+    #   ㉓e **覆盖断言** —— 这条不是我漏的，是 `main.py` 的 `_epoch1_freeze_guard()` docstring
+    #        里**自己写着「还没做」**的那条：「每个注册工具都必须在表里有政策的覆盖断言」。
+    #        缺了它的后果：某件工具在纪元 2 里既不被冻、也没有任何地方写明「为什么它不冻」——
+    #        **「没写」和「故意放行」在表上分不出来**。
+    #        2026-10-14 把缺的 14 条补齐（含 `reset_scene` 的 `allow`：它是纪元 2 唯一的出口），
+    #        这条断言才立得住；从此加新工具忘写政策 ⇒ **当场红**。
+    _pol23 = mod["TOOL_EPOCH_POLICY"]
+    _nopol23 = [n for n in names if n not in _pol23]
+    _badpol23 = [n for n in names
+                 if n in _pol23
+                 and str(_pol23[n].get("epoch2") or "") not in ("refuse", "patch_only", "allow")]
+    check("㉓e **每个注册工具都在 `TOOL_EPOCH_POLICY` 里有政策**，且 `epoch2` 取值合法"
+          "（`refuse` / `patch_only` / `allow`）—— 缺了就是「没写」与「故意放行」分不出来",
+          (not _nopol23) and (not _badpol23),
+          f"没政策的={_nopol23} 取值非法的={_badpol23}")
+    #   ㉔ **纪元 1→2 由「阶段三整批落地」自动触发**（2026-10-15 用户方案：「一进批量落位就切」）——
+    #        原先换纪元绑在 `confirm_stage3` 参数的**非空**上，而**没有任何一处报文**告诉 agent
+    #        它是阶段三的收尾动作 ⇒ 整批落完 35 行之后工程**静默留在纪元 1**，可 plan 早已是
+    #        `tuned`（源码自称「纪元 2 的常态」）。实测走了 8 轮，最后靠翻源码才补上。
+    #        ⚠ 同源缺陷：那句「用户原话」只校验**非空** ⇒ agent 自己写的选项文案也能满足它
+    #        （已落盘过一次：`plan_v2.json` 的 `promoted_user_quote`）。修法 = **自动触发** +
+    #        产物**如实记录来源**（`promoted_by` / `promoted_evidence`；手工旁路才写原话并标
+    #        `promoted_quote_attested: false`）。
+    #        ⚠ 判据里 **不许**再出现「拿用户原话当换纪元凭据」，也 **不许**再让报文叫 agent 去讨它。
+    _eb24 = _inspect10.getsource(mod["execute_build"])
+    _ov24 = _inspect10.getsource(mod["_stage_overview"])
+    _pr24 = _inspect10.getsource(mod["_promote_epoch2"])
+    _sl24 = _inspect10.getsource(mod["_save_ledger_epoch2"])
+    _sb24 = _inspect10.getsource(mod["_save_build_state"])
+    _plan24 = (ROOT / "src" / "mcp_server" / "planning" / "plan.py").read_text(encoding="utf-8")
+    _tools24 = (ROOT / "ue_plugin" / "UEPLANE" / "Content" / "Python" / "ueplane"
+                / "tools.py").read_text(encoding="utf-8")
+    # 判据拆成几个具名布尔量：既好读，也避免在 f-string 里塞转义引号。
+    _empty_ok24 = ('ledger.get("rows")' in _eb24) and ('ledger.get("rows")' in _pr24)
+    _prod24 = ("promoted_by" in _plan24) and ("promoted_quote_attested" in _plan24)
+    _clean24 = (("你在 UE 里看过之后的那句话" not in _ov24)
+                and ("只许 `auto` 或 `full`" not in _tools24))
+    check("㉔ 换纪元由**阶段三整批落地自动触发**（源码 pin）：自动判据在 `execute_build` 里 + "
+          "`_promote_epoch2` 不再拿用户原话当凭据 + **空台账放行** + **凭据活到落位之后** + "
+          "产物如实记来源 + 旧口径话术已清干净",
+          ("_auto_epoch2" in _eb24)
+          and ('mode == "full"' in _eb24)
+          and ("_epoch2_ready" in _eb24)
+          # ① 触发来源取代"用户原话"
+          and ("换纪元没有触发来源" in _pr24)
+          # ② **空台账必须放行**，且**调用方与被调方都放行**（只改一处 ⇒ 自动触发永不成立，实测）
+          and _empty_ok24
+          # ③ 证据里的 level 优先取调用方传进来的
+          and ('level or ledger.get("level")' in _pr24)
+          # ④ 凭据要能活到落位之后（落完那次写台账会覆盖 `_save_ledger_epoch2` 写的字段）
+          and ("promotion" in _sb24)
+          and ("promoted_by" in _sb24)
+          and ("promoted_by" in _sl24)
+          # ⑤ 产物如实记来源
+          and _prod24
+          # ⑥ 旧口径话术已清干净
+          and _clean24,
+          f"自动判据={'_auto_epoch2' in _eb24} 不再要原话={'换纪元没有触发来源' in _pr24} "
+          f"空台账两处都放行={_empty_ok24} 凭据活到落位后={'promotion' in _sb24} "
+          f"产物={_prod24} 旧话术已清={_clean24}")
+
     if FAILED:
         print(f"预检没过（{len(FAILED)} 项）：{FAILED}")
         print("**别重启**：先修。")

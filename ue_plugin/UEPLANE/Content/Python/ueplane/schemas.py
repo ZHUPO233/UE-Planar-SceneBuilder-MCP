@@ -165,11 +165,11 @@ class BuildRowResult(BaseModel):
 
 
 class BuildReport(BaseModel):
-    """阶段三第 2 步的执行报告 —— 落完（或拒收 / 演练）之后的**如实交代**。"""
+    """阶段三第 2 步的执行报告 —— 落完（或拒收）之后的**如实交代**。"""
 
     stage: str = Field(description="阶段名")
     level: str = Field(description="落在哪张图（当前关卡）")
-    dry_run: bool = Field(description="true = 只校验对账，**一个 Actor 都没落**")
+    dry_run: bool = Field(default=False, description="⚠ **演练已删（2026-10-12 用户指令）** —— 恒为 false，保留字段只为不改报文形状")
     refused: bool = Field(default=False, description="被拒收了吗（拒收 = 一个 Actor 都没落）")
     reason: str = Field(default="", description="拒收原因（原文）")
     plan_hash: str = Field(default="", description="执行的是哪一版几何指纹")
@@ -381,9 +381,9 @@ class RenameResult(BaseModel):
 class RenameReport(BaseModel):
     """一批改名的结果。"""
 
-    dry_run: bool = Field(description="true = 只预览，**没有真改**")
+    dry_run: bool = Field(default=False, description="⚠ 恒为 false（`rename_assets` 的 `confirm` 语义见工具说明；与已删的演练无关）")
     requested: int = Field(description="要求改几个")
-    renamed: int = Field(description="真改成功几个（dry_run 时恒为 0）")
+    renamed: int = Field(description="真改成功几个（预览时恒为 0）")
     failed: int = Field(description="几个不合法或失败")
     items: list[RenameResult] = Field(description="逐个结果")
     note: str = Field(description="说明与风险提示")
@@ -626,6 +626,14 @@ class AssetListStatus(BaseModel):
             "没填过就是空"
         ),
     )
+    new_candidates_total: dict[str, int] = Field(
+        default_factory=dict,
+        description=(
+            "每个缺的元素在实况库存里**一共**命中多少个（元素 → **真总数**）。"
+            "⚠ 与 `new_candidates` 的区别：那一栏是**展示用**的、最多 `max_per_element` 个；"
+            "这一栏是**真总数**（2026-10-14 加：找资产的判据合并成一份之后，这里也报得出总数了）。"
+        ),
+    )
     new_candidates: dict[str, list[str]] = Field(
         default_factory=dict, description="缺的元素在实况库存里**名字对得上**的新候选（元素 → 路径）"
     )
@@ -688,7 +696,7 @@ class PlanAcceptance(BaseModel):
     """**阶段二验收**的状态（2026-09-25 用户要求新增）。
 
     位置：**阶段二（规划 + 生图）之后、第三阶段之前**。生图 = 阶段二结束，进这一段；
-    用户在图上看过说"行"才放行进第三阶段，说"要改"就回到「改参数 → 重落盘 → 重画图」。
+    用户在图上看过说"行"才放行进第三阶段，说"要改"就回到「改参数 → 重落盘（那一页由代码自动重生成）」。
 
     ⚠ `state` 是**现算**的（`planning.acceptance_state()`），不是台账里那个旧快照 ——
       因为图常常是"落盘之后"才画好的，读快照会拿着"等出图"的旧字样回答"走到哪了"。
@@ -701,15 +709,18 @@ class PlanAcceptance(BaseModel):
         description=(
             "`not_started` 空表 / `awaiting_figure` 等出图 / `awaiting_user` 等用户看图确认 / "
             "`changes_requested` 用户提了要改 / `accepted` 验收通过。"
-            "⚠ `awaiting_user` 的含义是「**该出的每一路图都认账**」（见 `REQUIRED_VIEWS`：恒两张）"
-            "—— 只画了一张（缺另一路）会退回 `awaiting_figure`，因为那时 `confirm_plan` 会拒收。"
+            "⚠ `awaiting_user` 的含义是「**那一页认这份数据**」（见 `REQUIRED_VIEWS`：2026-10-11 起恒**一张**"
+            "three.js 页）—— 页没出来 / 不认这一版就会退回 `awaiting_figure`，因为那时 `confirm_plan` 会拒收。"
         ),
     )
     state_cn: str = Field(default="", description="上面那个状态的中文说明（给人看）")
     plan_hash: str = Field(default="", description="这一轮验的是**哪个几何指纹**")
     figures: list[str] = Field(
         default_factory=list,
-        description="**认这份数据**的图（图名）—— 就是该**使用成卡片给用户看**的那几张；空 = 还没画或图与数据不一致",
+        description=(
+            "**认这份数据**的那一页（文件名，如 `plan_v1_view.html`）—— 就是该**使用成卡片给用户看**的那一张；"
+            "空 = 还没生成或页与数据不一致"
+        ),
     )
     pending_changes: list[str] = Field(
         default_factory=list,
@@ -730,13 +741,15 @@ class PlanAcceptance(BaseModel):
             "**这一版相对『上一次用户确认过的那一版』改了什么**（2026-09-26 起）："
             "`{local, baseline, added, changed, removed, same, required_labels, changed_dims, "
             "required_views, views_why, note}`。"
-            "`local=true` = 局部一轮：**图里只要出现 `required_labels` 那几行**，"
-            "没动的行不必重画（用户要求：局部改就全局部，不要全部重做）；"
-            "`local=false` = 还没有基线（第一次搭）→ 图里要出现**每一行**。"
-            "⚠ **`required_views`（2026-09-30 加）决定要出哪几张图**：`top` = 顶视图（平面图，俯视）；"
-            "`elevation` = 「原图视角」透视示意图。**口径（用户最终定的）：位移 / 朝向 → 顶视图；"
-            "大小 / 高度（含 Z 标高 / Z 倍率）→ 「原图视角」透视示意图**；两样都动 → 两张都要。"
-            "为什么是这几张，看 `views_why`。"
+            "`local=true` = 局部一轮：**页里只要出现 `required_labels` 那几行**，"
+            "没动的行不必出现（用户要求：局部改就全局部，不要全部重做）；"
+            "`local=false` = 还没有基线（第一次搭）→ 页里要出现**每一行**。"
+            "⚠ **`required_views`（2026-10-11 改）恒为 `['page']`**：一张 three.js 页"
+            "（`views/<plan 名>_view.html`，落盘时由代码自动生成）。"
+            "当年「位移 → 顶视图 / 高度 → 立面，恒出两张」那套已作废 —— "
+            "**那张页能转**（顶视图 / 原图视角 / 沿街侧视都是页上的按钮），"
+            "所以「只动高度时俯视图看不出高低」这个理由不成立了。"
+            "`changed_dims` 仍在，但**只用来提示这一版动了什么**。为什么是这一张，看 `views_why`。"
         ),
     )
     awaiting_readback: dict = Field(
@@ -796,7 +809,7 @@ class PlanStatus(BaseModel):
     )
     data_path: str = Field(default="", description="几何数据文件")
     image_path: str = Field(
-        default="", description="（恒空 —— 图由 AI 拿 data_path 自己画，代码不出图）"
+        default="", description="（恒空 —— **确认页由代码在落盘时自动生成**（`views/<plan 名>_view.html`），这里不再单独给一份几何图；要逐行几何看活动那份 plan）"
     )
     summary: PlanSummary = Field(default_factory=PlanSummary, description="规模摘要")
     gate: PlanGate | None = Field(
@@ -812,22 +825,10 @@ class PlanStatus(BaseModel):
     plan: dict | None = Field(
         default=None, description="完整计划数据（include_plan=true 时带出）"
     )
-    drawing: dict | None = Field(
-        default=None,
-        description=(
-            "**画图用的逐行几何**（2026-09-30 加；`include_plan=true` 且规划非空时带出）："
-            "`{unit, world, coordinate_system, origin_view, required_views, views_why, required_labels, "
-            "changed_dims, rows, removed_labels, z_rules, note}`，"
-            "每行 = `{label, kind, element_key, layer, x_m, y_m, z_base_m, z_top_m, w_m, d_m, h_m, "
-            "rot_deg, changed}`（**单位米**）。"
-            "另有 `origin_view` = **顶视图那个「原图视角」箭头的坐标与文字**"
-            "（`arrow_from_m` / `arrow_to_m` 是**米、世界坐标**；`label` = 图上要写的字）——"
-            "**以它为准，别自己摆箭头**（与「别自己推 Z」同一条纪律）。"
-            "它的 Z 口径与阶段三**同源**（`_compose_build_rows()`）⇒ 平面图 / 立面图都用它画，"
-            "**别自己推 Z**（推错 = 图与数据不一致 = 等于没确认）。"
-            "⚠ 它是**只读派生值**：不写进活动那份 plan、**不进几何指纹**（读状态不会作废确认）。"
-        ),
-    )
+    # ⚠ **`drawing` 段已于 2026-10-11 删除**（不是"暂时不用"）：它是"给画图的人用的逐行几何"，
+    #   而那张页现在**由 `write_plan()` 落盘时自动生成**（`figure3d.py` + `web/preview3d.html`）
+    #   ⇒ 没人再需要它。**别再把它加回来** —— 留着就是两套口径（谁都能拿它去手画，而判据已经换了）。
+    #   要逐行几何看活动那份 plan（`pos` / `footprint_m` / `z_m` …），要看摆放就打开那一页。
     next_step: str = Field(default="", description="下一步做什么")
     warnings: list[str] = Field(default_factory=list, description="要提醒的坑")
     stages: list[dict] = Field(
@@ -842,6 +843,18 @@ class PlanStatus(BaseModel):
             "但**有一份当版对账报告时，阶段③的状态就直接由它决定**（报告说有几行要动，就是进行中）；"
             "没有当版报告才退回台账口径，并在依据里写明「真值未核」。"
             "读不到的产物那一行写「未开始」或写清读不到，不猜"
+        ),
+    )
+    handoff: str = Field(
+        default="",
+        description=(
+            "**交接段**（2026-10-12 加）：一行行的人话 —— 现在在纪元几 / 哪几个阶段没完 / "
+            "**用户已经说了、还没落到数据里的** / 最近一次「用户提要求」的原话 / 最近一次"
+            "「用户点头」的原话 / 下一步。"
+            "用途：**新开的会话**开场先调 `get_plan()`，靠这一段就知道全貌 —— "
+            "不依赖 cwd、不依赖文件名、不依赖宿主配置、不依赖上一个会话的记忆（本插件是"
+            "「装上就能用」的产品，不许要求用户往自己工程里塞规则文件）。"
+            "⚠ 它是**现算的拼接**，不是状态源：真值以 `stages` 与各阶段产物为准。"
         ),
     )
 
@@ -865,7 +878,7 @@ class SurfaceRowResult(BaseModel):
 class SurfaceProbeItem(BaseModel):
     """**第 ① 步的逐条答案**：对着资产清单里的一个目标，找到它用的材质没有。
 
-    ⚠ 「名字对不上就是没找到」—— 与阶段一 `plan_assets` 同一条纪律：**不猜、不拿别的顶替**。
+    ⚠ 「名字对不上就是没找到」—— 与阶段一 `find_assets` 同一条纪律：**不猜、不拿别的顶替**。
     """
 
     element_key: str = Field(default="", description="元素关键词（决定后面贴哪一块）")
@@ -882,7 +895,7 @@ class SurfaceProbeItem(BaseModel):
     )
     candidates_detail: list[FoundAsset] = Field(
         default_factory=list,
-        description=("候选的**结构化**明细（照阶段一 `plan_assets` 的 `ElementPlan.assets`）—— "
+        description=("候选的**结构化**明细（照阶段一 `find_assets` 的 `ElementPlan.assets`）—— "
                      "每条含 `matched_by`（按**资产名** / 按**文件夹名**命中）与 `matched_segment`"
                      "（命中的是哪一段）：**为什么命中**是字段、不是散文"),
     )
@@ -1169,7 +1182,8 @@ class AdoptEditsReport(BaseModel):
     """
 
     stage: str = Field(description="阶段名")
-    dry_run: bool = Field(default=False, description="true = 只读现状 + 列清单 + 留痕，**一个字节都没写**")
+    dry_run: bool = Field(default=False, description="⚠ **演练已删（2026-10-12）** —— 恒为 false；" 
+                                       "留痕 + 拒收那一步不再由演练承担，见 `adopt_user_edits` 的说明")
     level: str = Field(default="", description="在哪张图上认领的")
     planned: int = Field(default=0, description="这次要认领几行")
     adopted: int = Field(default=0, description="真写回 plan + 台账了几行")
@@ -1276,7 +1290,7 @@ class ExchangeDiffReport(BaseModel):
     """**阶段四 · 回读对账**的报告。
 
     ⚠ 它**不改 plan、不写任何文件**，也**不是"用户确认"** —— 只是把外部改过的地方列出来。
-      要落到 plan 必须回阶段二：`request_plan_change` → `generate_plan(patch=…)` → 重画图 → 用户确认。
+      要落到 plan 必须回阶段二：`request_plan_change` → `generate_plan(patch=…)` → 重落盘（那一页由代码自动重生成）→ 用户确认。
     """
 
     stage: str = Field(description="阶段名")
@@ -1305,7 +1319,7 @@ class EnvRowResult(BaseModel):
     component: str = Field(default="", description="参数写在哪个组件上（后处理写在 Actor 上就留空）")
     status: str = Field(
         default="",
-        description="applied 写了 / already 本来就一样（幂等跳过）/ failed 没成 / dry 演练 / spawned 新建了 Actor",
+        description="applied 写了 / already 本来就一样（幂等跳过）/ failed 没成 / spawned 新建了 Actor",
     )
     error: str = Field(default="", description="没成的原因原文（不掩饰）")
     wrote: dict = Field(default_factory=dict, description="这次**真正写下去**的属性（值）")
@@ -1326,7 +1340,7 @@ class EnvReport(BaseModel):
     level: str = Field(default="", description="当时 UE 开着哪张图")
     preset: str = Field(description="用的哪个时段预设（如 sunset）")
     preset_source: str = Field(default="", description="预设表从哪读的（配置路径 / 内置兜底）")
-    dry_run: bool = Field(default=False, description="是不是演练（演练时一个属性都没写）")
+    dry_run: bool = Field(default=False, description="⚠ **演练已删（2026-10-12）** —— 恒为 false")
     restore: bool = Field(default=False, description="这次是不是**回滚**（把台账里的现值写回去）")
     planned: int = Field(default=0, description="这次要处理几个因素")
     applied: int = Field(default=0, description="真写了几个因素")
@@ -1452,5 +1466,30 @@ class EvaluateReport(BaseModel):
     deliverable: str = Field(default="", description="给人看的清单正文（可直接使用）")
     official_calls: int = Field(default=0, description="这次调了官方几次（留痕）")
     next_step: str = Field(default="", description="下一步做什么（闭环那五步）")
+    warnings: list[str] = Field(default_factory=list, description="要提醒的坑（不藏着）")
+
+
+class ResetSceneResult(BaseModel):
+    """**`reset_scene()` 的结果** —— 同一张关卡图上从头再来（2026-10-14 加）。
+
+    ⚠ 它**只归档、不删**：`catalog/` 与 `views/` 整批搬进 `views/archive/reset_<时间戳>/`，
+      履历另记在 `<base>/reset_history.json`（**场景目录之外**，所以重置之后还看得见）。
+    ⚠ **默认一个 Actor 都不碰**（`purge_actors=true` 才清，且只清 `UEMCP/` 与 `UEMCP_env/`）。
+    ⚠ 换图**不需要**它 —— 换图 = 自动换场景（`ensure_scene()`）。
+    """
+
+    stage: str = Field(description="阶段名")
+    scene_key: str = Field(default="", description="哪个场景（关卡包路径转义后的 key）")
+    level: str = Field(default="", description="哪张关卡图")
+    epoch_before: int = Field(default=1, description="重置前是纪元几")
+    epoch_after: int = Field(default=1, description="重置后是纪元几（正常是 1 —— plan 被归档了）")
+    archived_to: str = Field(default="", description="整批归档到哪（**没有文件被删**）")
+    files_archived: int = Field(default=0, description="搬走了几个文件")
+    files_failed: int = Field(default=0, description="有几个没搬成（**它们还在原地**）")
+    actors_seen: int = Field(default=0, description="`UEMCP/` + `UEMCP_env/` 下当时有多少 Actor")
+    purged_actors: int = Field(default=0, description="真删了几个（`purge_actors=false` 时恒为 0）")
+    readonly: bool = Field(default=False, description="这一趟是只读的吗（`false` = 真重置了）")
+    official_calls: int = Field(default=0, description="这次调了官方几次（留痕）")
+    next_step: str = Field(default="", description="下一步做什么")
     warnings: list[str] = Field(default_factory=list, description="要提醒的坑（不藏着）")
 

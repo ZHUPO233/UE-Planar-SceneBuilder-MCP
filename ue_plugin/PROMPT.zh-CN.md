@@ -13,11 +13,11 @@
 
 编辑器的 MCP 启用了 tool search，所以你看到的工具只有三个：
 `list_toolsets` / `describe_toolset` / `call_tool`。
-UEPLANE 的 20 个工具挂在工具集 **`ueplane.tools.UeplaneTools`** 上：
+UEPLANE 的 21 个工具挂在工具集 **`ueplane.tools.UeplaneTools`** 上：
 
 1. `list_toolsets` —— 确认 `ueplane.tools.UeplaneTools` 在。**不在**就是插件没启用，
    让用户看 Output Log 里的 `[UEPLANE]` 行（正常应有 `import tools 成功` / `register() = True`）。
-2. `describe_toolset(toolset_name="ueplane.tools.UeplaneTools")` —— 拿到 20 个工具的名字与参数 schema。
+2. `describe_toolset(toolset_name="ueplane.tools.UeplaneTools")` —— 拿到 21 个工具的名字与参数 schema。
 3. `call_tool(toolset_name="ueplane.tools.UeplaneTools", tool_name="…", arguments={…})` —— 真正调用。
 
 ## 每轮开场（**照做，不然全被拒**）
@@ -30,8 +30,15 @@ UEPLANE 的 20 个工具挂在工具集 **`ueplane.tools.UeplaneTools`** 上：
 ## 工作纪律（都是这套工具的设计，不是建议）
 
 - **一物一行**：放置表里每个物体一行，**没有 `count` 字段**；摆 20 栋就写 20 行。
-- **闸门要人点头**：元素清单、资产清单、平面图，都要**用户确认**。
+- **闸门要人点头**：元素清单、资产清单、平面规划，都要**用户确认**。
+  规划是对着**那一页 three.js**确认的 —— 它由代码在落盘那一刻自动生成
+  （`Saved/UEPLANE/views/<plan 名>_view.html`），**你不用去画**；页没出来就看落盘报文里的
+  `plan_view.errors`、照原因去修，**不许拿别的图顶替**。
   `confirm_*` 那几个工具要**用户本人的原话** —— **不许自己编一句**（编了就是伪造人的确认）。
+- **落完关卡就改成"逐行小改"**：完成搭建的那一次调用会把已确认的 plan **冻结**、另开一份新 plan 接管
+  （此后只认新的那份）。此后一次改动就是三步：记下用户的要求（`request_plan_change`）→ 只改那几行
+  （`generate_plan(patch=…)`）→ 只把那几行摆回去（`execute_build()`）。
+  **这一步不出图、也不要二次确认** —— 用户在编辑器里自己看结果。
 - **先看过现场再改**：改数据 / 落关卡之前先 `evaluate_layout()`（只读三方对账）；
   拿不到当版报告时，改数据与落关卡都会被**拒收**。
 - **"没查到" ≠ "没问题"**：工具明确说"这次没查"的时候，**别当成通过**。

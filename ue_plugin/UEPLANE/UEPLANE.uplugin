@@ -1,10 +1,10 @@
 {
 	"FileVersion": 3,
-	"Version": 1,
-	"VersionName": "1.0.0",
+	"Version": 2,
+	"VersionName": "2.0.0",
 	"EngineVersion": "5.8.0",
 	"FriendlyName": "UEPLANE",
-	"Description": "Reference-image driven scene reproduction pipeline, running inside the editor. Adds a gated workflow to Unreal's native MCP tool surface: element list -> asset list -> one-row-per-object placement table -> user-approved figures -> level build -> surfaces -> environment, with a durable ledger, per-row incremental rebuilds and human-in-the-loop gates. No C++ modules; the workflow is plain Python on top of Epic's ToolsetRegistry.",
+	"Description": "Reference-image driven scene reproduction pipeline, running inside the editor. Adds a gated workflow to Unreal's native MCP tool surface: element list -> asset list -> one-row-per-object placement table -> a three.js page the user inspects and approves -> level build (that same call freezes the approved plan and reopens it as a fresh plan + ledger + asset list for row-level edits) -> tuning (no figure, no second approval) -> surfaces -> environment -> review and iteration -> export, with a durable ledger, per-row incremental rebuilds and human-in-the-loop gates. No C++ modules; the workflow is plain Python on top of Epic's ToolsetRegistry.",
 	"Category": "Editor",
 	"CreatedBy": "ZHUPO233",
 	"CreatedByURL": "https://github.com/ZHUPO233",

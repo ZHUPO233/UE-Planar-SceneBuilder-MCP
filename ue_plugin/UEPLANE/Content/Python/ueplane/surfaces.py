@@ -100,6 +100,18 @@ SURFACE_LEDGER_PATH = VIEWS_DIR / "surface_materials_v1.json"    # 建 / 派生 
 # ⚠ 阶段一的**资产清单**（`probe` 对着它逐条找材质）—— 单独列成常量，**不在函数里现拼路径**：
 #   预检要把它指到一个不存在的路径上、断言"没有清单就拒收"（可测性），现拼路径那种写法测不到。
 ASSET_LIST_PATH = CATALOG_DIR / "asset_list.json"
+ASSET_LIST_V2_PATH = CATALOG_DIR / "asset_list_v2.json"
+
+
+def active_asset_list_path() -> Path:
+    """**现在算数的那份资产清单** —— 与 `planning.active_asset_list_path()` **同一条判据**。
+
+    ⚠ 这里**不复用规划层那个函数**：本文件**绝不 import main / planning**（会形成循环 import，
+      见文件头那段血账），所以只能自己按同一句话算一遍。
+      两处判据必须**逐字同形**（`asset_list_v2.json` 在 ⇒ 就它，否则 v1）——
+      这是"同一件事只写一处"的**被迫例外**，改动时**两处一起改**（谁改漏谁就是两套口径）。
+    """
+    return ASSET_LIST_V2_PATH if ASSET_LIST_V2_PATH.exists() else ASSET_LIST_PATH
 
 # --- 官方 `get_asset_class()` 报出来的三档（`_classify()` 的第三格）-------------------
 #   用途只有一个：**分栏**（材质栏 / 实例栏）—— 所以它是"分类"，不是"母级路径"。
@@ -119,7 +131,7 @@ MAT_SELF_BUILD = "missing_self_build"  # **白膜**搜不到 ⇒ 待自建（第
 MAT_NONE = "none"                      # **非白膜**问完"确实没有" ⇒ **无**（不贴、不自建）
 
 # 自建的目标落点（`probe` 给白膜行**提议**的包路径 = `<这个目录>/M_<元素>`）
-SELF_BUILD_FOLDER = "/Game/UEMCP/Materials"
+SELF_BUILD_FOLDER = "/UEPLANE/Materials"
 
 # --- 实例状态（`instance_status`）—— 这三档决定第 ⑤ 步怎么走 -------------------------
 INST_IS_INSTANCE = "is_instance"       # 拿到的**本来就是实例** ⇒ 第 ⑤ 步跳过（已有的东西不重建）
@@ -195,7 +207,7 @@ class SurfacesRepo:
 
     official: OfficialCaller
     # ⚠ **按名字找资产的那份唯一实现由外面注入**（`main.py::match_assets_by_keyword` ——
-    #   阶段一 `plan_assets` 与阶段五 `probe` **共用它**）。本层**不许再写一份匹配循环**：
+    #   阶段一 `find_assets` 与阶段五 `probe` **共用它**）。本层**不许再写一份匹配循环**：
     #   写第二份，同一个关键词在两处会给出两套答案（本项目最忌讳的那种）。
     #   ⚠ **必填**（不给默认值）—— 忘了注入就**当场炸**，不退回老写法、也不悄悄回空表
     #   （那等于把"没接上"说成"没搜到"）。用户 2026-10-04 晚：「能复用就复用」。
@@ -1139,7 +1151,7 @@ def row_question(row: Any) -> str:
     if status == MAT_PENDING:
         cands = list(getattr(row, "candidates", None) or [])
         slot = str(getattr(row, "slot_name", "") or "")
-        # ⚠ 照阶段一 `plan_assets` 的话术：**"存在但名字对不上"也是出路之一** ——
+        # ⚠ 照阶段一 `find_assets` 的话术：**"存在但名字对不上"也是出路之一** ——
         #   让他给【路径 + 名字】，我们**可以改名**（`rename_assets`；改名前先 `get_referencers`）。
         esc = "**如果它其实存在、只是名字对不上，请把它的【路径 + 名字】告诉我，我来改名。**"
         if cands:
@@ -1177,11 +1189,11 @@ async def probe(repo: SurfacesRepo, max_per_element: int = 5) -> SurfaceReport:
     """
     warns: list[str] = []
     calls = 0
-    delivery = repo.load_json(ASSET_LIST_PATH)
+    delivery = repo.load_json(active_asset_list_path())
     delivery = delivery if isinstance(delivery, dict) else {}
     if not (delivery.get("items") or []):
         raise ToolError(
-            f"**没有资产清单**（`{ASSET_LIST_PATH}` 读不到 / 一行都没有）—— "
+            f"**没有资产清单**（`{active_asset_list_path()}` 读不到 / 一行都没有）—— "
             "「对着资产清单找材质」这件事根本不成立，**一个字节都没写**。"
             "先把阶段一走完（`confirm_assets` 落一份签过字的清单）。")
 
@@ -1265,7 +1277,7 @@ async def probe(repo: SurfacesRepo, max_per_element: int = 5) -> SurfaceReport:
         #   同时给它一个**提议的落点**（`/Game/UEMCP/Materials/M_<元素>`）：第 ⑤ 步照这个键去
         #   `config/surface_materials.json` 的 `create` 段找配方（**配方表里没有就不建、点名**）。
         # ⚠ 匹配走**注入进来的那份唯一实现**（`main.py::match_assets_by_keyword`，
-        #   与阶段一 `plan_assets` **共用**）：词边界 + 逐段文件夹名 + 记"为什么命中" + 同一支排序；
+        #   与阶段一 `find_assets` **共用**）：词边界 + 逐段文件夹名 + 记"为什么命中" + 同一支排序；
         #   **全部命中都拿回来**，展示才截前 N 个（阶段一的做法：问题里报**真总数**）。
         hits = repo.match_assets(key, inventory, FINGERPRINT_TYPES)
         if not hits:
@@ -1652,7 +1664,7 @@ async def confirm(repo: SurfacesRepo, items: list[Any] | None, quote: str) -> Su
     # ---- **缺口**：阶段一资产表里有、这份材质单里没有的元素 ⇒ 不许静默消失 -----------------
     #   照阶段一 `confirm_assets` 的 `unresolved_elements`（"元素清单里有、本表里没有的"）。
     gaps: list[str] = []
-    _doc = repo.load_json(ASSET_LIST_PATH)
+    _doc = repo.load_json(active_asset_list_path())
     if isinstance(_doc, dict):
         src_keys = {str(it.get("element_key") or "").strip().lower()
                     for it in (_doc.get("items") or []) if isinstance(it, dict)}

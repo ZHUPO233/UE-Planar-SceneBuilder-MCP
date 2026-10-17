@@ -36,11 +36,23 @@ $CfgDir     = Join-Path $PluginRoot "Content\config"
 # ── 要同步的清单（**每一行都是"产品是源、插件是拷贝"**）────────────────────────
 $Jobs = @(
     @{ From = (Join-Path $Repo "src\mcp_server\main.py");     To = (Join-Path $PyDir "main.py") },
+    @{ From = (Join-Path $Repo "src\mcp_server\scene.py");    To = (Join-Path $PyDir "scene.py") },
+    # WARNING 2026-10-14: scene.py is NEW and it is NOT optional. init_unreal.py imports it
+    #   (`from ueplane.scene import relocate`), so if it is missing the whole plugin registers ZERO
+    #   tools. It must also be in this list because -Deploy uses robocopy /MIR: a file present in the
+    #   deployed plugin but absent from this tree gets DELETED on deploy.
     @{ From = (Join-Path $Repo "src\mcp_server\schemas.py");  To = (Join-Path $PyDir "schemas.py") },
     @{ From = (Join-Path $Repo "src\mcp_server\surfaces.py"); To = (Join-Path $PyDir "surfaces.py") }
 )
 foreach ($f in (Get-ChildItem (Join-Path $Repo "src\mcp_server\planning") -Filter *.py)) {
     $Jobs += @{ From = $f.FullName; To = (Join-Path $PyDir "planning\$($f.Name)") }
+}
+# ⚠ `planning\web\`（2026-10-11 加）：阶段二那张 three.js 页的**模板 + 渲染层**。
+#   它**必须**跟着走：出图器（`planning\figure3d.py`）按**自己所在位置**找同级 `web\`
+#   ⇒ 插件树里少了它，页就出不来（`planning._write_view()` 会把原因报回来，落盘照旧不拦）。
+#   与上面两段同一条纪律：**产品侧是源、插件侧是拷贝**，改产品 → 跑本脚本，别手改插件里那份。
+foreach ($f in (Get-ChildItem (Join-Path $Repo "src\mcp_server\planning\web") -File -ErrorAction SilentlyContinue)) {
+    $Jobs += @{ From = $f.FullName; To = (Join-Path $PyDir "planning\web\$($f.Name)") }
 }
 foreach ($f in (Get-ChildItem (Join-Path $Repo "config") -Filter *.json)) {
     $Jobs += @{ From = $f.FullName; To = (Join-Path $CfgDir $f.Name) }
@@ -79,6 +91,7 @@ if ($Check) {
 # ── ③ 同步 ────────────────────────────────────────────────────────────────────
 if (-not $SkipSync) {
     New-Item -ItemType Directory -Force -Path (Join-Path $PyDir "planning") | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $PyDir "planning\web") | Out-Null
     New-Item -ItemType Directory -Force -Path $CfgDir | Out-Null
     foreach ($j in $Jobs) {
         Copy-Item $j.From $j.To -Force
@@ -127,7 +140,10 @@ $required = @(
     (Join-Path $PluginRoot "Content\Python\init_unreal.py"),
     (Join-Path $PyDir "bridge.py"),
     (Join-Path $PyDir "tools.py"),
+    (Join-Path $PyDir "scene.py"),
     (Join-Path $PyDir "_shims.py"),
+    (Join-Path $PyDir "planning\web\preview3d.html"),
+    (Join-Path $PyDir "planning\web\three.min.js"),
     (Join-Path $PluginRoot "Config\FilterPlugin.ini")
 )
 $lack = @($required | Where-Object { -not (Test-Path $_) })

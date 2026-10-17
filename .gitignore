@@ -39,8 +39,10 @@ backup-*/
 
 # views/ 分三类，别一刀切：
 #   - reference_*.jpg                 = **原始参考图（输入）**，要入库
-#   - plan_v1.json / plan_wire_v1.png = 当前链路产物，**它是闸门，必须能追溯**，要入库
-#   - 其余（探索期截图、回读 JSON、缩略图、归档目录）= **产物**，不入库
+#   - 其余（plan JSON / 确认页 HTML / 探索期截图 / 回读 JSON / 缩略图 / 归档目录）= **产物**，不入库
+#     ⚠ 2026-10-12 更正：这里原来写着「`plan_v1.json` / `plan_wire_v1.png` = 当前链路产物……
+#       **要入库**」—— 两句都作废：`plan_wire_v1.png` 那套早就删了；plan JSON 现在按下面
+#       「2026-10-04 本机运行状态」那条**一律不入库**（`views/*.json`）。
 #     ⚠ 2026-09-23 修正：原先把 overview_01.png / ref_view_01.png /
 #       reference_views.json / Material_00X.png 也叫"原始参考图、要入库"，
 #       但那几个是**关卡渲染截图和推导出的相机数据**（产物），不是参考图。
@@ -96,5 +98,25 @@ views/*.svg
 views/archive/
 views/exchange/
 views/preview/
+# ⚠ 2026-10-12 补：`views/<plan 名>_view.html` = 阶段二那页 three.js 确认页 ——
+#   **由 `write_plan()` 在落盘那一刻自动生成**（每落一版一份，正文里嵌着整份几何 JSON）
+#   ⇒ 按上面同一条口径是**产物**，不入库（要重出就重落盘，或 `python -m mcp_server.planning.figure3d`）。
+#   为什么以前没挡住：这一页 2026-10-11 才加进来，而上面那几条是按**后缀名**挑的（`.json` / `.svg`）——
+#   于是它**每落一版就往版本库里塞一份 HTML**。
+views/*_view.html
+views/*_view.htm
 # --- 2026-10-08（V1.0.0 发版）：开发过程留档不收（用户指令「不要包含开发日志和杂七杂八的东西」）
 docs/archive/
+
+# --- 2026-10-17（V2.0.0 发版）：编辑备份 / 本机运行时状态 / 试验件（都不入库）-------------------
+# `.backup-*` = 批量改写前留的**整目录备份**（那边同步过来的 23 个、共 30.3 MB，已删；规则留着防以后再攒）。
+# ⚠ 上面那条 `backup-*/` **管不住**带点的 `.backup-*` —— 这正是它攒进来的原因。
+.backup-*/
+# 运行数据：`active.json` = **当前场景指针**、`scenes/` = 每张关卡一份**身份卡**（`scene.json`）。
+# 由 `scene.py` 写在 `<base>/` 下，而 **MCP 侧 `<base>` = 仓库根** ⇒ 不挡就会进版本库。
+# ⚠ 它们是"这台机器这一刻的现场"，不是源码；权威永远以 UE 现读的当前关卡为准。
+active.json
+scenes/
+# 试验件与核对沙盒：`exp/` = three.js 原型期留档（那件事已完工）；`.edgetmp/` = 核对脚本 / 截图 / `.bak`。
+exp/
+.edgetmp/

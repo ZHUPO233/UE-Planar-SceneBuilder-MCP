@@ -64,6 +64,7 @@
 import hashlib
 import json
 import math
+import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -82,13 +83,35 @@ ARCHIVE_DIR = VIEWS_DIR / "archive"
 （`plan_v1_<时间戳>_<confirmed|draft>.json` / `plan_v2_...`），两边**不会互相覆盖**。
 """
 
+VIEW_TEMPLATE_PATH = Path(__file__).resolve().parent / "web" / "preview3d.html"
+"""**阶段二那张 three.js 页的模板**（2026-10-11 用户原话：「整改2阶段，不出图，出three.js」）。
+
+⚠⚠ **本常量在插件里会被 `init_unreal.py` 搬飞 —— 别拿它当模板路径用**（2026-10-11 实测）：
+  插件入口的 `_relocate()` 判据是「凡在 `REPO_ROOT` 底下的 Path 常量整体搬到 `Saved/UEPLANE`」，
+  而它把 `plan.py` 的 `REPO_ROOT` 搬到了 `Saved/UEPLANE`。实测（演示工程 `Saved/Logs/demo.log`，
+  那次 23:18:34 插件加载）：
+    `VIEW_TEMPLATE_PATH -> …/Saved/UEPLANE/Python/ueplane/planning/web/preview3d.html`
+  ⚠ 路径一律写**正斜杠**：反斜杠紧跟 `U`（例如 `Saved` 后面跟 `UEPLANE` 那种写法）在非 raw
+    字符串里是 **Unicode 转义**，会直接 `SyntaxError: truncated … escape`（2026-10-11 本文件
+    真的这么躺了一次 —— `init_unreal.py` 文件头那条纪律就是这么来的；**连"警告它"的这行也算**）。
+  —— 那文件**根本不存在**（模板在插件里，不在 Saved 里）⇒ 照它去读会报"模板不存在"。
+  **这就是"新增 Path 常量"的坑**：仓库里（`src/mcp_server/planning/web/`）它是对的，
+  只有插件环境会把 `REPO_ROOT` 搬走、连累它。
+
+⇒ 所以模板路径一律**运行时**问出图器：`figure3d.default_template()`（它每次调用按 `__file__`
+  现算同级 `web/`，仓库与插件两处都成立，而且**函数不是 Path 常量、`_relocate` 搬不动它**）
+  —— 见 `_write_view()`。⚠ 出图器那条路上**没有一个**模块级路径常量：`DEFAULT_TEMPLATE` /
+  `WEB_DIR` 就是这么被搬飞的（同一次实测），所以它们是函数。
+  本常量**只留给仓库侧/CLI 看**，不作为出图的实际输入。
+"""
+
 PLAN_V2_PATH = VIEWS_DIR / "plan_v2.json"
 """**纪元 2 的 plan** —— 阶段三结束、用户确认之后开出来，接管后续所有阶段（四~八）。
 
 【为什么要另起一份，而不是继续用 `plan_v1.json`】（2026-10-04 用户拍板「大换血」）
-  `plan_v1.json` 带的是**阶段二那套确认**（两张图 + 用户原话）—— 那份确认的对象是
+  `plan_v1.json` 带的是**阶段二那套确认**（一页 three.js + 用户原话）—— 那份确认的对象是
   「要搭成什么样」。搭完之后的所有改动（四 · 微调 / 五 表面材质 / 六 环境搭建 / 七 对账）
-  都不该再逼着用户重画两张图（他要的是「改一行就说一行」，不是每次都走一遍看图闸）。
+  都不该再逼着用户重出那一页（他要的是「改一行就说一行」，不是每次都走一遍看图闸）。
   于是阶段三一结束就**换纪元**：`plan_v1.json` **冻结只读**留档，`plan_v2.json` 从
   「旧 plan 那一刻的整表」起接管；之后改行走
   `request_plan_change` → `generate_plan(patch=…)` → `execute_build(only_labels=[…])`
@@ -102,30 +125,74 @@ PLAN_V2_PATH = VIEWS_DIR / "plan_v2.json"
   （`views/evaluate_v1.json`）不用因为换纪元而重跑，`G15` / `G16` 那两道闸也不受影响。
 """
 
-# 给用户看的那张图的文件名候选（**图由 AI 手绘，代码不出图**）—— figure_check() 按这些模式找
-FIGURE_GLOBS = ("plan_v1_overview*.svg", "plan_v1_overview*.png",
-                "plan_v1_overview*.jpg", "plan_v1_overview*.jpeg",
-                "plan_v1_overview*.webp", "plan_v1_overview*.gif")
-"""**平面图**（俯视）—— 前缀是代码找图的约定（图由 AI 手绘，代码不出图）。"""
+# 给用户看的那张图 —— **由代码在落盘时自动生成**（`figure3d.py` + `web/preview3d.html`），
+# `figure_check()` 按这些模式找它。命名见 `_write_view()`：`views/<plan 名>_view.html`。
+# ⚠ **2026-10-11 改：从"agent 手绘两张矢量图"变成"一张落盘自动生成的 three.js 页"**
+#   （用户原话：「整改2阶段，不出图，出three.js」+「而且段我想彻底改为用three.js了」）。
+#   旧的两路 glob（`plan_v1_overview*` / `plan_v1_elevation*`）**已删** ——
+#   留着就是两套口径（判据认旧格式、实际产出 HTML ⇒ 状态永远卡在"等出图"）。
+FIGURE_GLOBS = ("plan_*_view.html", "plan_*_view.htm")
+"""**给用户看的那张 three.js 页**（可转 / 可缩 / 可点）—— 落盘时自动生成。
 
-ELEVATION_GLOBS = ("plan_v1_elevation*.svg", "plan_v1_elevation*.png",
-                   "plan_v1_elevation*.jpg", "plan_v1_elevation*.jpeg",
-                   "plan_v1_elevation*.webp", "plan_v1_elevation*.gif")
-"""**立面图**（正视图 X 向 / 侧视图 Y 向）—— 2026-09-30 用户要求加。
-
-原话：「我要求的是改高度……但是这个图画的还是顶视图，我觉得得改一下，**当调整的是高度时
-生成的图得是正视图或者左右视图**」。实测场景：外部 agent 按流程改了 25 栋楼的高度、也回读、
-也出图，但那张图是**俯视图** —— 高度变化在俯视图上**完全看不见**，于是那张图作为
-"用户唯一能判断的依据"**等于没有**（他被要求对着一张看不出变化的图点头）。
-
-⚠ 为什么**单开一路前缀**、而不是并进 `FIGURE_GLOBS`：并进去的话**一张立面图就能顶掉平面图**，
-判据会从"两张都要"松成"有一张就行"。分开之后 `figure_check()` 按视图**逐项**判，缺哪张报哪张。
-⚠ 判据与平面图**完全一样**（当前指纹前 10 位 + 该覆盖的每一行 label）—— 同一份判据只写在
-`figure_verdicts()` 一处，用 `kind` 参数选前缀；**位图在两路里都不认账**（读不出文字）。
+判据（`figure_verdicts()` 里那一份，全工程只此一处）：
+  正文里有**当前几何指纹前 10 位** + **该覆盖的每一行 `label`** 都在。
+⚠ 为什么还能"核验一页 HTML"：它是**文本**，指纹与行名都写在正文里（`json.dumps(..., ensure_ascii=False)`
+  注入）—— 与当年核那张图的办法逐字相同。位图（png/jpg…）**一律不认账**（读不出文字）。
+⚠ 前缀刻意是 `plan_*_view`：`_write_view()` 按 `<plan 名>_view.html` 命名
+（`plan_v1.json` → `plan_v1_view.html`；纪元 2 → `plan_v2_view.html`），
+**不写死 v1** —— 换了纪元照样命中。
 """
 
 ELEMENTS_PATH = REPO_ROOT / "catalog" / "elements.json"
 """阶段一的元素清单 —— 本阶段从这里读「地图大小」和「有哪些元素」。"""
+
+ASSET_LIST_V2_PATH = REPO_ROOT / "catalog" / "asset_list_v2.json"
+"""**纪元 2 的资产清单**（2026-10-12 用户要求：资产表与位置表**同一种方式**进纪元 2）。
+
+为什么要它（用户原话）：「把资产表和位置表一样的方式进纪元 2」：
+  · **位置表**：纪元 1 = `plan_v1.json` → 换纪元时整表照抄成 `plan_v2.json`，v1 冻结只读；
+  · **资产表**：以前**只有一份** `catalog/asset_list.json`，换纪元不碰它 ——
+    这就出现一个不一致：**纪元 2 的位置表在改，可它引用的资产表还是阶段一那一份** ——
+    阶段五 / 阶段四拿它查"这个资产还在不在 / 实测多大"时，读到的是**纪元 1 时代的清单**，
+    而这中间资产库可能已经变过（本工程实测过一次：`/Game/Fab/Urban_Street_Pack`
+    整个文件夹消失、材质实例 58 → 56）。
+  ⇒ 现在与位置表**逐条同形**：换纪元时整表照抄成 `asset_list_v2.json`，
+    v1 那份从此**冻结只读**（`main.py` 的写入闸），活动的那份走咽喉 `active_asset_list_path()`。
+
+⚠ **判据只有"那个文件在不在"这一条**（与 `active_plan_path()` **逐字同形**）：
+  `asset_list_v2.json` 在 ⇒ 就它；不在 ⇒ 纪元 1 的 `asset_list.json`。**没有"能不能解析"那一层**。
+⚠ 与位置表唯一的差别：位置表的 v2 由 `promote_to_epoch2()` 写；资产表的 v2 也在那一步照抄
+  （同一处、同一次动作）—— 两边的"纪元切换点"必须**同一个**，否则读的人会看到
+  "位置表已是 v2、资产表还是 v1"这种半切换状态。
+"""
+
+
+ASSET_LIST_PATH = REPO_ROOT / "catalog" / "asset_list.json"
+"""**纪元 1 的资产清单**（阶段一签字的那一份）。
+
+⚠ **2026-10-14 新增这个常量，是为了掐掉两处「现拼路径」**（`active_asset_list_path()` 的
+  else 支，与 `promote_to_epoch2()` 里那行）。它们此前写的是 `REPO_ROOT / "catalog" / …`
+  —— **函数里现拼，`_relocate()` 搬不动它**。切场景（见 `ueplane/scene.py`）只把
+  `catalog/` 与 `views/` 两条根指进场景目录，**`REPO_ROOT` 本身不动**（它同时挂着
+  `config/`，那份是全工程一份）⇒ 现拼的那两处会指到**没人再写的老地方**，**静默读空** ——
+  最坏那种错：报文说"清单在这儿"，读的人拿到空表。
+⚠ 全工程**仅此两处**现拼（2026-10-14 逐个 grep 过）：本文件那两处；其余全是模块级常量，
+  或者指向 `config/` 因此本就该留在原地（`surfaces.py` 的 `REPO_ROOT / "config" / …`）。
+"""
+
+
+def active_asset_list_path() -> Path:
+    """**现在算数的那份资产清单是哪个文件** —— 全工程读写资产表的唯一咽喉（与 `active_plan_path()` 同形）。
+
+    口径一句话：**`asset_list_v2.json` 在 ⇒ 就它一份；不在 ⇒ 纪元 1 的 `asset_list.json`**。
+    """
+    return ASSET_LIST_V2_PATH if ASSET_LIST_V2_PATH.exists() else ASSET_LIST_PATH
+
+
+def active_asset_list() -> dict:
+    """读活动那份资产清单（读不动按"没有"处理，返回空 dict —— 不拿另一份顶替）。"""
+    doc = load_json(active_asset_list_path())
+    return doc if isinstance(doc, dict) else {}
 
 Point = tuple[float, float]
 Poly = list[Point]
@@ -394,6 +461,40 @@ def bounds_check(plan: dict) -> dict:
     }
 
 
+def _ground_missing_note(plan: dict) -> str:
+    """**plan 里有没有「世界地基」那一层** → 缺了就返回一段话（没缺给空串）。
+
+    为什么单开这一条（2026-10-12 实测 bug：整条街的楼与树**悬空**）：
+      阶段三**不凭空生底板** —— `docs/阶段三` 与代码都写着「世界地基要靠 plan 里真有一行
+      `ground` 白膜」。可它**一路没有闸**：
+        · `plan.py` 的工具说明写着"不许凭空多出一个元素，没有代码闸"——那管的是**多**，不管**少**；
+        · `_planning_warnings()` 只查反方向（阶段一记过、清单里没有），而且它**只在阶段一开工时算一次**；
+        · `_save_build_orders` 遇到 `element_key` 不在阶段一清单里会**拒收**（`plan.py:598`），
+          可那也拦不住"**少了一整层**"。
+      ⇒ 结果：漏了 `ground` 之后**一路绿灯**，直到用户在 UE 里看见东西悬在空中。
+      ⚠ 判据只看"有没有 ground 这一层"，**不看它多大/多厚**（那是阶段二自己的事）；
+        `ground` 属于 `BOUNDS_TIERS` 的**豁免·边界元素**（它自己就是世界边界）。
+      ⚠ **只报不拦**（与越界同一条口径）：已经落过的场景不能因为补了这条就作废；
+        但它必须**显形** —— 所以并进 `bounds_check_text()`，于是 `generate_plan` 与 `get_plan`
+        **两处都会报**（那就是"漏在阶段二、却在阶段三才炸"的那个缺口的堵法）。
+    """
+    rows = list(plan.get("whiteboxes") or []) + list(plan.get("assets") or [])
+    has_ground = any(
+        str((r or {}).get("element_key") or "").strip().lower() == "ground"
+        for r in rows if isinstance(r, dict)
+    )
+    if has_ground:
+        return ""
+    return (
+        "⚠ **阶段二检查 · 缺「世界地基」**：plan 里**没有 `ground` 这一行**（白膜）。\n"
+        "　· 阶段三**不凭空生底板**（`docs/阶段三` 与 `_compose_build_rows()` 都是这个口径）"
+        "⇒ 关卡里就没有地基，**楼 / 树 / 铺装会悬在空中**。\n"
+        "　· 补法：把它当一行**白膜**加进 plan（`element_key=\"ground\"`，`shape=\"cube\"`，"
+        "`z_m` 与 `height_m` 照阶段三的口径：顶面 = 两侧地面 15 cm、厚 20 cm 是口径值）。\n"
+        "　⚠ **只报红、不拦** —— 但这一条**必须显形**：实测就是这么漏到用户眼里的。"
+    )
+
+
 def bounds_check_text(plan: dict, limit: int = 12) -> str:
     """把 `bounds_check()` 的结果压成**一段话**（调用方直接塞进 warnings）。没越界就给空串。
 
@@ -402,10 +503,16 @@ def bounds_check_text(plan: dict, limit: int = 12) -> str:
       　判据：…
       　【硬 · 实体 2 处】…
       　【软 · 铺装 13 处】…（还有 N 处没列全）
+
+    ⚠ **2026-10-12 加**：这里**同时**带上「缺世界地基」那一条（`_ground_missing_note()`）——
+      两件事都是"阶段二该看出来、但以前一路绿灯"的，而且**共用同一个出口**
+      （`generate_plan` / `get_plan` 都调本函数）⇒ 一处加、两处都会报。
+      ⚠ 所以**没越界也不再恒为空串**：`ground` 缺了就有话要说。
     """
+    missing = _ground_missing_note(plan)
     res = bounds_check(plan)
     if res.get("ok"):
-        return ""
+        return missing
     outs = res.get("outside") or []
     world = plan.get("world") or {}
 
@@ -428,8 +535,8 @@ def bounds_check_text(plan: dict, limit: int = 12) -> str:
             # 名额被上一级用完了：**仍然报这一级有几处**（数量不能因为"没展开"就消失）
             body, more = "（上面的名额已用完，这一级不展开 —— 要全列就把 `limit` 调大）", ""
         lines.append(f"　【{BOUNDS_TIER_CN.get(tier, tier)} {len(mine)} 处】{body}{more}")
-    lines.append("　⚠ **只报红、不拦** —— 改不改由用户定（要么挪物体、要么把世界放大再重画图确认）。")
-    return "\n".join(lines)
+    lines.append("　⚠ **只报红、不拦** —— 改不改由用户定（要么挪物体、要么把世界放大再重落盘确认）。")
+    return ("\n".join(lines) + ("\n" + missing if missing else ""))
 
 
 # --- 纯 2D 基础（无业务；重叠判定要用 —— 但**碰撞检测那一步 2026-09-27 已删除**，这里只留工具）---
@@ -983,7 +1090,7 @@ def mark_confirmed(plan: dict, who: str, user_quote: str = "") -> dict:
     out["confirmation"].pop("params_hash", None)
     # ⚠ **2026-10-04 修**：`mode` / `rows` 是**微调版**（`mark_tuned()`）留下的那两笔 —— 原来
     #   没清。后果：`acceptance_state()` **最先认 `mode`** ⇒ 微调版走完正路
-    #   「重画两张图 → `confirm_plan()`」之后**仍然返回 `tuned`**，`main.py` 的 `_tuned_plan`
+    #   「重落盘（那一页由代码自动重生成）→ `confirm_plan()`」之后**仍然返回 `tuned`**，`main.py` 的 `_tuned_plan`
     #   仍为 True ⇒ `mode="full"` 继续被拒、真跑继续强制点名 —— 而报文里恰恰把那条正路说成
     #   **唯一出路**（用户/agent 照它做，永远回不到正常验收）。**清掉 = 正常确认才是回到正常验收。**
     out["confirmation"].pop("mode", None)
@@ -996,7 +1103,7 @@ def mark_tuned(plan: dict, user_quote: str, rows: list[dict] | None = None,
     """返回一份**带「微调版确认」信息的新 plan**（不改传入的那个对象）—— **第四阶段 · 微调**用。
 
     用在哪（阶段八之前的第 4 个阶段）：**整体搭建之后**用户说「把电线杆挪近一点」这类**小改** ——
-    不画图、不二次确认（阶段二那套"两张图 + confirm_plan"只属于前三阶段），
+    不画图、不二次确认（阶段二那套"一页 + confirm_plan"只属于前三阶段），
     但**改的是同一份 plan_v1.json**，所以必须留痕：谁让改的、改了哪几行、为什么。
 
     ⚠ **它不画图、也不检查图**（这是第四阶段与阶段二验收的**唯一区别**）——
@@ -1134,9 +1241,9 @@ CONFIRMED_ARCHIVE_GLOB = "plan_v*_confirmed.json"
 
 
 def row_signature(row: dict, kind: str) -> str:
-    """一行的**几何签名** —— 只装"改了就得重画图"的字段。
+    """一行的**几何签名** —— 只装"改了就得重出那一页"的字段。
 
-    ⚠ 故意**不含** `note` / `size_source`：那是说明文字，改字不该逼人重画图。
+    ⚠ 故意**不含** `note` / `size_source`：那是说明文字，改字不该逼人重出那一页。
     ⚠ `label` 也不在里面 —— 它是**匹配键**；label 一改就等于"删一行 + 加一行"，那是真的变了。
     """
     row = row if isinstance(row, dict) else {}
@@ -1189,54 +1296,33 @@ ASPECT_FIELDS = {
 ⚠ 资产行签名末位 `scale_z` **只在 ≠1 时才存在** ⇒ 下标越界一律当 `None`（= 没写），不是错误。
 """
 
-REQUIRED_VIEWS = ("top", "elevation")
-"""**每一版都出这两张图**（2026-09-30 用户定案 —— 先做过"按维度决定出哪几张"，当天下午定为恒出两张）。
+REQUIRED_VIEWS = ("page",)
+"""**每一版都出这一张**（2026-10-11 用户定案：「整改2阶段，不出图，出three.js」）。
 
-用户原话：「算了直接生成「原图视角」透视示意图和顶视图算了，太麻烦了」。
-为什么恒出两张比"按维度决定"更好（我的判断，也是采纳的理由）：
-  · **少一类往返失败**：条件视图的失败模式是「判错维度 → 要的那张没画 → `confirm_plan` 拒收 → 再画一遍」；
-    恒出两张把这个失败模式整个消掉；
-  · **规则少一条**：常量不需要向 agent 解释，也少一处"口径写在文档里、代码里忘跟"的分叉点
-    （与 `BUILD_LAYERS` / `ENV_FACTOR_ORDER` 同一条纪律：**能变成常量的，别留成条件**）；
-  · 代价只有"多画一张 svg"（agent 本来就是拿 `get_plan().drawing` 写脚本渲染）。
+历史（**别再照旧口径讲**）：原先恒出**两张 agent 手绘的图**（`top` 顶视图 + `elevation` 原图视角
+透视示意图，2026-09-30 定案）。改成 three.js 页之后**一张就够**，理由是能力包含关系：
+  · 那张页**可转、可缩、可点** —— 顶视图、原图视角、沿街侧视都是**页上的按钮**（`#bar` 里四个机位），
+    所以"只动高度时顶视图看不出高低"这个**当年要两张的理由已经不成立**：转一下或按「原图视角」即可；
+  · 而且它**由代码在落盘那一刻生成**（`_write_view()`）⇒ 当年"图与数据不一致"那一类事故
+    （数据改了、图还是上一版；或图画好了、指纹忘了写）**在结构上消失**。
 
-**两张各画什么**（写死，别让画图的人猜）：
-  · `top`（**顶视图**）= **X-Y 平面**（俯视、轴对齐）—— 看**摆在哪 / 占地多大 / 朝向**；
-  · `elevation`（**「原图视角」示意图**）= **透视**，不是轴对齐正投影（**2026-09-30 用户定案 B 案**）。
-
-⚠ **为什么第二张必须带透视**：本工程坐标系 `world.coordinate_system` 定的是 **X 前进**
-（承载参考图的纵深链）。按"沿 X 看 + 轴对齐投影"画，**X 会被整个压掉** ——
-41 行物体全投到同一张平面上，**近处的小卖部必然被远处的大楼盖住**（用户实测原话：
-「正视图我都看不清，被盖住了，远近关系没画好」）。而参考图本身就是**透视**（近大远小），
-所以"原图视角"这个名字**只有画成透视才对得上**。
-
-「原图视角」透视示意图的**硬要求**（画图前照这几条自查）：
-  ① **方向**：从参考图的拍摄侧看向场景纵深 = 本坐标系里**沿 +X 看**（X 小 = 近、X 大 = 远）；
-  ② **近大远小 —— 有公式，不许拿「淡化」糊过去**：`k = 30`（默认，可调）；
-     每行缩放 `s = k / (k + max(x_m, 0))`；**把 s 同时乘到该行矩形的宽和高上**
-     （画出来的宽 = `w_m × s`、高 = `h_m × s`，**同一物体宽高用同一个 s**）；
-     ⚠ **远（`x_m` 大）的物体，画出来的宽度必须比近的窄** ——
-     宽度画成一样 = **等于没做近大远小**（2026-10-03 实测被抓到一次：41 行矩形宽度全是 `68.0`）；
-     ⚠ 图注里写明你用的 `k`（例：`近大远小 k=30（示意图，非严格投影）`）—— 让人一眼能核；
-  ③ **每行必须标 `x_m`**（标签旁写 `x=…`，或按 X 分层 + 引线）—— 让"谁在前谁在后"**可读**；
-  ④ **被挡住的行也必须出图**（淡化 / 虚线 / 引出标注都行）—— **一行都不许省**
-     （与"图里要覆盖该覆盖的每一行 label"同一条纪律，别拿"被挡住了"当漏画的理由）；
-  ⑤ **纵向仍是 Z**（高度不因远近倾斜）；允许用矩形 / 简单体块简化，**不要求严格渲染**；
-  ⑥ 图上写一句「**示意图，非严格投影**」，并标出**视平线 / 地面线**（可选但有帮助）。
-  ⚠ 数据一律取自 `get_plan().drawing`（`x_m` / `y_m` / `z_base_m` / `z_top_m` / `w_m` / `d_m` / `h_m`）
-    —— **别自己推 Z**（推错就是两套口径）。
+⚠ **保留这个常量、不写死单路**：`change_set()` / `figure_check()` / `acceptance_state()` 都按它循环 ——
+  将来若用户改口要第二路（他原话：「若他改口要两路，照第 4 节 A 的备选走」），
+  在这里加一个值 + 在 `FIGURE_GLOBS` 加一组前缀即可，**判据一行都不用改**。
+⚠ 取值 `"page"`（不是 `"top"`）：它既不是顶视图也不是立面图 —— 它是一张**能转的页**，
+  名字照实写，免得读的人拿"顶视图"的旧想象去理解它。
 """
 
 ORIGIN_VIEW_LABEL = "原图视角（相机沿 +X 看）"
-"""顶视图里**必须写出来**的那行字（**一字不差**）—— 就是**「原图视角」箭头**的文字部分。
+"""那张页上**要写出来**的那行字（**一字不差**）—— 就是 3D 场景里「原图视角」箭头的文字部分。
 
 为什么要有这个箭头（2026-10-04 用户原话：「生成顶视图加个原图视角箭头，不然用户看不懂」）：
-顶视图是**俯视**（X-Y 平面），画面上**看不出哪边是「原图往里看」的方向**。
-本工程坐标系 `world.coordinate_system` 定的是 **X 前进**（承载参考图的纵深链），
-所以顶视图要在 +X 那一头画个箭头、写上这句话，用户才分得清朝向。
+俯视时画面**看不出哪边是「原图往里看」的方向**。本工程坐标系 `world.coordinate_system`
+定的是 **X 前进**（承载参考图的纵深链），所以在世界 Y 最小边外侧画一条沿 +X 的箭头、
+写上这句话，用户才分得清朝向（`web/preview3d.html` 的 `buildOriginArrow()` / `buildOriginLabel()`）。
 
-⚠ 只有**顶视图**要它：透视图本身就叫「原图视角」，**不加**。
-⚠ 位置口径由 `origin_view_spec()` 给死（**别让画图的人自己摆** —— 那是第二套口径）。
+⚠ 位置口径仍由 `origin_view_spec()` 给死（**别让画图的人自己摆** —— 那是第二套口径）；
+  它现在只服务"缺这四个字会记一条提示"（`figure_verdicts()`）与人工核对，**不再指挥谁去画图**。
 """
 
 ORIGIN_VIEW_ARROW_GAP_M = 2.0
@@ -1244,8 +1330,8 @@ ORIGIN_VIEW_ARROW_GAP_M = 2.0
 
 ⚠ 这是**口径值，不是实测值**。为什么 2 m 够：布局**都在世界范围之内**（`ground` 白膜顶到世界边界，
 见 `bounds_check()` 那三级判据），往外让 2 m 就落在空地上，又不至于跑到图框外面去。
-位置由 `origin_view_spec()` 算 —— 与 `drawing.rows` 的 `z_base_m` / `z_top_m` 同一条纪律：
-**口径只能有一份，画图的人照着画。**
+位置由 `origin_view_spec()` 算 —— 与 `_compose_build_rows()` 算 `z_base_cm` / `z_top_cm` 同一条纪律：
+**口径只能有一份**（`drawing` 段删了，页由代码自动生成，谁都不用再照着画）。
 """
 
 ORIGIN_VIEW_MISSING_WARNING = "顶视图缺「原图视角」箭头 —— 用户会看不懂朝向"
@@ -1270,7 +1356,7 @@ def _aspects_from_signature(sig: str, kind: str) -> dict[str, str]:
     ⚠ 长度对不上（老格式 / 手改坏了）→ `{}` = **不猜**，调用方按"每一维都变了"严判。
 
     为什么要能**从签名反推**：台账里的 `accepted_rows` 是分维判据上线**之前**记下的历史数据。
-    不能反推的话，这些行会永远落进"判不出维度 → 两张图都要"的严判里（多一道无用功）；
+    不能反推的话，这些行会永远落进"判不出维度"那一档（多一道无用功）；
     能反推，旧基线也判得出"这次只动了位移"或"只动了高度"。
     """
     try:
@@ -1297,8 +1383,9 @@ def _aspects_from_signature(sig: str, kind: str) -> dict[str, str]:
 def row_aspects(row: dict, kind: str) -> dict[str, str]:
     """一行的**按维度分组签名** → `{"plan": ..., "size": ..., "height": ...}`（2026-09-30 加）。
 
-    用途只有一个：回答「**这一版动的是位移 / 大小 / 高度里的哪几样**」——
-    因为它决定**要出哪几张图**（`VIEW_FOR_DIM`：位移 → 顶视图；大小 / 高度 → 立面）。
+    用途只有一个：回答「**这一版动的是位移 / 大小 / 高度里的哪几样**」。
+    ⚠ **它不再决定"要出哪几张图"**（2026-10-11 起恒出**一张** three.js 页，见 `REQUIRED_VIEWS`）——
+      现在只用来**说清这一版动了什么**（报文的重点提示）。
 
     ⚠ 实现是"拿 `row_signature()` 的结果按下标切"（`_aspects_from_signature()`）——
       **不另抄一份字段清单**，免得哪天签名里加了字段、这边忘了跟，两处口径悄悄分叉。
@@ -1366,9 +1453,9 @@ def change_set(plan: dict) -> dict:
 
     输出：`{local, baseline, added, changed, removed, same, required_labels, changed_dims,`
     `required_views, views_why, note}`
-      · `required_labels` = 这一版**图里必须出现**的 label（新增 + 改动 + 删掉的行）；
-      · `required_views` = **恒为两张**（`["top", "elevation"]`，2026-09-30 用户定案）：
-        **顶视图**（X-Y）+ **「原图视角」透视示意图**（透视：近大远小）。依据与"为什么不做条件视图"见 `REQUIRED_VIEWS`；
+      · `required_labels` = 这一版**页里必须出现**的 label（新增 + 改动 + 删掉的行）；
+      · `required_views` = **恒为一张**（`["page"]`，2026-10-11 用户定案）：
+        一张 three.js 页（`views/<plan 名>_view.html`，落盘时自动生成）。见 `REQUIRED_VIEWS`；
       · `local=False` 表示**没有基线**（第一次搭）→ `required_labels` 是**每一行**（全量）。
 
     基线按优先级取：
@@ -1419,14 +1506,14 @@ def change_set(plan: dict) -> dict:
             "local": False, "baseline": "", "added": [], "changed": [], "removed": [],
             "same": 0, "required_labels": labels,
             # 没有基线 = **全量一轮**（第一次搭 / 换了图）：整表都是新摆的 ——
-            # 位移、大小、高度**三样都算动过**（维度只用于"重点标哪几行"；两张图本来就恒出）。
+            # 位移、大小、高度**三样都算动过**（维度只用于"重点标哪几行"；那一张页本来就恒出）。
             "changed_dims": ["plan", "size", "height"],
             "required_views": list(REQUIRED_VIEWS),
             "views_why": ("还没有『被确认过的基线』（第一次搭 / 换了图）⇒ **全量一轮**："
-                          "整张表都是新摆的，图里要出现每一行；**两张图照出**"
-                          "（顶视图 + 「原图视角」透视示意图 —— 每一版都出这两张）。"),
-            "note": ("还没有『被确认过的基线』—— 这一版按**全量**判：图里要出现放置表"
-                     f"**每一行**的 label（共 {len(labels)} 行），且**平面图与立面图都要**。"),
+                          "整张表都是新摆的，页里要出现每一行；**那一张页照出**"
+                          "（落盘时由代码自动生成，见 `figure3d.py`）。"),
+            "note": ("还没有『被确认过的基线』—— 这一版按**全量**判：页里要出现放置表"
+                     f"**每一行**的 label（共 {len(labels)} 行），**一张 three.js 页就够**。"),
         }
 
     added = [l for l in cur if l not in base_rows]
@@ -1437,12 +1524,14 @@ def change_set(plan: dict) -> dict:
     req = [l for l in labels if l in changed_set or l in added_set]
     req += [l for l in removed if l not in req]        # 删掉的行也要点到（用户得看见"它没了"）
 
-    # --- 「变的是哪一维」→ 决定**要出哪几张图**（2026-09-30 加）------------------------
-    # 用户原话：「我要求的是改高度……但是这个图画的还是顶视图，我觉得得改一下，
-    #   **当调整的是高度时生成的图得是正视图或者左右视图**」。
-    # 根因就在这儿：变更集原先只回 label 列表，**平面改和高度改的输出一模一样** ——
-    # 于是 agent 一律按老习惯画俯视图，而高度变化在俯视图上完全看不见（那张图白给）。
-    # 判据：把"改动 + 新增"的行按**维度签名**再比一次（`row_aspects()`）。
+    # --- 「变的是哪一维」→ **只用来重点提示**（2026-09-30 加；2026-10-11 起不再决定出哪几张）----
+    # 当年为什么有它：变更集原先只回 label 列表，**平面改和高度改的输出一模一样** ——
+    #   于是 agent 一律按老习惯画俯视图，而高度变化在俯视图上完全看不见（用户原话：
+    #   「我要求的是改高度……但是这个图画的还是顶视图……**当调整的是高度时生成的图得是
+    #   正视图或者左右视图**」）。
+    # ⚠ **现在那张页可转**（顶视图 / 原图视角 / 沿街侧视都是页上的按钮）⇒ 这个理由不成立了，
+    #   所以维度**不再决定出哪几张**（恒一张，见 `REQUIRED_VIEWS`），只用来在报文里说清动了什么。
+    #   判据：把"改动 + 新增"的行按**维度签名**再比一次（`row_aspects()`）。
     cur_aspects = plan_row_aspects(plan)
     dims: set[str] = set()
     dims_blind: list[str] = []
@@ -1463,25 +1552,22 @@ def change_set(plan: dict) -> dict:
     if dims_blind:
         dims.update({"plan", "size", "height"})
     if removed:
-        dims.add("plan")                    # 删掉的行要在顶视图上点到"它没了"
+        dims.add("plan")                    # 删掉的行要在页面里点到"它没了"
 
-    # --- 视图要求 = **恒出两张**（2026-09-30 用户定案，见 `REQUIRED_VIEWS`）----------------
-    # 原先做过"按动的是哪一维决定出哪几张"，当天下午用户定为恒出两张：「太麻烦了」。
-    # 所以这里不再做映射 —— 维度只用来**说清这一版动了什么**（报文里给重点）。
+    # --- 视图要求 = **恒出一张**（2026-10-11 用户定案，见 `REQUIRED_VIEWS`）----------------
     required_views = list(REQUIRED_VIEWS)
     if changed or added or removed:
-        views_why = ("**每一版都出两张**：顶视图（X-Y：摆在哪 / 占地多大）+ "
-                     "**「原图视角」透视示意图**（近大远小、每行标 `x_m`、被挡住的行也要出图）。"
-                     "这一版动到的维度"
-                     "（**只用来决定图里重点标哪几行**，不再决定出哪几张图）："
+        views_why = ("**每一版都出一张 three.js 页**（落盘时由代码自动生成；可转、可缩、可点，"
+                     "顶视图 / 原图视角 / 沿街侧视都是页上的按钮）。这一版动到的维度"
+                     "（**只用来提示重点看哪儿**）："
                      + "、".join(DIM_CN[d] for d in ("plan", "size", "height") if d in dims)
                      + "。")
         if dims_blind:
             views_why += (f"；⚠ 其中 {len(dims_blind)} 行在基线里**没有维度签名**"
-                          "（旧台账，判不出动的是哪一维）—— 两张图照出、照验。")
+                          "（旧台账，判不出动的是哪一维）—— 那一张页照出、照验。")
     else:
-        views_why = ("**每一版都出两张**（顶视图 + 「原图视角」透视示意图）——这一版与基线逐行一致，"
-                     "两张照出、照验（「没有图不许让用户确认」这条闸不因变更集为空而失效）。")
+        views_why = ("**每一版都出一张 three.js 页** —— 这一版与基线逐行一致，"
+                     "页照出、照验（「没有图不许让用户确认」这条闸不因变更集为空而失效）。")
     return {
         "local": True, "baseline": base_where,
         "added": added, "changed": changed, "removed": removed,
@@ -1490,19 +1576,23 @@ def change_set(plan: dict) -> dict:
         "required_views": required_views,
         "views_why": views_why,
         "note": (f"**局部一轮**（基线：{base_where}）：新增 {len(added)} / 改动 {len(changed)} / "
-                 f"删除 {len(removed)}；图里只需出现这 **{len(req)} 行**的 label；"
-                 f"另外 {len(same)} 行**没动**、不必重画（它们早已确认过）。"
+                 f"删除 {len(removed)}；页里只需出现这 **{len(req)} 行**的 label；"
+                 f"另外 {len(same)} 行**没动**（它们早已确认过）。"
                  f"视图要求：{views_why}"),
     }
 
 
 def origin_view_spec(plan: dict) -> dict:
-    """**「原图视角」箭头**的规格（机器可读）—— 出处是 `get_plan().drawing.origin_view`。
+    """**「原图视角」箭头**的规格（机器可读）—— **口径的唯一出处就是本函数**（不是 `get_plan()` 的派生段）。
+
+    ⚠ 它前身是 `get_plan().drawing.origin_view` —— **那个 `drawing` 段 2026-10-11 已整段删除**
+      （页改由代码自动生成 ⇒ 没人再需要"给画图的人用的几何"）。要看它当版的样子：
+      打开 `views/<plan 名>_view.html`；要看这一版必须覆盖哪些行：跑 `--figure-checklist`。
 
     为什么由**代码给死**（2026-10-04 用户要求：「生成顶视图加个原图视角箭头，不然用户看不懂」）：
       顶视图是俯视，**看不出哪边是「原图往里看」的方向**；箭头的**位置与朝向**要是让画图的人
       自己估，就是**第二套口径** —— 而图是用户唯一能判断的依据
-      （与 `drawing.rows` 里那些 `z_base_m` / `z_top_m` 同一条纪律：**别自己推**）。
+      （与 `_compose_build_rows()` 算 `z_base_cm` / `z_top_cm` 同一条纪律：**别自己推**）。
 
     形状与语义：
       · `axis` = `"X"` —— 原图视角 = **沿 +X 看**（就是 `world.coordinate_system.forward_axis`）；
@@ -1516,7 +1606,7 @@ def origin_view_spec(plan: dict) -> dict:
     ⚠ **只读、离线、不碰 UE**：世界范围只取 `plan["world"]` 的 `center` / `size`（米）；
       取不到就退回同一处的 `bounds`；两样都没有 → 两个坐标字段给 `None` + `warning` 写明原因
       （**不猜、不拿别的数顶替** —— 与硬规则 6「预估值不许伪装成实测值」同源）。
-    ⚠ 它**不进几何指纹**（是派生值，不是 plan 的一部分）—— 与 `drawing` 段整体同一条口径。
+    ⚠ 它**不进几何指纹**（是派生值，不是 plan 的一部分）—— 与 `_compose_build_rows()` 算出来的 z 口径同一性质。
     """
     spec: dict = {
         "axis": "X",
@@ -1527,9 +1617,11 @@ def origin_view_spec(plan: dict) -> dict:
         "where": ("放在**图框下沿、世界范围之外**（世界 Y 最小边再往外 "
                   + f"{ORIGIN_VIEW_ARROW_GAP_M:g} m），**别压到任何一行**；"
                   + "箭头指向 **+X**（画面里「往原图纵深去」的方向）"),
-        "note": ("只有**顶视图**（`views/plan_v1_overview*.svg`）要画它："
-                 "从 `arrow_from_m` 到 `arrow_to_m` 画一个指向 +X 的箭头，"
-                 + "并在旁边写上「" + ORIGIN_VIEW_LABEL + "」。"
+        "note": ("它现在画在**那张 three.js 页的 3D 场景里**"
+                 "（`web/preview3d.html` 的 `buildOriginArrow()` / `buildOriginLabel()`，"
+                 "这条 spec 就是它的口径来源）："
+                 "从 `arrow_from_m` 到 `arrow_to_m` 摆一个指向 +X 的箭头，"
+                 + "旁边写上「" + ORIGIN_VIEW_LABEL + "」。"
                  "⚠ 缺「原图视角」这四个字会被 `figure_verdicts()` 记一条**提示** —— "
                  "**只报不拦**，不影响确认与任何既有判据。"),
     }
@@ -1625,43 +1717,37 @@ def figure_verdicts(plan: dict, plan_mtime: float | None = None,
                     kind: str = "plan") -> list[dict]:
     """逐张判 `views/` 里的图**认不认这份数据** → `[{name, path, ok, why}]`（只读、离线）。
 
-    `kind` 选**哪一路图**（2026-09-30 加）：
-      · `"plan"`（默认）= **平面图**（俯视），文件名前缀 `plan_v1_overview*`；
-      · `"elevation"` = **立面图**（正视图 / 侧视图），文件名前缀 `plan_v1_elevation*`。
-    ⚠ 两路的判据**一字不差**（就是下面这份代码），只有文件名前缀不同 ——
-      判据只写一处，免得"平面图严、立面图松"这种两套口径。
+    `kind` 选**哪一路**（2026-09-30 加；2026-10-11 起**只剩一路**，这个形参保留只为不改调用方）：
+      · `"page"`（默认，也是唯一有意义的值）= 那张 three.js 页，文件名 `plan_*_view.html`。
+    ⚠ 形参 `kind` **不再改变判据**：判据只有下面这一份（见 `FIGURE_GLOBS`）。
 
     判据（两条**都要过**）：
-      - **正文里要有当前几何指纹的前 10 位** —— 证明"这张图是拿这份数据画的"；
-      - **正文里要出现"该覆盖的每一行"的 `label`** —— 证明"这张图**没漏东西**"
+      - **正文里要有当前几何指纹的前 10 位** —— 证明"这一页是拿这份数据生成的"；
+      - **正文里要出现"该覆盖的每一行"的 `label`** —— 证明"这一页**没漏东西**"
         （判据实现在 `figure_label_coverage()`）。
 
-    ⚠ 除上面两条判据外，**顶视图多一条「只报不拦」的提示**（2026-10-04 加，用户要求
+    ⚠ 除上面两条判据外，**多一条「只报不拦」的提示**（2026-10-04 加，用户要求
       「生成顶视图加个原图视角箭头，不然用户看不懂」）：正文里没有「原图视角」这四个字
       → 该 verdict 的 `warnings` 里记 `ORIGIN_VIEW_MISSING_WARNING`。
-      ⚠ 它**不进 `ok`**、不进拒收判据、不影响 `missing_views` —— **第一版只报不拦**
-      （用户拍板：先看效果，别把已有旧图一变就作废）；箭头该画在哪儿见 `origin_view_spec()`。
-      ⚠ 只查顶视图这一类，透视图（`kind="elevation"`）**不加**这条。
+      ⚠ 它**不进 `ok`**、不进拒收判据、不影响 `missing_views` —— **只报不拦**；
+      箭头的口径见 `origin_view_spec()`。
 
     ⚠ **要覆盖哪些行，2026-09-26 起按"变更集"算**（用户要求：「用户想局部改，**所有都局部改，
       不要全部重做**」）：有已确认的基线时，只要求出现**这一次动了的那几行**的 label；
-      **没有基线（第一次搭）时仍是全量**（每一行都要出现）。覆盖率因此是**传递**成立的：
-      第一版全量画过，之后每轮只画改动过的那几行，并起来就是每一行。见 `change_set()`。
+      **没有基线（第一次搭）时仍是全量**（每一行都要出现）。见 `change_set()`。
 
-    ⚠ **位图（png / jpg / jpeg / webp / gif）一律不认账**：读不出文字，就核验不了"漏没漏"。
-      原来的位图口径是"文件比 plan_v1.json 新就放行"—— 那条口子与本条要求**直接冲突**
-      （一张漏了 20 行的截图，只要比数据新就能过关），故一并撤掉。要使用就出 **svg**。
+    ⚠ **位图（png / jpg / jpeg / webp / gif）与旧机制产物一律不认账**：本函数只认
+      `FIGURE_GLOBS` 命中的 **HTML**（那一页是文本，指纹与行名都在正文里）。
+      位图读不出文字 ⇒ 核验不了"漏没漏"；旧机制那份是**上一套**的产物，已经不再生成。
 
-    ⚠ `plan_mtime` 是**保留形参**：`clear_stale_figures()` 还在传它（签名不动、少改调用方）。
-      位图不再按时间放行之后，它**不参与任何判定** —— 只用来在理由里写一句"这张比数据新/老"，
-      当诊断信息（好让人一眼看出那张位图是不是上一轮的）。
+    ⚠ `plan_mtime` 是**保留形参**（老调用方还在传；位图不再按时间放行 ⇒ 它不参与判定）。
 
-    它是 `figure_check()`（确认时把关）、`clear_stale_figures()`（落盘时清除）、
-    `accepted_figures()`（验收状态）**共用的唯一判据** —— 判据只写一处，免得几条路各说各话。
+    它是 `figure_check()`（确认时把关）、`accepted_figures()`（验收状态）**共用的唯一判据**
+    —— 判据只写一处，免得几条路各说各话。
     """
     head = plan_geometry_hash(plan)[:10]
     # ⚠ 走咽喉（`active_plan_path()`）——纪元 2 开了之后基准是 `plan_v2.json`。
-    #   它在这里**只当诊断信息用**（"这张位图比数据新还是老"），不参与任何判定。
+    #   它在这里**只当诊断信息用**（"这张比数据新还是老"），不参与任何判定。
     _apath = active_plan_path()
     if plan_mtime is None:
         try:
@@ -1669,13 +1755,13 @@ def figure_verdicts(plan: dict, plan_mtime: float | None = None,
         except OSError:
             plan_mtime = 0.0
 
-    # 这一版**图里要覆盖哪些行**（局部轮 = 变更集；没有基线 = 全量）—— 唯一入口见 change_set()
+    # 这一版**页里要覆盖哪些行**（局部轮 = 变更集；没有基线 = 全量）—— 唯一入口见 change_set()
     cs = change_set(plan)
     req = list(cs.get("required_labels") or [])
     scope = ("局部一轮" if cs.get("local") else "全量一轮")
 
     found: list[Path] = []
-    for pattern in (ELEVATION_GLOBS if kind == "elevation" else FIGURE_GLOBS):
+    for pattern in FIGURE_GLOBS:
         try:
             found += [p for p in VIEWS_DIR.glob(pattern) if p.is_file()]
         except OSError:
@@ -1683,17 +1769,17 @@ def figure_verdicts(plan: dict, plan_mtime: float | None = None,
 
     out: list[dict] = []
     for path in sorted(set(found)):
-        if path.suffix.lower() != ".svg":
-            # 位图**不再认账**（理由见本函数 docstring）：这里只把"新旧"当诊断信息写进理由，
-            # 绝不用它放行 —— 用时间放行的话，"漏了 20 行的截图"只要比数据新就照样过关。
+        if path.suffix.lower() not in (".html", ".htm"):
+            # 非 HTML 一律不认账（理由见本函数 docstring）：只把"新旧"当诊断信息写进理由，
+            # 绝不用它放行。
             try:
                 age = (f"比 {_apath.name} 新" if path.stat().st_mtime >= plan_mtime
                        else f"比 {_apath.name} 老")
             except OSError:
                 age = "取不到修改时间"
             out.append({"name": path.name, "path": path, "ok": False, "warnings": [],
-                        "why": (f"位图读不出文字，**核验不了有没有漏元素**（这张{age}）；"
-                                "要使用就出 svg —— 图内写当前指纹 + 该覆盖的那些行的 label")})
+                        "why": (f"不是 HTML，**核验不了有没有漏行**（这个{age}）；"
+                                "认账的是落盘时自动生成的那张 `plan_<版本>_view.html`")})
             continue
         try:
             text = path.read_text(encoding="utf-8-sig", errors="replace")
@@ -1702,22 +1788,19 @@ def figure_verdicts(plan: dict, plan_mtime: float | None = None,
                         "why": f"读不动（{exc}）"})
             continue
 
-        # --- 顶视图的「原图视角」箭头：**只报不拦**（2026-10-04 用户要求）----------------
-        # 用户原话：「生成顶视图加个原图视角箭头，不然用户看不懂」—— 顶视图是**俯视**（X-Y），
-        #   画面上看不出哪边是「原图往里看」的方向（本工程 X 前进 = 参考图的纵深链）。
-        # ⚠ **第一版只报不拦**（用户拍板：先看效果，别把已有旧图一变就作废）：
-        #   这条**不进** `ok`、**不进**下面任何拒收判据、**不影响** `missing_views` ——
+        # --- 「原图视角」箭头：**只报不拦**（2026-10-04 用户要求）------------------------
+        # 用户原话：「生成顶视图加个原图视角箭头，不然用户看不懂」—— 俯视时看不出哪边是
+        #   「原图往里看」的方向（本工程 X 前进 = 参考图的纵深链）。
+        # ⚠ **只报不拦**：这条**不进** `ok`、**不进**任何拒收判据、**不影响** `missing_views` ——
         #   只是挂在 verdict 的 `warnings` 里，由 `figure_check()` 汇总带出去。
-        #   箭头该画在哪儿的口径见 `origin_view_spec()`。
-        # ⚠ 只查**顶视图**这一类（`kind != "elevation"`）：透视图本身就叫「原图视角」，不加这条。
         arrow_warn = ""
-        if kind != "elevation" and "原图视角" not in text:
+        if "原图视角" not in text:
             arrow_warn = ORIGIN_VIEW_MISSING_WARNING
         warns = [arrow_warn] if arrow_warn else []
 
         if head not in text:
             out.append({"name": path.name, "path": path, "ok": False, "warnings": warns,
-                        "why": f"正文里没有当前指纹 {head}…（是别的版本的图）"})
+                        "why": f"正文里没有当前指纹 {head}…（是别的版本生成的）"})
             continue
         cov = figure_label_coverage(plan, text, labels=req)
         if not cov["ok"]:
@@ -1735,42 +1818,39 @@ def figure_verdicts(plan: dict, plan_mtime: float | None = None,
 
 
 def figure_check(plan: dict) -> dict:
-    """判「views/ 里**该有的图**是不是都认这份数据」→
+    """判「views/ 里**该有的那一页**认不认这份数据」→
     `{ok, figures, required_views, missing_views, required_labels, local, changed_dims, note[, needs_labels]}`。
-    ⚠ **2026-10-04 多一个 `warnings`**（**只报不拦**的提示，如「顶视图缺「原图视角」箭头」）——
+    ⚠ **2026-10-04 多一个 `warnings`**（**只报不拦**的提示，如「页里缺「原图视角」四个字」）——
       它**不参与 `ok`**，`ok` 的判据与以前**一字不差**。
 
-    **按视图逐项判**（2026-09-30 加）：`change_set()["required_views"]` 说这一版要出哪几张
-    （**位移 / 朝向 → 顶视图**；**大小 / 高度 → 「原图视角」透视示意图**；见 `VIEW_FOR_DIM`），这里逐项验：
-      · `top` → 平面图（俯视），前缀 `plan_v1_overview*`；
-      · `elevation` → 「原图视角」透视示意图，前缀 `plan_v1_elevation*`。
-    **缺哪一张就报哪一张**（`missing_views`），不合并成一句含糊的"图不认数据"。
-
-    判据见 `figure_verdicts()`：**指纹对得上 + 该覆盖的每一行 `label` 都在图里**。
+    判据见 `figure_verdicts()`：**指纹对得上 + 该覆盖的每一行 `label` 都在页里**。
     ⚠ 「该覆盖的行」= `change_set()["required_labels"]`：**局部轮 = 本次改动的那几行**；
       没有基线（第一次搭）= **全量每一行**（2026-09-26 用户要求「所有都局部改，不要全部重做」）。
 
     为什么要有它（2026-09-24 收尾清单 #8）：AGENTS 的口径是 **图与数据必须一致 ——
     不一致 = 等于没确认**，但以前全靠人自觉（实测踩到过：图里还写着"本图未经用户确认"，
     而数据早已确认）。2026-09-25 又按用户要求加严：**光有指纹不算数，还得一行都不漏**。
-    2026-09-30 再加一层：**漏的是哪一维**也算"漏" —— 只改高度却只给俯视图，
-    用户根本看不出改了什么，那张图作为凭据等于没有（用户原话见 `ELEVATION_GLOBS`）。
 
-    ⚠ 判不过时**不猜**：说清是哪张图、为什么不算数，让调用方（confirm_plan）拒收；
-      缺图时额外附 `needs_labels`（这一版**必须出现在图里**的 label ——
-      局部轮就是那几行，**不用重画整张图**），让画图的人照着补，而不是来回猜"到底漏了哪个"。
+    ⚠ **2026-10-11 起只剩一路**（用户：「整改2阶段，不出图，出three.js」）：原先按
+      `required_views` **逐视图**判（缺哪张报哪张）。现在那一页是**落盘时自动生成的** ——
+      它该在的时候**必在**（除非出图那一步自己失败，而失败原因由 `write_plan()` 的
+      `plan_view.errors` 直接报出来，不靠这里猜）。所以本函数收敛成一路；
+      `required_views` / `missing_views` / `view_labels` 三个键**照旧返回**（形状不变），
+      值分别是 `["page"]` / `[] 或 ["page"]` / `["three.js 页（落盘自动生成）"]`。
+
+    ⚠ 判不过时**不猜**：说清为什么不算数，让调用方（confirm_plan）拒收；
+      缺页时额外附 `needs_labels`（这一版**必须出现在页里**的 label）。
     """
     cs = change_set(plan)
     needs = list(cs.get("required_labels") or [])
-    views = [str(v) for v in (cs.get("required_views") or ["top"])]
-    view_cn = {"top": "平面图（俯视）", "elevation": "「原图视角」透视示意图"}
-    view_prefix = {"top": "plan_v1_overview*.svg", "elevation": "plan_v1_elevation*.svg"}
+    views = [str(v) for v in (cs.get("required_views") or ["page"])]
+    view_cn = {"page": "three.js 页（落盘自动生成，可转 / 可缩 / 可点）"}
+    view_prefix = {"page": "plan_*_view.html"}
 
     per_view: dict[str, list[dict]] = {}
-    for view in ("top", "elevation"):
+    for view in views:
         try:
-            per_view[view] = figure_verdicts(
-                plan, kind=("elevation" if view == "elevation" else "plan"))
+            per_view[view] = figure_verdicts(plan)
         except OSError:
             per_view[view] = []
 
@@ -1778,14 +1858,14 @@ def figure_check(plan: dict) -> dict:
     missing_views = [view for view in views
                      if not any(v.get("ok") for v in per_view.get(view, []))]
 
-    # --- 只报不拦的提示：汇总各图 `figure_verdicts()` 记下的 `warnings`（2026-10-04 加）------
-    # 当前只有一条来源：顶视图正文里没有「原图视角」箭头（见 `ORIGIN_VIEW_MISSING_WARNING`）。
+    # --- 只报不拦的提示：汇总 `figure_verdicts()` 记下的 `warnings`（2026-10-04 加）------
+    # 当前只有一条来源：页里没有「原图视角」四个字（见 `ORIGIN_VIEW_MISSING_WARNING`）。
     # ⚠ **判据一个都没动**：上面的 `figures` / `missing_views` / `ok` 与以前逐字相同 ——
     #   这里只是把提示**带出去**，让调用方（`get_plan()` / `confirm_plan()`）看得见。
     view_warnings = [str(w) for view in views for v in per_view.get(view, [])
                      for w in (v.get("warnings") or [])]
 
-    # 逐路说清现状：哪张认账 / 认不了的话是为什么 / **一张都没有**（并给出命名约定）
+    # 说清现状：认账 / 认不了的话是为什么 / **一张都没有**（并给出命名约定）
     parts: list[str] = []
     stray_hint = ""
     for view in views:
@@ -1801,26 +1881,24 @@ def figure_check(plan: dict) -> dict:
         parts.append(f"{view_cn[view]}：❌ views/ 里**没有** `{view_prefix[view]}` 这张")
         if not stray_hint:
             # ⚠ 2026-09-26 改（客户反馈实测）：以前这里一律说「views/ 里没有图」—— 而客户那头的 agent
-            #   **图已经画好了**（名字不是 plan_v1_overview*），它读到的却是「没有图」，
-            #   于是**去把文件改了个名**再来确认。两个坏处：
-            #     ① 事实说错了（有图，只是没被命名约定命中）；
-            #     ② 既没说约定是什么、也没说正确出路 —— agent 只能靠撞墙学（AGENTS：不许靠人记得）。
-            #   现在分成两句说：**一张图都没有** / **有图，但没被约定命中**（并说明改名是允许的）。
+            #   **图已经画好了**（名字不合约定），它读到的却是「没有图」，于是**去把文件改了个名**。
+            #   现在分开说：**一张都没有** / **有，但没被约定命中**（并说明命名只是约定）。
+            # ⚠ 2026-10-11：那一页**不再由人画** ⇒ 这里的话术跟着改（别再叫 agent 去"重命名"）。
             try:
-                stray = [p.name for p in VIEWS_DIR.glob("*.svg") if p.is_file()]
+                stray = [p.name for p in VIEWS_DIR.glob("plan_*_view*.htm*") if p.is_file()]
             except OSError:
                 stray = []
             if stray:
-                stray_hint = ("（views/ 里有 " + str(len(stray)) + " 张 svg 没被任何一路前缀命中："
+                stray_hint = ("（views/ 里有 " + str(len(stray)) + " 份没被认账的页："
                               + "、".join(stray[:6]) + ("…" if len(stray) > 6 else "")
-                              + "。⚠ 命名只是**代码找图的约定**，真正的判据是**图的内容**"
+                              + "。⚠ 命名只是**代码找页的约定**，真正的判据是**页的内容**"
                                 "（当前几何指纹前 10 位 + 该覆盖的每一行 label）—— "
-                                "所以**把它改名成上面那个前缀是允许的**；"
-                                "但内容不对的话，改名也过不了，那得重画。）")
+                                "内容不对的（上一版生成的）改名也过不了。）")
             else:
-                stray_hint = ("⚠ 画完请**按上面那两种前缀命名**"
-                              "（平面图 `plan_v1_overview*.svg` / 立面图 `plan_v1_elevation*.svg`）"
-                              "—— 那是代码找图的约定；**必须是 svg**，位图核验不了有没有漏。")
+                stray_hint = ("⚠ 那一页**本该由 `write_plan()` 在落盘时自动生成** —— "
+                              "它不在，说明出图那一步失败了：看落盘那次报文的 `plan_view.errors`"
+                              "（原因会逐条列出来），或手工重出："
+                              "`python -m mcp_server.planning.figure3d`。")
     note = "；".join(parts)
     if missing_views:
         note += "。视图要求（为什么会缺）：" + str(cs.get("views_why") or "")
@@ -1844,40 +1922,6 @@ def figure_check(plan: dict) -> dict:
     return out
 
 
-def clear_stale_figures(plan: dict, plan_mtime: float | None = None) -> tuple[list[str], list[str]]:
-    """把 `views/` 里**不认这份数据**的图移进 `views/archive/` → `(移走的, 留下的)`。
-
-    为什么要**代码自动清除**（2026-09-24 用户要求，收尾清单 #8 加码）：图是"用户确认过的那一版"
-    的凭据。数据一改（指纹就变），旧图就变成**没人确认过的图** —— 留在 `views/` 里只会让人
-    （和下一个 agent）误以为"这就是当前这版"。以前只能靠人记得删。
-    规则写死：**只留认账的图**（判据同 `figure_verdicts()`），其余移到 archive。
-    当前正在给用户看的那张只要认账就**不会被删** —— 被清掉的永远是**别的版本**的图。
-
-    ⚠ 是"移走"不是"销毁"：进 `views/archive/`（带原文件名），免得把人家画过的图无声无息弄丢。
-    """
-    removed: list[str] = []
-    kept: list[str] = []
-    # 两路图**都要清**（2026-09-30 加：平面图 + 立面图）—— 判据仍只有 `figure_verdicts()` 一份。
-    for kind in ("plan", "elevation"):
-        for verdict in figure_verdicts(plan, plan_mtime, kind=kind):
-            if verdict["ok"]:
-                kept.append(verdict["name"])
-                continue
-            path: Path = verdict["path"]
-            try:
-                ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-                target = ARCHIVE_DIR / path.name
-                n = 1
-                while target.exists():
-                    target = ARCHIVE_DIR / f"{path.stem}_{n}{path.suffix}"
-                    n += 1
-                path.replace(target)                 # 同盘移动，原子
-                removed.append(f"{verdict['name']}（{verdict['why']}）")
-            except OSError as exc:
-                kept.append(f"{verdict['name']}（清不掉：{exc}）")
-    return removed, kept
-
-
 # --- 阶段二验收（2026-09-25 用户要求新增）--------------------------------------
 #
 # 【为什么要单开一个阶段】
@@ -1886,7 +1930,7 @@ def clear_stale_figures(plan: dict, plan_mtime: float | None = None) -> tuple[li
 #   也没人记得改过什么。现在改成：
 #       **生图 = 阶段二结束 → 进「阶段二验收」**
 #       用户在图上看过说"行" → 闸门开，进第三阶段
-#       说"要改" → 改参数 → 重落盘 → 重画图 → 再使用，**循环到点头为止**
+#       说"要改" → 改参数 → 重落盘（那一页自动重生成）→ 再使用，**循环到点头为止**
 #
 # 【台账为什么独立成 views/acceptance.json，不写进 plan_v1.json】
 #   ① `plan_geometry_hash()` 算的是 plan_v1.json 里**除 confirmation 外**的全部内容 ——
@@ -1909,11 +1953,11 @@ ACCEPTANCE_STATES: dict[str, str] = {
     "not_started": "还没开始：放置表是空的，没有坐标可看",
     "awaiting_figure": "等出图：数据已落盘，但 views/ 里没有认这份数据的图",
     "awaiting_user": "等待用户看图确认：图与数据一致，可以使用给用户了",
-    "changes_requested": "用户提了要改的地方：等改参数 → 重落盘 → 重画图",
+    "changes_requested": "用户提了要改的地方：等改参数 → 重落盘（那一页自动重生成）",
     "accepted": "验收通过：闸门已开，可以进第三阶段",
     # ⚠ 2026-10-04（第四阶段 · 微调）：`tuned` **不是阶段二验收的一种状态** —— 它说的是
     #   "这一版是**整体搭建之后按用户原话小改**过的"。与 `accepted` 的关键区别只有一条：
-    #   **这一次没有图**（阶段二的"两张图 + 用户看图点头"只属于前三阶段）——
+    #   **这一次没有图**（阶段二的"一页 + 用户看页点头"只属于前三阶段）——
     #   依据是 `confirmation.user_quote`（用户原话）+ `confirmation.rows`（改了哪几行、为什么）。
     #   验收方式 = 用户在 UE 里自己看；agent 要把**数字**报出来（例：`Y −33.0 → −32.0`）。
     "tuned": ("微调版：几何已按用户原话改过、**这一次没有图**（如实）—— "
@@ -2030,19 +2074,18 @@ def save_acceptance(acc: dict) -> None:
 
 
 def accepted_figures(plan: dict) -> list[str]:
-    """**认这份数据**的图（图名）—— 也就是"该使用给用户看的那几张"。
+    """**认这份数据**的页（文件名）—— 也就是"该给用户看的那一张"。
 
-    判据只有 `figure_verdicts()` 一份（svg 看当前指纹前 10 位 **+ 该覆盖的行都在图里**
-    —— 局部轮是本次改动的那几行，没有基线才是全部行；位图一律不认），不另立标准。
-    ⚠ **两路都算**（2026-09-30 加）：平面图 `plan_v1_overview*` + 立面图 `plan_v1_elevation*`
-      —— 该给用户看的可能就是**两张卡**（改了高度时平面图看不出高低）。
-    ⚠ 认账的图**一张都没有**时这里返回空表 ——
-    验收状态就会停在 `awaiting_figure`，逼着出图，而不是"嘴上说图有了"。
+    判据只有 `figure_verdicts()` 一份（HTML 看当前指纹前 10 位 **+ 该覆盖的行都在页里**
+    —— 局部轮是本次改动的那几行，没有基线才是全部行；位图 / 旧格式一律不认），不另立标准。
+    ⚠ **2026-10-11 起只剩一张**（原先两路：平面图 + 立面图；现在一张能转的 three.js 页）——
+      那张页由 `write_plan()` 落盘时自动生成，所以它**该在的时候必在**。
+    ⚠ 认账的页**一张都没有**时这里返回空表 ——
+    验收状态就会停在 `awaiting_figure`，逼着看"出图那一步为什么失败"，而不是"嘴上说页有了"。
     """
     out: list[str] = []
     try:
-        for kind in ("plan", "elevation"):
-            out += [v["name"] for v in figure_verdicts(plan, kind=kind) if v.get("ok")]
+        out += [v["name"] for v in figure_verdicts(plan) if v.get("ok")]
     except OSError:
         return []
     return out
@@ -2063,26 +2106,26 @@ def acceptance_state(plan: dict, acc: dict | None = None,
          —— **放在最前面判**，因为它是**唯一一种"没有图也算数"的确认**：
          `mark_tuned()` 会同时写 `confirmed=True`，若不先拦下来，下面第 ② 条会直接把它
          算成 `accepted`（"闸门已开"）—— 那等于**替它假装有图**，而这一版是如实没有图的。
-         它**不走**下面"图认不认这份数据"那条路（`figure_check()` 会报"没有认账的图"）。
+         它**不走**下面"图认不认这份数据"那条路（`figure_check()` 会报"没有认账的页"）。
       ① 两张表都空 → `not_started`（没有坐标可看，谈不上验收）
       ② `confirmation.confirmed` → `accepted`（闸门已开）
       ③ 这一版几何上**最后一条事件**是"要改" → `changes_requested`
          （用户提了改动、还没落到数据里；下次落盘换了指纹，这条自然失效 = 进入新一轮）
-      ④ **该出的每一路图都认账**（`figure_check().ok`，路数见 `REQUIRED_VIEWS`）→
-         `awaiting_user`（可以使用给用户了）
-      ⑤ 否则 → `awaiting_figure`（等出图 / 等补上缺的那一路）
+      ④ **那一页认账**（`figure_check().ok`，路数见 `REQUIRED_VIEWS` —— 2026-10-11 起是一张）→
+         `awaiting_user`（可以给用户看了）
+      ⑤ 否则 → `awaiting_figure`（页没出来 / 不认这一版）
 
-    ⚠ **2026-09-30 修**：判据原先只是"**有没有**认账的图"，于是**只画了顶视图（缺 `elevation`）**
-      也会报 `awaiting_user` —— 而 `confirm_plan` 会**按视图拒收** ⇒ **状态与闸门打架、会骗人**：
-      一个不细看的 agent 会拿着一张图给用户、用户点头、然后确认被拒（白跑一轮，
-      更坏的是它可能以为"已经确认过了"）。现在判据统一到 `figure_check()`
-      —— 那个函数本来就是按 `REQUIRED_VIEWS` **逐视图**判的，一处置口径。
+    ⚠ **2026-09-30 修**：判据原先只是"**有没有**认账的图"，于是缺其中一路也会报 `awaiting_user`
+      —— 而 `confirm_plan` 会**按视图拒收** ⇒ **状态与闸门打架、会骗人**：
+      一个不细看的 agent 会拿着一图给用户、用户点头、然后确认被拒（白跑一轮）。
+      现在判据统一到 `figure_check()` —— **一处置口径**（2026-10-11 之后只有一路，这条仍然成立：
+      `figure_check()` 是"页认不认这份数据"的唯一判据，本函数不另算一遍）。
     """
     if not (plan.get("assets") or plan.get("whiteboxes")):
         return "not_started"
     # ⚠ ⓪ **微调版最先判**（第四阶段 · 微调，2026-10-04 加）：`mode == "tuned"` 就直接收工 ——
     #   别往下走。它的 `confirmation.confirmed` 也是 true，落到第 ② 条会被算成 `accepted`
-    #   （那会**替它假装有图**）；而它的确**没有图**（本轮不画图、也不要求补图）。
+    #   （那会**替它假装有图**）；而它的确**没有图**（本轮不生成页、也不要求补）。
     if str((plan.get("confirmation") or {}).get("mode") or "") == "tuned":
         return "tuned"
     if bool((plan.get("confirmation") or {}).get("confirmed")):
@@ -2097,14 +2140,14 @@ def acceptance_state(plan: dict, acc: dict | None = None,
             return "changes_requested"
         if last.get("kind") == "accepted":
             return "accepted"
-    # ⚠ 判据统一到 `figure_check()`：**每一条要求的视图都认账**才算"可以给用户看了"。
-    #   （旧判据只看"有没有认账的图" → 只画一张也会说"可以给用户看了"，而确认时会按视图拒收。）
-    #   判不动（异常）就按"还没齐"处理 —— 严的那一侧：宁可让 agent 再画一张，也不能骗它去确认。
+    # ⚠ 判据统一到 `figure_check()`：**那一页认账**才算"可以给用户看了"。
+    #   `figs` 与 `views_ok` 现在指向同一件事（只有一路）—— 保留两者是为了**异常那一侧**
+    #   仍然从严（判不动 = 按"没齐"处理，宁可让 agent 去查出图为什么失败，也不能骗它去确认）。
     try:
         views_ok = bool(figure_check(plan).get("ok"))
     except Exception:                       # noqa: BLE001
         views_ok = False
-    return "awaiting_user" if (figs and views_ok) else "awaiting_figure"
+    return "awaiting_user" if (views_ok and figs) else "awaiting_figure"
 
 
 def pending_changes(plan: dict, acc: dict | None = None) -> list[str]:
@@ -2264,7 +2307,8 @@ def acceptance_view(plan: dict, tail: int = 8) -> dict:
 def write_plan(plan: dict, target: Path | None = None) -> dict:
     """落盘 plan —— **全工程唯一写入点**。返回
     `{"path": 写到哪个文件, "epoch": 纪元号, "archived": 留档文件名,`
-    `"removed_figures": [...], "kept_figures": [...], "acceptance": {...}}`。
+    `"removed_figures": []（保留键，见下）, "kept_figures": []（保留键）, "acceptance": {...},`
+    `"plan_view": {...}}`。
 
     `target`（2026-10-04 加）＝ **写到哪个文件**；默认 `active_plan_path()` —— 也就是
     「纪元 2 开了就写 `plan_v2.json`，否则写 `plan_v1.json`」。**只有换纪元那一步**
@@ -2276,14 +2320,38 @@ def write_plan(plan: dict, target: Path | None = None) -> dict:
         原样复制进 `views/archive/`（文件名带 UTC 时间戳）。内容一模一样时不重复留档。
         ⚠ **归档名带纪元前缀**（`plan_v1_<时间戳>_<confirmed|draft>.json` / `plan_v2_...`）——
         不让 v1 / v2 的留档互相覆盖，也让"这一版属于哪个纪元"一眼看得出来。
-      - **清除不认账的图**（收尾清单 #8 加码，2026-09-24 用户要求）：数据一改，旧图就变成
-        "没人确认过的图"，留在 `views/` 里只会误导人 —— 由 `clear_stale_figures()` 移进 archive。
-        当前这张只要认账就留着。
       - **进「阶段二验收」**（2026-09-25 用户要求）：落盘 = 这一版几何进验收（`enter_acceptance()`）。
-        收在这里的理由与上两条一样 —— `write_plan()` 是全工程唯一写入点，
+        收在这里的理由与上一条一样 —— `write_plan()` 是全工程唯一写入点，
         收在这儿就**没人能忘**（MCP 的 generate_plan、CLI 的 --confirm 都走这条路）。
+      - **顺手渲染阶段二那张 three.js 页**（2026-10-11 用户要求：「整改2阶段，不出图，出three.js」）
+        —— `_write_view()` → `views/<plan 名>_view.html` + 同级的 `three.min.js`。
+        ⚠ **它失败不拦落盘**（理由见 `_write_view()` 的 docstring），结果在返回值的
+        `plan_view` 里：`{ok, out, bytes, rows, errors, ...}` —— 判据分开报，别混成一句。
+        ⚠ **自动清图已经删掉**（同日）：页由本函数重生成 ⇒ `views/` 下不会有"别的版本的页"，
+        `clear_stale_figures()` 整段删除；`removed_figures` / `kept_figures` 两个键
+        **保留但恒为空**（不改调用方）。
     """
     path = Path(target) if target is not None else active_plan_path()
+
+    # --- ⚠ **不可回到前三阶段**（2026-10-12 用户指令，代码硬闸）------------------------------
+    # 用户原话：「三阶段只触发一次…直接冻结纪元 1 开启纪元 2…一旦落进关卡代码自动结束前三阶段
+    #   且**不可回到前三阶段**，开启纪元 2 后只参考新表」。
+    # 判据一句话：**`plan_v2.json` 在 ⇒ `plan_v1.json` 已冻结，任何往它的写一律拒收**。
+    # ⚠ 为什么闸在**这里**：`write_plan()` 是全工程唯一写入点（MCP 的 generate_plan、CLI 的
+    #   --confirm、换纪元那一步都走它）⇒ 一处拦住 = 全覆盖，不用去每个调用点各写一遍
+    #   （那种"靠每个调用点自觉"的判据，本项目已经吃过几次亏）。
+    # ⚠ 与 `active_plan_path()` 的分工：咽喉负责"**读**哪一份"（v2 在就只认 v2）；
+    #   这里负责"**写**哪一份"——两者是同一条口径的两半，缺一半就能被绕过去
+    #   （实测过的绕法：谁直接把 target 指成 `plan_v1.json` 就能改那份"冻结只读"的表）。
+    if PLAN_V2_PATH.exists() and path == OUT_JSON:
+        raise ValueError(
+            f"拒收：**纪元 1 已结束，`{OUT_JSON.name}` 冻结只读** —— 一个字节都没写。\n"
+            f"· 换纪元（阶段三那一次落地）之后，权威表是 `{PLAN_V2_PATH.name}`；"
+            "**前三阶段不会再回来**（用户口径：「不可回到前三阶段，开启纪元 2 后只参考新表」）。\n"
+            f"· 要改内容请改活动那份：`planning.active_plan_path()` → `{PLAN_V2_PATH.name}`"
+            "（正常路径 = `request_plan_change` → `generate_plan(patch=…)`）。\n"
+            f"· `{OUT_JSON.name}` 只作**留档**看（`views/archive/` 里还有一份冻结时的副本）。")
+
     epoch = _epoch_of_path(path)
     prefix = f"plan_v{epoch}"
     VIEWS_DIR.mkdir(parents=True, exist_ok=True)
@@ -2336,7 +2404,7 @@ def write_plan(plan: dict, target: Path | None = None) -> dict:
                         _acc0["accepted_rows"] = plan_row_signatures(_old_doc)
                         _acc0["accepted_rows_from"] = arch.name
                     # 分维签名一起回填（同一份旧数据现算得出来）—— 少回填它的话，
-                    # 下一轮局部改会落进"判不出维度 → 两张图都要"的严判。
+                    # 下一轮局部改会落进"判不出维度"那一档。
                     if not (_acc0.get("accepted_aspects") or {}):
                         _acc0["accepted_aspects"] = plan_row_aspects(_old_doc)
                         _acc0["accepted_aspects_from"] = arch.name
@@ -2347,7 +2415,7 @@ def write_plan(plan: dict, target: Path | None = None) -> dict:
     path.write_text(body, encoding="utf-8")
 
     # --- 落盘 = 进【阶段二验收】（2026-09-25 用户要求：生图即结束阶段二）--------
-    # ⚠ 放在"写数据"之后、"清图"之前：验收台账要读**刚写下去的**那份数据的指纹。
+    # ⚠ 放在"写数据"之后、"出页"之前：验收台账要读**刚写下去的**那份数据的指纹。
     # ⚠ 台账写不动**不该把落盘本身带崩**（数据已经安全落地了）—— 降级成一条说明。
     try:
         acceptance = enter_acceptance(plan)
@@ -2365,43 +2433,105 @@ def write_plan(plan: dict, target: Path | None = None) -> dict:
     except OSError:
         pass
 
+    # ⚠ **`removed_figures` / `kept_figures` 两个键保留但恒为空**（2026-10-11）：
+    #   它们原先是 `clear_stale_figures()` 的产物（把不认账的旧图移进 archive）。
+    #   现在那一页**由本函数在下面自动重生成**，`views/` 下**不可能有"别的版本生成的页"** ⇒
+    #   自动清图整段删除（理由与旧 `clear_stale_figures()` 的 docstring 同源）。
+    #   键保留是为了**不改动调用方**（`main.py` 三处都在读它），且空表就是如实答案。
+    return {"path": str(path), "epoch": epoch, "archived": archived, "removed_figures": [],
+            "kept_figures": [], "acceptance": acceptance,
+            "plan_view": _write_view(plan, path)}
+
+
+def _write_view(plan: dict, plan_path: Path) -> dict:
+    """落盘之后**顺手渲染**阶段二那张 three.js 页 → `{ok, path, out, bytes, rows, errors, ...}`。
+
+    为什么收在 `write_plan()` 里（与"自动留档 / 自动清图 / 自动进验收"同一条纪律：
+    **不许靠人记得**）：手画那套的失败模式是「**图与数据不一致**」（数据改了、图还是上一版；
+    或图画好了、指纹忘了写）。由唯一写入点顺手生成 ⇒ **这个失败模式在结构上消失**。
+    输出名 = 与 plan 同名 + `_view.html`（`plan_v1.json` → `views/plan_v1_view.html`；
+    纪元 2 是 `plan_v2.json` → `views/plan_v2_view.html`）。
+
+    ⚠ **生成失败不拦落盘**（2026-10-11 定的，理由写在这儿免得被当成漏掉）：
+      ① 落盘是**别的所有阶段的输入**（阶段三搭建、阶段四微调、对账都读 plan）——
+         为了让一张预览页好看而把 plan 挡在门外，代价与收益完全不成比例；
+      ② 失败面很窄且**当场可见**：模板缺失 / 槽位没替换 / 正文里缺指纹或缺行 ——
+         `figure3d.render_page()` 的**当场自检**会把原因逐条报回来（这里是 `errors`），
+         再由调用方（`generate_plan` / `get_plan` / `confirm_plan`）摆到眼前；
+      ③ 真拦的话，模板一坏就**整个阶段二不能用** —— 那正是交接单里点名要避免的状态
+         （演示工程那份 78 行规划还等着用户验收）。
+      ⚠ 所以判据是"**plan 写成了没有**"与"**页出没出来**"分开报 —— 别把后者说成前者。
+
+    ⚠ 判据不在这里另写一套：指纹与"这一版要覆盖哪些行"都取 `figure3d.render_page()` 里那两处
+      （`plan_geometry_hash()` / `change_set().required_labels`）—— 一处口径。
+    """
+    out_path = Path(plan_path).parent / f"{Path(plan_path).stem}_view.html"
     try:
-        removed, kept = clear_stale_figures(plan, plan_mtime=prev_mtime)
-    except OSError as exc:                  # 清图失败不该把落盘本身带崩
-        return {"path": str(path), "epoch": epoch, "archived": archived, "removed_figures": [],
-                "kept_figures": [f"（清图没跑成：{exc}）"], "acceptance": acceptance}
-    return {"path": str(path), "epoch": epoch, "archived": archived, "removed_figures": removed,
-            "kept_figures": kept, "acceptance": acceptance}
+        from . import figure3d                       # 同级模块（与 plan.py 一起被同步进插件）
+    except ImportError as exc:                       # noqa: PERF203
+        return {"ok": False, "out": "", "path": str(out_path), "bytes": 0, "rows": 0,
+                "errors": [f"出图模块 figure3d 没进来（{exc}）"], "siblings": []}
+    try:
+        return figure3d.render_page(
+            # ⚠ 走咽喉：纪元 2 开了之后资产表是 `asset_list_v2.json`（2026-10-12 用户要求与位置表同待遇）
+    plan, Path(plan_path), active_asset_list_path(),
+            out_path, sys.modules[__name__],
+            # ⚠ 模板路径**运行时**问出图器，**不要**用本模块的 `VIEW_TEMPLATE_PATH` 常量 ——
+            #   插件里它会被 `init_unreal.py` 的 `_relocate()` 搬飞（实测证据见那个常量的说明）。
+            #   `figure3d.default_template()` 每次调用按 `__file__` 现算 ⇒ 两处都成立、也搬不动。
+            template_path=figure3d.default_template())
+    except Exception as exc:                         # noqa: BLE001 —— 出图失败不该把落盘带崩
+        return {"ok": False, "out": "", "path": str(out_path), "bytes": 0, "rows": 0,
+                "errors": [f"{type(exc).__name__}: {exc}"], "siblings": []}
 
 
-def promote_to_epoch2(plan_v1_doc: dict, user_quote: str) -> dict:
+def promote_to_epoch2(plan_v1_doc: dict, user_quote: str = "", *, trigger: str = "",
+                      evidence: dict | None = None) -> tuple[dict, dict]:
     """**换纪元（epoch 1 → 2）**：冻结 `plan_v1.json`、另开 `plan_v2.json` 接管后续阶段。
 
-    谁调它：`main.py` 的 `execute_build(confirm_stage3=…)` —— 那一次调用**只做切换、
-    一个 Actor 都不动**（判据与话术在那边：纪元 1 还没开过 + 台账每一行都落成了 + 有用户原话）。
+    谁调它：`main.py` 的 `execute_build()` —— **阶段三整批落地（`mode` 解析为 `full`）自动触发**，
+    或手工旁路 `execute_build(confirm_stage3=…)`。那一次调用**先切纪元、再当场落位**。
+    （判据与话术在 `main.py::_promote_epoch2()`：纪元 1 还没开过 + **有触发来源**。）
 
-    做三件事（顺序不能反）：
+    ⚠ **2026-10-15 改（用户方案：「一进批量落位就切」）**：不再要求"用户原话"当凭据 ——
+    人的授权在**上游**（阶段二 `confirm_plan` 的满 5 秒闸 + 阶段三整批校验 + G16 现场对账）。
+    产物**如实记录来源**：`promoted_by`（自动 / 手工旁路）+ `promoted_evidence`；
+    只有手工旁路才写 `promoted_user_quote`，并同时写 `promoted_quote_attested: False`
+    （工具无法核实那句话是不是人打的 —— 字段名不许再冒称事实）。
+
+    返回 **`(新的 plan 内容, 附带动作的结果字典)`**。第二个值现在记的是**资产表搬家**的结果
+      （`{"asset_list_copied", "asset_list_note", "asset_list_v1", "asset_list_v2"}`）——
+      调用方要把它写进报文（`planned=False` 那种静默失败本工程最忌）。
+
+    做四件事（顺序不能反）：
       ① **冻 v1**：给 `plan_v1.json` 的 `confirmation` 加 `frozen_at` / `frozen_by`（值为 `epoch2`）
          —— ⚠ `confirmation` **不进几何指纹**（`plan_geometry_hash()` 排除它），
          所以这一步**不会作废任何确认、也不会让现场对账报告过期**；
          写它**照走 `write_plan(target=OUT_JSON)`**（唯一写入点）⇒ 顺手把**冻结前那一版**
          归档进 `views/archive/`（`plan_v1_<戳>_<confirmed|draft>.json`，带纪元前缀）；
       ② **开 v2**：内容 = 旧 plan 那一刻的**整表**（资产表 / 白膜表一个字不改），
-         只在 `confirmation` 里记 `epoch = 2` / `promoted_at` / 用户原话；
-         走 `write_plan(target=PLAN_V2_PATH)` 落盘（唯一写入点：自动留档 + 清不认账的图 + 进验收）；
-      ③ 归档里那份 v1 与 v2 的留档**共用 archive 目录但名字带纪元前缀**，不会互相覆盖。
+         只在 `confirmation` 里记 `epoch = 2` / `promoted_at` / `promoted_by` / `promoted_evidence`；
+         走 `write_plan(target=PLAN_V2_PATH)` 落盘（唯一写入点：自动留档 + 进验收）；
+      ③ **资产表也跟着进纪元 2**（2026-10-12 用户要求「把资产表和位置表一样的方式进纪元 2」）：
+         `catalog/asset_list.json` **逐字节照抄**成 `catalog/asset_list_v2.json`，
+         此后全工程读它走咽喉 `active_asset_list_path()`（v2 在 ⇒ 就它）。
+         ⚠ **逐字节**：它是阶段一的**签字产物**，搬家**不许改内容**；
+         ⚠ 与位置表**同一次动作** —— 分开做会留下"位置表已是 v2、资产表还是 v1"的半切换状态；
+      ④ 归档里那份 v1 与 v2 的留档**共用 archive 目录但名字带纪元前缀**，不会互相覆盖。
 
     ⚠ **几何指纹故意逐位不变**：新旧两份只差 `confirmation`，而指纹排除它 —— 于是
       「换纪元」这件事**不会**把用户上一次确认作废，也不会让 `views/evaluate_v1.json` 变过期
       （`G15` / `G16` 那两道闸照旧认它）。这是刻意的：换的是「哪份文件算数」，不是几何。
-    ⚠ **拒收**（不写任何文件）：纪元已开（`plan_v2.json` 在）/ `user_quote` 为空（拿不出原话
-      = 还没问过他）/ 拿不到 v1 的内容（不猜）。这些抛 `ValueError`，由调用方转成工具报文。
+    ⚠ **拒收**（不写任何文件）：纪元已开（`plan_v2.json` 在）/ **没有触发来源**
+      （既不是整批落地、也不是手工旁路）/ 拿不到 v1 的内容（不猜）。这些抛 `ValueError`，
+      由调用方转成工具报文。
     """
-    quote = str(user_quote or "").strip()
-    if not quote:
+    _trig = str(trigger or "").strip()
+    if not _trig:
         raise ValueError(
-            "换纪元**必须有用户原话**（`user_quote`）—— 拿不出原话就说明还没问过他："
-            "让他在 UE 里看过这一版之后回一句，把那句话原文填进来。")
+            "换纪元**必须有触发来源**（阶段三整批落地自动触发，或手工旁路 `confirm_stage3`）——"
+            "拿不到来源就说明这一次既不是整批落地、也没人手工发起：不换（不猜）。")
+    quote = str(user_quote or "").strip()
     if PLAN_V2_PATH.exists():
         raise ValueError(
             f"纪元 2 已经开了（`{PLAN_V2_PATH.name}` 在）—— 换纪元只做一次，"
@@ -2430,7 +2560,18 @@ def promote_to_epoch2(plan_v1_doc: dict, user_quote: str) -> dict:
     conf2 = dict(new_doc.get("confirmation") or {})
     conf2["epoch"] = 2
     conf2["promoted_at"] = _now()
-    conf2["promoted_user_quote"] = quote
+    conf2["promoted_by"] = _trig
+    if isinstance(evidence, dict) and evidence:
+        conf2["promoted_evidence"] = dict(evidence)
+    if quote:
+        # ⚠ 只有**手工旁路**才写这句"原话"，而且必须同时写"未经核实"——
+        #   这个字段以前叫 `promoted_user_quote` 却谁也分不出它是不是人打的（实测被 agent
+        #   自己写的选项文案满足过）。字段名不许再冒称事实。
+        conf2["promoted_user_quote"] = quote
+        conf2["promoted_quote_attested"] = False
+        conf2["promoted_quote_note"] = (
+            "这句是**调用方（agent）声明**的用户原话，**工具无法核实** —— 引擎侧看不见键盘。"
+            "正常路径（阶段三整批落地自动触发）不写这个字段。")
     conf2["note"] = (
         "**纪元 2**（由阶段三结束时的换纪元开出）：几何 = 纪元 1 那一刻的整表（一个字没改）。"
         "此后改行走 `request_plan_change`（记原话）→ `generate_plan(patch=…)` → "
@@ -2441,7 +2582,34 @@ def promote_to_epoch2(plan_v1_doc: dict, user_quote: str) -> dict:
 
     # ② 落盘 v2（唯一写入点；`target` 显式给 v2）
     write_plan(new_doc, target=PLAN_V2_PATH)
-    return new_doc
+
+    # ③ **资产表也跟着进纪元 2**（2026-10-12 用户要求：「把资产表和位置表一样的方式进纪元 2」）------
+    # 与位置表**同一次动作、同一个时点**照抄一份 —— 否则会出现"位置表已是 v2、资产表还是 v1"
+    #   这种**半切换状态**：纪元 2 里改着位置表，而阶段四/五查"这资产还在不在 / 实测多大"时
+    #   读到的却是阶段一那一天的清单（本工程实测过一次资产库中途变化：
+    #   `/Game/Fab/Urban_Street_Pack` 整个文件夹消失、材质实例 58 → 56）。
+    # ⚠ 照抄**逐字节复制**（不重新解释、不加字段）—— 它是阶段一的**签字产物**，
+    #   换纪元只是"把它带过去"，**不许在搬家时改它的内容**（改了就等于伪造那张签字）。
+    # ⚠ v1 那份从此**冻结只读**：写闸在 `main.py` 的资产表写入处（与 plan 的写闸同一口径）。
+    # ⚠ 复制失败 **不让换纪元"半成功"**：v2 plan 已经落盘了，这里只如实回报，
+    #   由调用方决定要不要补救（`asset_list_v2_copied: false`）—— 静默失败更坏。
+    _asset_v1 = ASSET_LIST_PATH
+    _asset_v2 = ASSET_LIST_V2_PATH
+    asset_copied = False
+    _asset_err = ""
+    try:
+        if _asset_v1.is_file():
+            _asset_v2.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(_asset_v1, _asset_v2)
+            asset_copied = True
+        else:
+            # 没有资产表可搬：**不是错误**（阶段一可能还没确认清单）—— 如实记一句。
+            _asset_err = f"纪元 1 里没有 {_asset_v1.name}（阶段一清单还没落盘）⇒ 没搬"
+    except OSError as exc:
+        _asset_err = f"{type(exc).__name__}: {exc}"
+
+    return new_doc, {"asset_list_copied": asset_copied, "asset_list_note": _asset_err,
+                     "asset_list_v1": str(_asset_v1), "asset_list_v2": str(_asset_v2)}
 
 
 def confirm_plan(who: str) -> int:
@@ -2483,23 +2651,19 @@ def confirm_plan(who: str) -> int:
         print(f"拒绝确认：{path.name} 的几何与算出来时不一致（被改过）。")
         return 3
 
-    # --- ⚠ 图与数据必须一致（2026-09-24 收尾清单 #8）---
-    # 为什么放在写盘之前：确认是"人对着一张图点头"这件事的留痕。图都没认这份数据，
-    # 那次点头点的就不是这一版 —— 所以图不认账时**不写盘**。
+    # --- ⚠ 页与数据必须一致（2026-09-24 收尾清单 #8）---
+    # 为什么放在写盘之前：确认是"人对着一张页点头"这件事的留痕。页都没认这份数据，
+    # 那次点头点的就不是这一版 —— 所以页不认账时**不写盘**。
     fig = figure_check(plan)
     if not fig["ok"]:
-        print("拒绝确认：图不认这份数据 —— " + fig["note"])
+        print("拒绝确认：页不认这份数据 —— " + fig["note"])
         if fig.get("missing_views"):
-            print("  **缺的视图**："
+            print("  **缺的**："
                   + "、".join(str(x) for x in (fig.get("view_labels") or fig["missing_views"])))
-        if fig.get("local"):
-            print(f"  这是**局部一轮**：拿 {path} 重画一张 —— 图内写明当前几何指纹，"
-                  "**且把本次改动的那几行都画进去**"
-                  f"（共 {len(fig.get('required_labels') or [])} 行）；没动的行**不必重画**。")
-        else:
-            print(f"  先拿 {path} 重画一张：图内写明当前几何指纹，"
-                  "**且放置表每一行的 label 都要出现**（一行都不能漏）。")
-        print("  要画哪些行：python -m mcp_server.planning.plan --figure-checklist")
+        print(f"  ⚠ 那一页**由 `write_plan()` 落盘时自动生成**，不用谁去画 —— "
+              f"它不在 / 不认账，看落盘那次报文的 `plan_view.errors`；"
+              f"要手工重出：python -m mcp_server.planning.figure3d")
+        print("  要覆盖哪些行：python -m mcp_server.planning.plan --figure-checklist")
         return 5
 
     confirmed = mark_confirmed(plan, who, user_quote="（命令行直连确认：确认人就在键盘前）")
@@ -2541,24 +2705,27 @@ def request_change_cli(items: list[str], by: str = "用户（命令行）") -> i
     print(f"当前状态：第 {acc.get('round')} 轮，"
           f"{ACCEPTANCE_STATES.get(acc.get('state'), acc.get('state'))}")
     print("下一步：按这些改动改数据里的 pos / 占地 → 重跑 generate_plan（自动进新一轮）"
-          "→ 重画图（图内写新指纹）→ 再把图交给用户。")
+          "→ 重落盘（那一页自动重生成、页内写新指纹）→ 再把页交给用户。")
     return 0
 
 
 # --- 入口 ---------------------------------------------------------------------
 #
-# 画图**不在本文件、也不在任何代码里**（2026-09-24 用户拍板）：
-#   本文件只算几何数据；要图就由 AI 拿 plan_v1.json 自己画。
+# 出图**在代码里、但不在本文件**（2026-10-11 起）：
+#   落盘时由 `write_plan()` → `_write_view()` → `figure3d.py` + `web/preview3d.html`
+#   自动生成那张 three.js 页。（2026-09-24 那条"图由 AI 手绘"的口径已作废。）
 
 
 def figure_checklist_cli() -> int:
-    """`--figure-checklist` —— 打印"这张图**必须画进去**的全部行"（画图前照着核对用）。
+    """`--figure-checklist` —— 打印"这一页**必须覆盖**的全部行"（核对用）。
 
-    为什么单开这条（2026-09-25 用户要求「画图让 Agent 不要漏位置坐标表任何一个元素」）：
-    少画一行，`confirm_plan` 会拒收，但它**只在画完之后**才告诉你漏了哪几行 ——
-    那就得画两遍。先在动手前把清单打出来，一遍画对。
+    为什么留着它（2026-09-25 用户要求「画图让 Agent 不要漏位置坐标表任何一个元素」）：
+    少一行，`confirm_plan` 会拒收，而它**只在出页之后**才告诉你漏了哪几行。
+    现在页由代码生成、自检在**落盘那一刻**就跑（`figure3d.self_check()`），所以这条
+    CLI 的用途从"画图前照抄清单"变成了**人工抽查**：想知道"这一版到底该覆盖哪些行、
+    页里有没有"时跑它。
 
-    退出码：0 有清单 / 1 还没有规划数据 / 4 放置表是空的（没有行可画）。
+    退出码：0 有清单 / 1 还没有规划数据 / 4 放置表是空的（没有行）。
     """
     path = active_plan_path()          # ⚠ 走咽喉（纪元 2 开了就是 plan_v2.json）
     if not path.exists():
@@ -2569,7 +2736,7 @@ def figure_checklist_cli() -> int:
     boxes = list(plan.get("whiteboxes") or [])
     rows = assets + boxes
     if not rows:
-        print("放置表是空的（初始化状态）—— 没有行要画。")
+        print("放置表是空的（初始化状态）—— 没有行。")
         return 4
     cs = change_set(plan)
     req = list(cs.get("required_labels") or [])
@@ -2579,42 +2746,39 @@ def figure_checklist_cli() -> int:
         if isinstance(row, dict):
             pos_by_label[str(row.get("label") or "")] = row.get("pos")
     head = plan_geometry_hash(plan)
-    print(f"几何指纹（图里必须写上它的前 10 位）：{head[:10]}")
+    print(f"几何指纹（页里必须写上它的前 10 位）：{head[:10]}")
     print(f"世界：中心 {plan['world']['center']}  大小 {plan['world']['size']} m")
     if cs.get("local"):
-        print(f"**局部一轮**（基线：{cs['baseline']}）—— 图里**只要**出现下面 {len(req)} 行；"
-              f"另外 {cs['same']} 行没动、**不必重画**（它们早已确认过）。")
+        print(f"**局部一轮**（基线：{cs['baseline']}）—— 页里**只要**出现下面 {len(req)} 行；"
+              f"另外 {cs['same']} 行没动（它们早已确认过）。")
         print(f"  本次：新增 {len(cs['added'])} / 改动 {len(cs['changed'])} / 删除 {len(cs['removed'])}")
     else:
-        print(f"图里必须出现下面**全部 {len(req)} 行**的 label（一行都不能少）：")
+        print(f"页里必须出现下面**全部 {len(req)} 行**的 label（一行都不能少）：")
     for i, lab in enumerate(req, 1):
-        mark = "（本版**删掉**的行：画上并标明『已删』）" if lab in removed else ""
+        mark = "（本版**删掉**的行：页里不该再有它）" if lab in removed else ""
         print(f"  {i:>3}. {lab}{mark}    pos={pos_by_label.get(lab)}")
-    views = [str(v) for v in (cs.get("required_views") or ["top"])]
-    print("**要出哪几张图**（按『这一版改的是哪一维』定）：")
+    views = [str(v) for v in (cs.get("required_views") or ["page"])]
+    print("**要出哪一张**（2026-10-11 起恒一张，不再按维度分）：")
     if cs.get("views_why"):
         print(f"  依据：{cs['views_why']}")
-    for v in views:
-        if v == "top":
-            print("  · **平面图**（俯视）→ 存成 views/plan_v1_overview*.svg")
-        else:
-            print("  · **立面图**（正视图 X 向 或 侧视图 Y 向；两张都出也行）"
-                  "→ 存成 views/plan_v1_elevation*.svg")
-        print("      （图里要写当前指纹前 10 位 + 上面那几行的 label）")
-    print("⚠ 每张图都**必须是 svg** —— 位图读不出文字，核验不了有没有漏；"
-          "改高度的图只给俯视图 = **看不出改了什么**，确认时会被拒。")
-    # --- 顶视图的「原图视角」箭头（2026-10-04 用户要求）--------------------------------
-    # 画**之前**就把它摆出来：位置口径由代码给死（`origin_view_spec()`），画图的人照着画；
-    # ⚠ 缺它**只提示不拒收**（第一版只报不拦），所以这里是"必须画"的要求、不是闸。
+    for _v in views:
+        print(f"  · `views/{path.stem}_view.html`（three.js 页）"
+              "—— **落盘时由代码自动生成**，不用谁去画")
+    print("⚠ 认账的判据（`figure_verdicts()`）：页正文里有当前指纹前 10 位 + 上面那几行的 label。")
+    print("⚠ 页没出来时**别去手画** —— 看落盘那次报文的 `plan_view.errors`（原因会逐条列出），"
+          "或手工重出：`python -m mcp_server.planning.figure3d`。")
+    # --- 「原图视角」箭头（2026-10-04 用户要求）----------------------------------------
+    # 它现在画在**那张页的 3D 场景里**（`web/preview3d.html` 的 `buildOriginArrow()`）；
+    # ⚠ 缺这四个字**只提示不拒收**（`ORIGIN_VIEW_MISSING_WARNING`）—— 这里报出来供人工核对。
     _ov = origin_view_spec(plan)
-    print("⚠ **顶视图还要画「原图视角」箭头**（不然用户分不清哪边是原图往里看的方向）：")
+    print("⚠ 页里还要有「原图视角」四个字（不然用户分不清哪边是原图往里看的方向）：")
     if _ov.get("arrow_from_m") and _ov.get("arrow_to_m"):
         print(f"    {_ov['arrow_from_m']} → {_ov['arrow_to_m']}（米、世界坐标，指向 +X），"
-              f"旁边写「{_ov['label']}」")
+              f"文字「{_ov['label']}」")
         print(f"    {_ov.get('where')}")
     else:
-        print(f"    ⚠ 位置这次没算出来（{_ov.get('warning')}）—— 口径见 `get_plan().drawing.origin_view`")
-    print("    ⚠ 位置与朝向**以 `get_plan().drawing.origin_view` 为准**（别自己摆）；"
+        print(f"    ⚠ 位置这次没算出来（{_ov.get('warning')}）—— 口径见 `origin_view_spec()`")
+    print("    ⚠ 位置与朝向**以 `origin_view_spec()` 为准**（别自己摆）；"
           "缺这四个字只会记一条提示，不影响确认。")
     return 0
 
@@ -2647,15 +2811,14 @@ def main() -> int:
     print(f"  图      : " + ("、".join(acc["figures"]) if acc["figures"]
                             else "**没有认这份数据的图**（没有图不许让用户确认）"))
     cs = change_set(plan)
-    print("  画图清单: python -m mcp_server.planning.plan --figure-checklist"
-          + (f"（**局部一轮**：图里只要出现本次改动的 {len(cs['required_labels'])} 行；"
-             f"另外 {cs['same']} 行没动、不必重画）"
+    print("  核对清单: python -m mcp_server.planning.plan --figure-checklist"
+          + (f"（**局部一轮**：页里只要出现本次改动的 {len(cs['required_labels'])} 行；"
+             f"另外 {cs['same']} 行没动）"
              if cs.get("local") else
-             f"（图里必须出现全部 {len(cs['required_labels'])} 行的 label，一行都不能漏）"))
-    print("  要出的图: " + "、".join(
-        ("平面图 plan_v1_overview*.svg" if str(v) == "top"
-         else "立面图 plan_v1_elevation*.svg")
-        for v in (cs.get("required_views") or ["top"])))
+             f"（页里必须出现全部 {len(cs['required_labels'])} 行的 label，一行都不能漏）"))
+    print("  要给用户看的: " + "、".join(
+        f"views/{path.stem}_view.html（three.js 页，落盘自动生成）"
+        for _v in (cs.get("required_views") or ["page"])))
     if acc["pending_changes"]:
         print("  用户要改: " + "；".join(acc["pending_changes"]))
     print(f"  验收台账: {acc['ledger_path']}")

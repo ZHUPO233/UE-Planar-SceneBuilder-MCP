@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="zh-CN" data-ueplane="preview3d">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UEPLANE · 阶段二放置预览（three.js）</title>
+<!--
+  ============================================================================
+  UEPLANE · 阶段二出图模板（**规范来源**：插件根 STANDARD.md「§2 预览规范」）
+  ----------------------------------------------------------------------------
+  ⚠ 本文件是**壳**：`Tools/build_preview3d_template.ps1` 把 `planning/web/three.min.js`
+    内联进下面那个 script 占位，产出**真正的模板** `planning/web/preview3d.html`。
+    ⇒ 改页面请改这个壳，然后重跑那个脚本；别直接手改产出的 660 KB 模板。
+
+  ⚠ 数据槽位 = figure3d.py 的 `SLOT`（**唯一契约**，注入后正文里不许再出现它）。
+    注入内容 = `{"meta":{...},"rows":[{label,key,kind,x,y,w,d,zb,h[,rot,scale,path,note,src]}]}`
+    ⚠ 槽位字面量在本壳里**只许出现一次**（下面那行 `var S = …;`）—— 注释里再写一次，
+      注入时会被替换成一份 JSON，图变两倍大、注释还会被撕开。three.js 的占位同理，只留一处。
+
+  🔴 three.js **必须内联**（2026-10-17 实测）：DSH 文档预览窗是 `sandbox="allow-scripts"`
+    的 blob: iframe，继承宿主 CSP `script-src 'unsafe-inline'`（**不含 blob:/self**）
+    ⇒ 外挂的方式（script 的 src 指向同级 three.min.js）会被**静默拦掉**：页面只剩 CSS、
+    黑屏且不报错。内联后实测 r155 正常。**别改回外挂**（也别在注释里写那种标签：
+    figure3d 的 copy_siblings 会照字面去复制"同级库"）。
+
+  🔴 任何一步失败都必须**写在画面上**（本页左上角红框）：黑屏哑巴是本页历史上最贵的坑。
+  ============================================================================
+-->
+<style>
+  html,body{margin:0;height:100%;background:#0f1216;color:#e8e8e8;overflow:hidden;
+    font-family:"Microsoft YaHei","SimHei",system-ui,sans-serif}
+  #cv{display:block;width:100%;height:100%;cursor:grab}
+  #cv.drag{cursor:grabbing}
+  #ovl{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+  .lbl{position:absolute;transform:translate(-50%,-130%);white-space:nowrap;font-size:11px;
+    color:#f2f6fb;text-shadow:0 0 3px #000,0 0 4px #000,0 0 8px #000}
+  .lbl.sel{color:#ffd24a;font-weight:700;font-size:12.5px}
+  .panel{position:fixed;background:rgba(17,21,27,.92);border:1px solid #2e3742;border-radius:10px;
+    padding:10px 12px;font-size:12px;line-height:1.7;box-shadow:0 8px 26px #0008;box-sizing:border-box}
+  #hud{left:12px;top:12px;width:440px}
+  #hud b{color:#fff}
+  #hud .sub{color:#8b95a3;font-size:11px;margin-top:5px}
+  #hud kbd{background:#232b36;border:1px solid #3d4756;border-bottom-width:2px;border-radius:4px;
+    padding:0 4px;font-size:10px;color:#cfd8e4;font-family:inherit}
+  #list{right:12px;top:12px;width:254px;max-height:calc(100vh - 160px);overflow:auto;padding:8px 6px}
+  #list h4{margin:2px 4px 6px;font-size:11.5px;color:#9fb4d0;font-weight:600}
+  #list .grp{margin:7px 4px 2px;color:#6f7d8c;font-size:10px;letter-spacing:.3px}
+  #list .ri{display:flex;gap:6px;align-items:center;padding:2px 5px;border-radius:5px;cursor:pointer;font-size:11px}
+  #list .ri:hover{background:#26303c}
+  #list .ri.on{background:#3d5a7a;color:#fff}
+  #list .ri .d{width:9px;height:9px;border-radius:2px;flex:0 0 auto;border:1px solid #0009}
+  #list .ri .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #detail{left:12px;bottom:64px;width:440px;display:none}
+  #detail .hd{color:#ffd24a;font-weight:600;margin-bottom:4px}
+  #detail table{border-collapse:collapse;font-size:11.5px}
+  #detail td{padding:1px 12px 1px 0;vertical-align:top}
+  #detail td.k{color:#8b95a3;white-space:nowrap}
+  #detail .note{color:#7d8797;font-size:10.5px;margin-top:4px;white-space:pre-wrap}
+  #bar{left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:6px;align-items:center}
+  button{background:#28313d;color:#dbe3ee;border:1px solid #3d4756;border-radius:7px;
+    padding:5px 11px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:.12s}
+  button:hover{background:#35435a;border-color:#4b5a6e}
+  button.on{background:#3d5a7a;border-color:#5f86b3;color:#fff}
+  label.ck{display:flex;gap:5px;align-items:center;color:#b9c3d0;font-size:11.5px;cursor:pointer;
+    background:#1b222b;border:1px solid #2e3742;border-radius:7px;padding:5px 9px}
+  #err{position:fixed;left:12px;top:12px;max-width:72vw;display:none;background:#2a0d0d;
+    color:#ffb3b3;border:1px solid #5c2b2b;border-radius:8px;padding:10px 12px;font-size:13px;
+    white-space:pre-wrap;z-index:99;line-height:1.6}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="ovl"></div>
+<div class="panel" id="hud"></div>
+<div class="panel" id="list"></div>
+<div class="panel" id="detail"></div>
+<div class="panel" id="bar">
+  <button data-v="fit">居中</button>
+  <button data-v="origin">原图视角</button>
+  <button data-v="iso">斜视角</button>
+  <button data-v="top">顶视图</button>
+  <button data-v="side">沿街侧视</button>
+  <label class="ck"><input type="checkbox" id="lblCk" checked /> 标签</label>
+  <label class="ck"><input type="checkbox" id="annoCk" checked /> 原图视角箭头</label>
+</div>
+<div id="err"></div>
+
+<script>
+/* ==== three.js（内联；版本见下；禁止改回外挂 —— 理由见文件头）==== */
+__THREE__
+</script>
+
+<script>
+/* ============================================================================
+   UEPLANE · 阶段二 three.js 页（**规范 §2**）
+   ----------------------------------------------------------------------------
+   数据：本脚本第一行那个 S 常量 —— 由 figure3d.py 在 plan 落盘那一刻注入到 SLOT 处。
+         唯一权威 = plan；本页**只画数据**，不自造任何几何。
+   坐标口径：plan 是左手系 Z-up（X 前 / Y 右 / Z 上），three 是右手系。
+         交接处**只在一处**取反 Y：toThree(x,y,z) = (x,-y,z)；相机用标准 lookAt + up=(0,0,1)，
+         于是 UE 的 +Y 落在屏幕右侧（与 plan 的 right_normal(d)=(-dy,dx) 判据一致）。
+   形体：樱花树/树类 = 树干圆柱 + 半透明树冠椭球（**不许画成实心方块** —— 8 m 冠幅会变成墙）；
+         其它 = 一个盒子（w × d × h，底面在 zb）。
+   交互：默认「居中」把**世界中心**摆到画面正中；单击拾取、右侧清单点选、F 聚焦、
+         左键旋转 / 右键平移 / 滚轮缩放（全部带阻尼）；1~4 切视角。
+   失败：任何异常都写进左上角 #err（**不许静默**）。
+   ========================================================================== */
+(function () {
+  var S = /*__DATA__*/;
+  var ROWS = (S && S.rows) || [];
+  var META = (S && S.meta) || {};
+  var $ = function (id) { return document.getElementById(id); };
+  function fail(m) { var b = $('err'); if (b) { b.style.display = 'block'; b.textContent = '⚠ ' + m; } }
+  window.addEventListener('error', function (ev) {
+    fail('运行时报错：' + (ev.message || '') + '\n   位置 ' + (ev.filename || '') + ':' + (ev.lineno || ''));
+  });
+
+  try {
+    if (typeof THREE === 'undefined') { fail('three.js 没加载（THREE 未定义）—— 模板里的内联库被破坏了，重跑 Tools/build_preview3d_template.ps1。'); return; }
+    if (!ROWS.length) { fail('数据里一行都没有（S.rows 为空）—— 看 figure3d.py 的注入结果。'); return; }
+
+    var world = META.world || [0, 0];
+    var hx = world[0] / 2, hy = world[1] / 2, zmax = 0;
+    ROWS.forEach(function (r) { if (r.zb + r.h > zmax) zmax = r.zb + r.h; });
+    if (zmax <= 0) { zmax = 1; }
+
+    var COL = { sakura_tree:0xf0a8c0, bench:0xc8a06a, striped_wall:0xc7cacc, far_buildings:0x9aa3ad,
+      stone_paving:0x8b9299, planting_soil:0x6b432e, hedge:0x466f4b, curb:0xa8aeb5,
+      paver_joint:0x33383e, planter_edge:0xa2684c, petal_litter:0xe6aec0, bollard:0xe08c2e,
+      shrub_orange:0xd07a24, shrub_green:0x4d7f45, street_clutter:0x7a7f86, railing:0x161a1f,
+      ground:0x2f353c };
+    var CN = { sakura_tree:'樱花树', bench:'长凳', striped_wall:'竖条纹大墙', far_buildings:'远景建筑带',
+      stone_paving:'石板铺装', planting_soil:'种植带', hedge:'绿篱', curb:'路缘石', paver_joint:'石板横缝',
+      planter_edge:'花坛砖边', petal_litter:'落花层', bollard:'矮柱灯', shrub_orange:'橙灌木',
+      shrub_green:'绿灌木', street_clutter:'设备箱', railing:'矮栏', ground:'世界地基' };
+    /* 哪些 element_key 画成树（树干 + 树冠）。要加树类资产就在这里加 —— 这是**唯一**一处。 */
+    var TREE_KEYS = { sakura_tree:1 };
+    function colOf(r) { return COL[r.key] === undefined ? 0x7d90a8 : COL[r.key]; }
+    function cnOf(r) { return CN[r.key] === undefined ? (r.key || '未分类') : CN[r.key]; }
+    function toThree(x, y, z) { return new THREE.Vector3(x, -y, z); }
+    function isTree(r) { return TREE_KEYS[r.key] === 1 && r.h > 0.5; }
+
+    var cv = $('cv');
+    var renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0f1216);
+    scene.fog = new THREE.Fog(0x0f1216, 110, 900);
+    var camera = new THREE.PerspectiveCamera(50, 1, 0.2, 20000);
+    camera.up.set(0, 0, 1);
+
+    scene.add(new THREE.HemisphereLight(0xdfe9ff, 0x2a2f38, 1.2));
+    var dl = new THREE.DirectionalLight(0xfff1e0, 1.4);   dl.position.set(-80, -60, 140); scene.add(dl);
+    var dl2 = new THREE.DirectionalLight(0x9fb6d8, 0.55); dl2.position.set(90, 70, 60);   scene.add(dl2);
+
+    /* ---- 世界中心 / 边界（「中心在哪」必须一眼可见）---- */
+    var axes = new THREE.AxesHelper(7);
+    axes.position.set(0, 0, 0.05);
+    scene.add(axes);
+    var bpts = [-hx,-hy,0.01,  hx,-hy,0.01,   hx,-hy,0.01,  hx,hy,0.01,
+                 hx,hy,0.01,  -hx,hy,0.01,   -hx,hy,0.01,  -hx,-hy,0.01,
+                -3,0,0.02,  3,0,0.02,   0,-3,0.02,   0,3,0.02];
+    var bgeo = new THREE.BufferGeometry();
+    bgeo.setAttribute('position', new THREE.Float32BufferAttribute(bpts, 3));
+    scene.add(new THREE.LineSegments(bgeo, new THREE.LineBasicMaterial({ color: 0x55637a })));
+
+    var gpts = [];
+    for (var gx = -hx; gx <= hx + 0.01; gx += 10) { gpts.push(gx, -hy, 0.002, gx, hy, 0.002); }
+    for (var gy = -hy; gy <= hy + 0.01; gy += 10) { gpts.push(-hx, gy, 0.002, hx, gy, 0.002); }
+    var ggeo = new THREE.BufferGeometry();
+    ggeo.setAttribute('position', new THREE.Float32BufferAttribute(gpts, 3));
+    scene.add(new THREE.LineSegments(ggeo, new THREE.LineBasicMaterial({ color: 0x232c36 })));
+
+    /* ---- 原图视角图例：**放在场景外面**（世界 y 最小边外 5 m），不占场景、不遮元素 ---- */
+    var LEG = toThree(-hx, -hy - 5, 0.06);
+    var anno = new THREE.Group();
+    (function () {
+      var matRed = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+      var len = 20;
+      var shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, len, 10), matRed);
+      shaft.position.set(LEG.x + len / 2, LEG.y, LEG.z);
+      shaft.rotation.z = -Math.PI / 2;
+      anno.add(shaft);
+      var head = new THREE.Mesh(new THREE.ConeGeometry(0.85, 3.4, 16), matRed);
+      head.position.set(LEG.x + len + 1.6, LEG.y, LEG.z);
+      head.rotation.z = -Math.PI / 2;
+      anno.add(head);
+      var pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 2.4, 8), matRed);
+      pole.position.set(LEG.x, LEG.y, LEG.z + 1.2);
+      anno.add(pole);
+      var dot = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10), matRed);
+      dot.position.set(LEG.x, LEG.y, LEG.z + 2.5);
+      anno.add(dot);
+      var lgeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(LEG.x, LEG.y, LEG.z),
+        new THREE.Vector3(LEG.x, -(hy) + 0.02, LEG.z)]);
+      anno.add(new THREE.Line(lgeo, new THREE.LineBasicMaterial({ color: 0xff6b60, transparent: true, opacity: 0.35 })));
+    })();
+    scene.add(anno);
+
+    /* ---- 形体（一行一个；树类 = 树干 + 树冠）---- */
+    var unitBox = new THREE.BoxGeometry(1, 1, 1);
+    var unitSphere = new THREE.SphereGeometry(1, 18, 12);
+    var unitCyl = new THREE.CylinderGeometry(1, 1.15, 1, 10);
+    var meshes = [], rowMeshes = [];
+    function reg(i, m) { m.userData.i = i; meshes.push(m); (rowMeshes[i] = rowMeshes[i] || []).push(m); }
+
+    ROWS.forEach(function (r, i) {
+      var eps = (r.kind === 'whitebox') ? (i * 0.0015) : 0;   /* 共面层错开，消 z-fighting */
+      if (isTree(r)) {
+        var trunkH = r.h * 0.34, crownH = Math.max(r.h - trunkH, 0.4);
+        var trunk = new THREE.Mesh(unitCyl, new THREE.MeshLambertMaterial({ color: 0x53402f }));
+        trunk.position.copy(toThree(r.x, r.y, r.zb + trunkH / 2));
+        trunk.scale.set(0.22, 0.26, trunkH);
+        scene.add(trunk); reg(i, trunk);
+        var crown = new THREE.Mesh(unitSphere, new THREE.MeshLambertMaterial({
+          color: new THREE.Color().setHSL(0.93 + (i % 3) * 0.012, 0.62, 0.72),
+          transparent: true, opacity: 0.62, depthWrite: false
+        }));
+        crown.position.copy(toThree(r.x, r.y, r.zb + trunkH + crownH / 2));
+        crown.scale.set(Math.max(r.w / 2, 0.3), Math.max(r.d / 2, 0.3), crownH / 2);
+        scene.add(crown); reg(i, crown);
+        return;
+      }
+      var mat = new THREE.MeshLambertMaterial({
+        color: colOf(r), transparent: r.kind !== 'asset', opacity: r.kind === 'asset' ? 1 : 0.92
+      });
+      mat.polygonOffset = true; mat.polygonOffsetFactor = -1; mat.polygonOffsetUnits = -1;
+      var m = new THREE.Mesh(unitBox, mat);
+      m.position.copy(toThree(r.x, r.y, r.zb + Math.max(r.h, 0.02) / 2 + eps));
+      m.scale.set(Math.max(r.w, 0.05), Math.max(r.d, 0.05), Math.max(r.h, 0.02));
+      scene.add(m); reg(i, m);
+    });
+
+    /* ---- 标签（资产；全部显示 + 选中高亮 + ☑标签 总开关）---- */
+    var labels = [], ovl = $('ovl');
+    ROWS.forEach(function (r, i) {
+      if (r.kind !== 'asset') return;
+      var d = document.createElement('div');
+      d.className = 'lbl';
+      d.textContent = r.label;
+      ovl.appendChild(d);
+      labels.push({ i: i, el: d, p: toThree(r.x, r.y, r.zb + Math.max(r.h, 0.5)), world: toThree(r.x, r.y, r.zb) });
+    });
+    var centerLbl = document.createElement('div');
+    centerLbl.className = 'lbl';
+    centerLbl.style.color = '#8fd3ff';
+    centerLbl.textContent = '世界中心 (0,0)';
+    ovl.appendChild(centerLbl);
+
+    var annoLbl = document.createElement('div');
+    annoLbl.className = 'lbl';
+    annoLbl.style.color = '#ff8f83';
+    annoLbl.style.fontWeight = '700';
+    annoLbl.textContent = '原图视角 沿 +X →（近端 → 纵深）';
+    ovl.appendChild(annoLbl);
+    var annoAnchor = new THREE.Vector3(LEG.x + 22, LEG.y, LEG.z + 3.4);
+
+    var showLabels = true, showAnno = true;
+    $('lblCk').addEventListener('change', function (e) { showLabels = e.target.checked; });
+    $('annoCk').addEventListener('change', function (e) { showAnno = e.target.checked; anno.visible = showAnno; });
+
+    /* ---- 相机（阻尼）---- */
+    var EYE = toThree(-hx + 2, 0, 1.75);
+    var want = { yaw: 205, pitch: 25, dist: 160, tx: 0, ty: 0, tz: 3 };
+    var cur  = { yaw: 205, pitch: 25, dist: 160, tx: 0, ty: 0, tz: 3 };
+    function place(c) {
+      var p = c.pitch * Math.PI / 180, y = c.yaw * Math.PI / 180;
+      camera.position.set(
+        c.tx + c.dist * Math.cos(p) * Math.cos(y),
+        c.ty + c.dist * Math.cos(p) * Math.sin(y),
+        c.tz + c.dist * Math.sin(p));
+      camera.up.set(0, 0, 1);
+      camera.lookAt(c.tx, c.ty, c.tz);
+      camera.updateMatrixWorld(true);
+    }
+
+    /* ---- 取景：**按世界包围盒 8 个角的投影**二分求距离（2026-10-17 修）------------
+       原先是 radius/sin(fov/2) 的经验式：对"世界很长、很窄"的街道（160×48 m）会算得过远，
+       再叠上 yaw≈205°（几乎顺着街轴看）⇒ 160 m 的街被压缩成"坨"。现在两条一起改：
+         · 距离：8 个角都投在 ±0.86 NDC 内、且没有角在相机背后 ⇒ 二分；
+         · 朝向：**长轴世界默认从侧面斜俯**（yaw≈250°），让长边横在屏幕上，而不是顺着它看。 */
+    var CORNERS = [];
+    (function () {
+      var zt = Math.max(zmax, 1);
+      [-hx, hx].forEach(function (x) {
+        [-hy, hy].forEach(function (y) {
+          [0, zt].forEach(function (z) { CORNERS.push(toThree(x, y, z)); });
+        });
+      });
+    })();
+    var _cv3 = new THREE.Vector3();
+    function ndcMax(c) {
+      place(c);
+      var mx = 0;
+      for (var i = 0; i < CORNERS.length; i++) {
+        _cv3.copy(CORNERS[i]).project(camera);
+        if (_cv3.z > 1) return 9;                       /* 有角在相机背后 ⇒ 装不下 */
+        mx = Math.max(mx, Math.abs(_cv3.x), Math.abs(_cv3.y));
+      }
+      return mx;
+    }
+    function fitDist(yaw, pitch, t) {
+      var lo = 4, hi = 8000, c = { yaw: yaw, pitch: pitch, dist: 8, tx: t.x, ty: t.y, tz: t.z };
+      for (var i = 0; i < 30; i++) {
+        var mid = Math.sqrt(lo * hi);
+        c.dist = mid;
+        if (ndcMax(c) > 0.86) lo = mid; else hi = mid;
+      }
+      return hi;
+    }
+
+    function markButtons(name) {
+      Array.prototype.forEach.call(document.querySelectorAll('#bar button'), function (b) {
+        b.className = (b.getAttribute('data-v') === name) ? 'on' : '';
+      });
+    }
+    function setView(name) {
+      var t, yaw, pitch, dist;
+      var longSide = (hx / Math.max(hy, 0.001)) > 1.4;   /* 长条形世界（街道）⇒ 侧面斜俯 */
+      if (name === 'origin') {
+        var op = 1.5 * Math.PI / 180, od = Math.max(40, hx * 1.05);
+        t = new THREE.Vector3(EYE.x + od * Math.cos(op), EYE.y, EYE.z - od * Math.sin(op));
+        yaw = 180; pitch = 1.5; dist = od;
+      } else if (name === 'top') {
+        t = toThree(0, 0, 0); yaw = 180; pitch = 86; dist = fitDist(yaw, pitch, t);
+      } else if (name === 'side') {
+        t = toThree(0, 0, zmax * 0.34); yaw = 90; pitch = 3; dist = fitDist(yaw, pitch, t);
+      } else if (name === 'iso') {
+        t = toThree(0, 0, zmax * 0.20);
+        yaw = longSide ? 268 : 218; pitch = longSide ? 18 : 24;
+        dist = fitDist(yaw, pitch, t);
+      } else {                                            /* fit = 全景居中（默认） */
+        t = toThree(0, 0, zmax * 0.18);
+        yaw = longSide ? 250 : 215; pitch = longSide ? 27 : 28;
+        dist = fitDist(yaw, pitch, t);
+      }
+      want.tx = t.x; want.ty = t.y; want.tz = t.z;
+      want.yaw = yaw; want.pitch = pitch; want.dist = dist;
+      markButtons(name);
+    }
+    function focusRow(i) {
+      var r = ROWS[i];
+      if (!r) return;
+      var t = toThree(r.x, r.y, r.zb + Math.min(r.h, 6) * 0.5);
+      var size = Math.max(r.w, r.d, r.h, 1.5);
+      want.tx = t.x; want.ty = t.y; want.tz = t.z;
+      want.dist = Math.max(5, size * 2.6);
+      if (want.pitch < 6) want.pitch = 14;
+      markButtons('');
+    }
+
+    /* ---- 选中 / 详情 ---- */
+    var sel = -1, saved = [];
+    function clearSel() {
+      for (var k = 0; k < saved.length; k++) {
+        saved[k].mat.color.setHex(saved[k].color);
+        if (saved[k].mat.emissive) saved[k].mat.emissive.setHex(0x000000);
+      }
+      saved.length = 0;
+    }
+    function selectRow(i, fly) {
+      clearSel();
+      sel = i;
+      Array.prototype.forEach.call(document.querySelectorAll('#list .ri'), function (el) {
+        el.className = 'ri' + (Number(el.getAttribute('data-i')) === i ? ' on' : '');
+      });
+      if (i < 0) { $('detail').style.display = 'none'; return; }
+      (rowMeshes[i] || []).forEach(function (m) {
+        saved.push({ mat: m.material, color: m.material.color.getHex() });
+        m.material.color.setHex(0xffd24a);
+        if (m.material.emissive) m.material.emissive.setHex(0x2a2100);
+      });
+      var r = ROWS[i];
+      var rowsHtml = '';
+      rowsHtml += '<tr><td class="k">平面位置</td><td>x = ' + r.x + ' , y = ' + r.y + ' m</td>' +
+                  '<td class="k">占地</td><td>' + r.w + ' × ' + r.d + ' m</td></tr>';
+      rowsHtml += '<tr><td class="k">底面标高</td><td>' + r.zb + ' m</td>' +
+                  '<td class="k">高度</td><td>' + r.h + ' m' + (r.h <= 0 ? '（资产清单里查不到，画成薄片）' : '') + '</td></tr>';
+      rowsHtml += '<tr><td class="k">朝向</td><td>' + (r.rot === undefined ? 0 : r.rot) + '\u00b0</td>' +
+                  '<td class="k">scale</td><td>' + (r.scale === undefined ? 1 : r.scale) + '</td></tr>';
+      if (r.path) rowsHtml += '<tr><td class="k">资产</td><td colspan="3" style="word-break:break-all">' + r.path + '</td></tr>';
+      $('detail').style.display = 'block';
+      $('detail').innerHTML =
+        '<div class="hd">' + r.label + ' <span style="color:#8b95a3;font-weight:400">· ' + cnOf(r) + ' · ' +
+        (r.kind === 'asset' ? '真网格' : '白膜占位') + '</span></div>' +
+        '<table>' + rowsHtml + '</table>' +
+        (r.note ? '<div class="note">note：' + r.note + '</div>' : '') +
+        (r.src ? '<div class="note">尺寸来源：' + r.src + '</div>' : '');
+      if (fly) focusRow(i);
+    }
+
+    /* ---- 右侧清单 ---- */
+    (function buildList() {
+      var html = '<h4>元素清单 · ' + ROWS.length + ' 行（点一行 = 选中 + 飞过去）</h4>';
+      var groups = {}, order = [];
+      ROWS.forEach(function (r, i) {
+        if (!groups[r.key]) { groups[r.key] = []; order.push(r.key); }
+        groups[r.key].push(i);
+      });
+      order.forEach(function (k) {
+        var idx = groups[k], first = ROWS[idx[0]];
+        html += '<div class="grp">' + cnOf(first) + '（' + idx.length + '）</div>';
+        idx.forEach(function (i) {
+          var r = ROWS[i], hex = colOf(r).toString(16);
+          while (hex.length < 6) { hex = '0' + hex; }
+          html += '<div class="ri" data-i="' + i + '"><span class="d" style="background:#' + hex +
+                  '"></span><span class="t">' + r.label + '</span></div>';
+        });
+      });
+      $('list').innerHTML = html;
+      Array.prototype.forEach.call(document.querySelectorAll('#list .ri'), function (el) {
+        el.addEventListener('click', function () { selectRow(Number(el.getAttribute('data-i')), true); });
+      });
+    })();
+
+    /* ---- 拾取 ---- */
+    var ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+    function pick(clientX, clientY) {
+      var rect = cv.getBoundingClientRect();
+      ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      var hits = ray.intersectObjects(meshes, false);
+      return hits.length ? hits[0].object.userData.i : -1;
+    }
+
+    /* ---- 交互 ---- */
+    var drag = 0, lx = 0, ly = 0, moved = 0;
+    cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    cv.addEventListener('mousedown', function (e) {
+      drag = (e.button === 2 || e.shiftKey) ? 2 : 1;
+      lx = e.clientX; ly = e.clientY; moved = 0;
+      cv.className = 'drag';
+      e.preventDefault();
+    });
+    window.addEventListener('mouseup', function (e) {
+      if (drag === 1 && moved < 4) selectRow(pick(e.clientX, e.clientY), false);
+      drag = 0; cv.className = '';
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!drag) return;
+      var dx = e.clientX - lx, dy = e.clientY - ly;
+      moved += Math.abs(dx) + Math.abs(dy);
+      lx = e.clientX; ly = e.clientY;
+      if (drag === 1) {
+        want.yaw -= dx * 0.28;
+        want.pitch = Math.max(-8, Math.min(89.5, want.pitch + dy * 0.24));
+      } else {
+        var k = want.dist * 0.0016, mm = camera.matrixWorld.elements;
+        want.tx += (-mm[0] * dx + mm[4] * dy) * k;
+        want.ty += (-mm[1] * dx + mm[5] * dy) * k;
+        want.tz += (-mm[2] * dx + mm[6] * dy) * k;
+      }
+      markButtons('');
+    });
+    cv.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      want.dist = Math.max(3, Math.min(2500, want.dist * (e.deltaY > 0 ? 1.11 : 0.9)));
+      markButtons('');
+    }, { passive: false });
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'f' || e.key === 'F') { if (sel >= 0) focusRow(sel); }
+      if (e.key === 'Escape') selectRow(-1, false);
+      if (e.key === '1') setView('fit');
+      if (e.key === '2') setView('origin');
+      if (e.key === '3') setView('top');
+      if (e.key === '4') setView('side');
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#bar button'), function (b) {
+      b.addEventListener('click', function () { setView(b.getAttribute('data-v')); });
+    });
+
+    /* ---- HUD ---- */
+    $('hud').innerHTML = '<b>UEPLANE · 阶段二 放置预览</b>' +
+      '<div class="sub">世界 ' + world[0] + ' × ' + world[1] + ' m · ' + (META.rows || ROWS.length) + ' 行（资产 ' +
+      (META.assets === undefined ? '-' : META.assets) + ' + 白膜 ' +
+      (META.whiteboxes === undefined ? '-' : META.whiteboxes) + '）· 指纹 ' + (META.fp_short || '-') +
+      ' · ' + (META.generated_at || '') + '</div>' +
+      '<div class="sub">轴：<span style="color:#ff6b6b">X 红</span>（沿街）· <span style="color:#7ee081">Y 绿</span>（横向）· <span style="color:#7aa8ff">Z 蓝</span>（高）· 中心在原点，' + world[0] + '×' + world[1] + ' m 边界已画出</div>' +
+      '<div class="sub"><span style="color:#ff8f83">红色箭头（边界外左侧）</span> = 原图视角方向：沿 <b>+X</b> 看（近端 → 纵深）；机位 x≈' + (-hx + 2) + ' m、y = 0、眼高 1.75 m，不画进场景</div>' +
+      '<div class="sub"><kbd>单击</kbd>选中 · <kbd>F</kbd>聚焦 · <kbd>Esc</kbd>取消 · <kbd>左拖</kbd>旋转 · <kbd>右拖</kbd>平移 · <kbd>滚轮</kbd>缩放 · <kbd>1</kbd>居中 <kbd>2</kbd>原图 <kbd>3</kbd>顶视 <kbd>4</kbd>侧视</div>';
+
+    function resize() {
+      var w = cv.clientWidth || window.innerWidth, h = cv.clientHeight || window.innerHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / Math.max(h, 1);
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    /* ---- 标签绘制：**全部画出来**（2026-10-17 用户：删掉「距离剔除 + 屏幕去重」那条约束）---- */
+    var v3 = new THREE.Vector3();
+    function drawLabels() {
+      var w = cv.clientWidth, h = cv.clientHeight;
+      for (var i = 0; i < labels.length; i++) {
+        var L = labels[i];
+        if (!showLabels) { L.el.style.display = 'none'; continue; }
+        v3.copy(L.p).project(camera);
+        if (v3.z > 1 || v3.z < -1) { L.el.style.display = 'none'; continue; }
+        L.el.style.display = 'block';
+        L.el.className = 'lbl' + (L.i === sel ? ' sel' : '');
+        L.el.style.left = ((v3.x * 0.5 + 0.5) * w).toFixed(1) + 'px';
+        L.el.style.top = ((-v3.y * 0.5 + 0.5) * h).toFixed(1) + 'px';
+      }
+      v3.set(0, 0, 0.1).project(camera);
+      if (v3.z < 1) {
+        centerLbl.style.display = 'block';
+        centerLbl.style.left = ((v3.x * 0.5 + 0.5) * w).toFixed(1) + 'px';
+        centerLbl.style.top = ((-v3.y * 0.5 + 0.5) * h).toFixed(1) + 'px';
+      } else { centerLbl.style.display = 'none'; }
+      if (showAnno) {
+        v3.copy(annoAnchor).project(camera);
+        if (v3.z < 1) {
+          annoLbl.style.display = 'block';
+          annoLbl.style.left = ((v3.x * 0.5 + 0.5) * w).toFixed(1) + 'px';
+          annoLbl.style.top = ((-v3.y * 0.5 + 0.5) * h).toFixed(1) + 'px';
+        } else { annoLbl.style.display = 'none'; }
+      } else { annoLbl.style.display = 'none'; }
+    }
+
+    function frame() {
+      cur.yaw += (want.yaw - cur.yaw) * 0.18;
+      cur.pitch += (want.pitch - cur.pitch) * 0.18;
+      cur.dist += (want.dist - cur.dist) * 0.18;
+      cur.tx += (want.tx - cur.tx) * 0.22;
+      cur.ty += (want.ty - cur.ty) * 0.22;
+      cur.tz += (want.tz - cur.tz) * 0.22;
+      place(cur);
+      drawLabels();
+      renderer.render(scene, camera);
+      requestAnimationFrame(frame);
+    }
+    setView('fit');
+    cur.yaw = want.yaw; cur.pitch = want.pitch; cur.dist = want.dist;
+    cur.tx = want.tx; cur.ty = want.ty; cur.tz = want.tz;
+    place(cur);
+    frame();
+  } catch (e) {
+    window.__ueplaneFail = true;
+    fail('初始化失败：' + (e && e.message ? e.message : e) + '\n' +
+      (e && e.stack ? String(e.stack).split('\n').slice(0, 4).join('\n') : ''));
+  }
+})();
+</script>
+</body>
+</html>

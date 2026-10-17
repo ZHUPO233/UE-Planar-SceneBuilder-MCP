@@ -1,11 +1,11 @@
-﻿# Temp probe: full MCP handshake over HTTP (127.0.0.1:8000/mcp), call one toolset tool,
+# Temp probe: full MCP handshake over HTTP (127.0.0.1:8000/mcp), call one toolset tool,
 # print the decoded returnValue (the toolset wraps results twice: text -> {returnValue: "..."}).
 # usage: pwsh -File mcp_probe.ps1 -Tool probe_asyncio
 #        pwsh -File mcp_probe.ps1 -Tool check_build_target -Args '{"decision":"","target_level":""}'
 #        pwsh -File mcp_probe.ps1 -Tool list_toolsets -Toolset ""     (top-level MCP tool)
 param(
   [string]$Tool    = "",
-  [string]$Toolset = "ueplane.toolsets.UeplaneTools",
+  [string]$Toolset = "ueplane.tools.UeplaneTools",
   [string]$ToolArgs = "{}",
   [string]$Base    = "http://127.0.0.1:8000/mcp",
   [switch]$Raw

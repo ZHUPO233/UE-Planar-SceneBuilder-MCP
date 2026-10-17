@@ -17,7 +17,7 @@
 |---|---|---|
 | `FileVersion` | `3` | 官方 VibeUE 用的也是 3 |
 | `Version` | `1` | 插件清单格式版本，**不是产品版本** |
-| `VersionName` | `1.0.0` | **产品版本**；打包时可用 `MakePlugin.ps1 -Version 1.0.1` 覆盖 |
+| `VersionName` | `2.0.0` | **产品版本**；打包时可用 `MakePlugin.ps1 -Version 2.0.0` 覆盖 |
 | `EngineVersion` | `5.8.0` | ⚠ **必须精确到补丁号**（Fab 表单的硬字段）；文案里才写 `5.8+` |
 | `FriendlyName` | `UEPLANE` | 商店里显示的名字 |
 | `Category` | `Editor` | 编辑器插件 |
@@ -105,7 +105,7 @@ needs, so nothing has to be installed alongside the plugin.
 
 Setup — enable the plugin and restart the editor, then start the server once from the editor console
 (ModelContextProtocol.StartServer). Point your MCP-capable agent at the editor's MCP endpoint
-(default http://127.0.0.1:8000/mcp); it discovers UEPLANE's 20 tools via list_toolsets, then calls
+(default http://127.0.0.1:8000/mcp); it discovers UEPLANE's 21 tools via list_toolsets, then calls
 official_status first (link self-check) and get_plan (state overview). PROMPT.md ships in the package
 and can be pasted straight into the agent.
 
@@ -188,7 +188,7 @@ v1.0.1 及以前已经发出去，**不可撤回**。而插件里有四份文件
 3. 它是**漏斗**：免费用 server 试过、觉得好用的人，正是最愿意为"省事"付钱的人。
 
 ⚠ **口径纪律**：不要写"插件功能更多"（**不是事实**），也不要用"专业版/完整版"这类暗示免费版残缺的词。
-**两边的功能面完全一样（同 20 个工具、同一份业务代码）** —— 差的是**部署方式**。
+**两边的功能面完全一样（同 21 个工具、同一份业务代码）** —— 差的是**部署方式**。
 
 
 ---

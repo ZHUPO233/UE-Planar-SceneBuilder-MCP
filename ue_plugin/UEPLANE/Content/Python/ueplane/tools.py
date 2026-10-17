@@ -126,6 +126,28 @@ def _doc(product_name):
         _DOCED[1] += 1
         doc = (getattr(getattr(M, product_name, None), "__doc__", "") or "").strip()
         if doc:
+            # 🔴 **一处覆盖**（2026-10-12 全修）：工具描述是**静态文本**，没法按纪元动态改 ——
+            #   而它们里面写着「重落盘 → 让用户看图确认 → confirm_plan()」这种**只属于纪元 1** 的流程
+            #   （共十几处）。逐条改描述的风险是**改漏一处就是一处诱饵**，所以在这里**统一追加一句覆盖**：
+            #   任何客户端拿到的**每一条**工具描述都会带上它 —— 一处生效、不会漏。
+            doc = (
+                doc
+                + "\n\n🔴 **纪元 2（阶段三落地之后）—— 本文若写了相反的流程，以本行为准**："
+                "①②③ 的写工具（`confirm_elements` / `confirm_assets` / `rename_assets` / "
+                "`check_build_target` / `confirm_plan`）**一律拒收**，`generate_plan` 只放行 `patch`。"
+                "**凡本文写「重落盘（页由代码自动重生成）→ 让用户看图确认 → `confirm_plan()`」的，"
+                "都只属于纪元 1。** 纪元 2 的改动只有一条路：`request_plan_change`（记用户原话）→ "
+                "`generate_plan(patch=…)` → `execute_build(only_labels=[…])` —— **不画图、不重确认**；"
+                "验收 = 用户在 UE 里看，**要报数字**给他。状态只认 `get_plan()` 的 `stages` + `handoff`。"
+                "\n\n🧭 **换图 = 换场景**（2026-10-14 起）：每个场景各记各的（元素 / 资产 / 规划 / "
+                "台账 / 材质 / 环境 / 对账 / 验收）—— 换一张关卡图就**自动**换一套状态，"
+                "**不需要任何重置动作**；新图天然是**纪元 1**，可以直接从 `confirm_elements()` 从头搭。"
+                "要在**同一张图**上推倒重来 ⇒ `reset_scene()`（要**用户本人原话**）。"
+                "\n\n📐 **场景规范（硬约束）**：见本 toolset 说明末尾「场景规范」一节 —— 数据一物一行 / "
+                "`z_m` 是底面 / 资产高 = 实测包围盒 × scale；预览页由代码强制生成（居中 · 可点选 · "
+                "树不是方块 · three 内联 · 失败写画面上），**不许手画图顶替**；搭建真网格优先、满覆盖率；"
+                "**收尾必须报数字**。"
+            )
             try:
                 fn.__doc__ = doc
                 _DOCED[0] += 1
@@ -137,13 +159,49 @@ def _doc(product_name):
 
 @unreal.uclass()
 class UeplaneTools(unreal.ToolsetDefinition):
-    """UEPLANE —— 用参考图快速复刻场景的那套**流程工具**（资产确认 → 平面规划 → 搭场景 → 微调 → 表面材质 → 环境搭建 → 对账出图）。
+    """UEPLANE —— 用参考图快速复刻场景的那套**流程工具**（资产确认 → 平面放置规划 → 资产布局生成 → 微调 → 表面材质 → 环境搭建 → 评估与闭环迭代 → 导出/交换）。
+
+    这八项就是 `main.py::STAGE_NAMES_8`（现行八阶段编号）；**"现在走到哪一步"以 `get_plan().stages` 的现算为准**，别拿这句话当状态。
 
     本插件版与服务器版**同一套业务代码**（`main.py` / `schemas.py` / `surfaces.py` / `planning/` 一字未改），
     只是把"官方调用"从 HTTP 换成了**进程内** toolset 调用。
 
     ⚠ 每轮开场先调 `official_status()`（链路闸的钥匙），再调 `get_plan()` 看走到哪一步。
-    """
+
+    🔴 **纪元 2（阶段三落地之后）只走这一条路**：`request_plan_change`（记用户原话）→
+    `generate_plan(patch=…)` → `execute_build(...)` —— **不画图、不重确认**，验收 = 用户在 UE 里
+    自己看，**要报数字**给他。
+    ⚠ **前三阶段的写工具在纪元 2 一律拒收**（`confirm_elements` / `confirm_assets` /
+    `rename_assets` / `check_build_target` / `confirm_plan`；`generate_plan` 的**整表**形式也拒收）——
+    「不可回到前三阶段」不只是冻结文件，**工具也封**；往回走没有路，别试。
+    ⚠ **状态只认 `get_plan()` 的返回值**（`stages` 八阶段总览 + `handoff` 交接段）：**新开的会话**
+    开场先调它就知道全貌 —— 别凭记忆、别读文件里的叙述性字段。
+
+    📐 **场景规范（硬约束 · 2026-10-17 用户定案，不是建议）** —— 完整正文在插件根
+    `STANDARD.md`；**但下面这段就是可执行的那份，别去找文件也能照做**：
+
+    · **数据**：一物一行（**没有 count**）；`z_m` = 该行**底面**绝对标高；资产行高 = **实测包围盒 Z × scale**；
+      查不到包围盒 ⇒ 高 0、页面画薄片并写明（**不许猜尺寸**）；预估值必须标「预估待核实」，不许伪装成实测。
+      ⚠ **建筑必须逐栋成行、按参考图详细分布**：一排建筑 = 一行一栋（各带 pos / footprint / 高 / 朝向），
+      **禁止**用一条「××建筑带」「××大墙 120 m」代表一排建筑或整条街的立面 —— 那等于把分布压成一个数字。
+      连续的一件（一道长墙 / 一条绿篱 / 一条铺装）可以一行，**多栋建筑不行**。
+    · **阶段二那张 three.js 页**：默认**居中于世界中心**（不许把相机丢到世界外面）+ 画**中心轴与世界边界框** +
+      **右侧元素清单可点选** + **三维单击拾取** + **详情面板**（位置 / 占地 / 底面 / 高 / 朝向 / scale / 资产路径 / note）+
+      **树 = 树干 + 半透明树冠**（**不许实心方块**：8 m 冠幅 + 12 m 株距会变成两堵墙）+
+      **示意放场景外**（如「原图视角」箭头）+ three.js **必须内联**（外挂 src 会被沙箱 CSP 静默拦掉 ⇒ 黑屏且不报错）+
+      **任何失败写到画面上**。
+      ⚠ 这些**由代码强制**：页 = `planning/figure3d.py` + `planning/web/preview3d.html`（three 已内联），
+      落盘那一刻自动生成 —— agent 不需要"记得画好"，只需要把它交给用户看；**也不许手画图顶替**。
+    · **搭建**：真网格优先；白膜**只在查不到资产时**登记（`is_placeholder` + `placeholder_shape` + 预估尺寸）；
+      plan 的每一行都必须落地（满覆盖率）；改东西只走 `request_plan_change` → `generate_plan(patch=…)` → `execute_build`。
+      ⚠ **禁止快速搭建**：不许「先搭个大概、回头再补」、不许跳过闸门、不许用一块大地块凑覆盖率、
+      不许留临时占位 Actor；落完立刻 `evaluate_layout()` 三方对账并报差异。
+    · **严格还原参考图**：**参考图是唯一判据** —— 图上看得见的元素一个都不能少；尺寸 / 间距 / 朝向 / 层次
+      （步道宽、树离路缘多远、墙多高、建筑退线、哪侧更密）都按图还原，**不许"差不多就行"**；
+      看不清的标「待核实」+ 备用方案，**不许省略、也不许凭空加**；交付前顶视 / 原图视角 / 侧视各过一遍。
+    · **收尾必须报数字**：改了几行、哪几行、前后值（例 `Y −12.5 → −17.5`）、搭了几个 Actor、每类几个、
+      坐标范围、还有几行没落地。**"改好了"不算报告。**
+    """;
 
     # ══ ① 开场先看 ═══════════════════════════════════════════════════════════
 
@@ -175,7 +233,7 @@ class UeplaneTools(unreal.ToolsetDefinition):
         Returns:
             JSON 字符串：`ok` + `result`（含 `stages` 八阶段总览 / `acceptance` / `gate`）。
         """
-        return _call(lambda: M.get_plan(include_plan=include_plan))
+        return _call(lambda: M.get_plan(B.CTX, include_plan=include_plan))
 
     @toolset_registry.tool_call
     @staticmethod
@@ -212,13 +270,13 @@ class UeplaneTools(unreal.ToolsetDefinition):
         Returns:
             JSON 字符串：`ok` + `result`（元素清单落盘结果）。
         """
-        return _call(lambda: M.confirm_elements(
+        return _call(lambda: M.confirm_elements(B.CTX, 
             _models(M.ElementItem, elements_json, []), source_image=source_image))
 
     @toolset_registry.tool_call
     @staticmethod
-    @_doc("plan_assets")
-    def plan_assets(keywords_json: str, max_per_element: int = 4) -> str:
+    @_doc("find_assets")
+    def find_assets(keywords_json: str, max_per_element: int = 4) -> str:
         """按名字找资产 → 报告**找到 / 没找到**，并对每个元素给一句要问用户的话。
 
         ⚠ 名字对不上就是**没找到**（不许猜、不许拿别的顶替）。
@@ -230,7 +288,7 @@ class UeplaneTools(unreal.ToolsetDefinition):
         Returns:
             JSON 字符串：`ok` + `result`。
         """
-        return _call(lambda: M.plan_assets(B.CTX, keywords=_opt(keywords_json, None),
+        return _call(lambda: M.find_assets(B.CTX, keywords=_opt(keywords_json, None),
                                            max_per_element=max_per_element))
 
     @toolset_registry.tool_call
@@ -276,7 +334,9 @@ class UeplaneTools(unreal.ToolsetDefinition):
                       params_json: str, patch_json: str) -> str:
         """把**平面放置表**落盘成活动那份 plan（阶段二主工具；**记录，不是规划**）。
 
-        坐标由**你**看图 + 按用户要求规划好再传进来。**本工具不出图**（图由你拿数据自己画）。
+        坐标由**你**看图 + 按用户要求规划好再传进来。本工具**在落盘那一刻自动生成一页 three.js**
+        （`views/<plan 名>_view.html`；渲染层 `planning/figure3d.py` + `planning/web/preview3d.html`）
+        —— **你不用去画任何东西**，也不许手画（2026-10-12 起；旧的"两张手绘矢量图"那套已删）。
 
         Args:
             assets_json: 资产行数组的 JSON 串。每行含 `element_key` / `label` / `asset_path` /
@@ -293,7 +353,7 @@ class UeplaneTools(unreal.ToolsetDefinition):
         Returns:
             JSON 字符串：`ok` + `result`。
         """
-        return _call(lambda: M.generate_plan(
+        return _call(lambda: M.generate_plan(B.CTX, 
             _opt(assets_json, None), _opt(whiteboxes_json, None), _opt(world_json, None),
             params=_opt(params_json, None), patch=_opt(patch_json, None)))
 
@@ -316,7 +376,7 @@ class UeplaneTools(unreal.ToolsetDefinition):
         Returns:
             JSON 字符串：`ok` + `result`。
         """
-        return _call(lambda: M.request_plan_change(_opt(items_json, []), by=by, reason=reason))
+        return _call(lambda: M.request_plan_change(B.CTX, _opt(items_json, []), by=by, reason=reason))
 
     @toolset_registry.tool_call
     @staticmethod
@@ -334,7 +394,7 @@ class UeplaneTools(unreal.ToolsetDefinition):
         Returns:
             JSON 字符串：`ok` + `result`，或 `refused`（闸门拒收原因）。
         """
-        return _call(lambda: M.confirm_plan(confirmed_by=confirmed_by, user_quote=user_quote))
+        return _call(lambda: M.confirm_plan(B.CTX, confirmed_by=confirmed_by, user_quote=user_quote))
 
     # ══ ④ 阶段三：落关卡 ═════════════════════════════════════════════════════
 
@@ -363,8 +423,7 @@ class UeplaneTools(unreal.ToolsetDefinition):
     @staticmethod
     @_doc("execute_build")
     def execute_build(mode: str = "auto", force_full: bool = False, adopt: bool = False,
-                      dry_run: bool = False, verify: str = "full", batch: bool = True,
-                      accept_user_edits: bool = False, user_quote: str = "",
+                      verify: str = "full", batch: bool = False, user_quote: str = "",
                       only_labels_json: str = "", confirm_stage3: str = "") -> str:
         """把放置表落进关卡 —— 默认**只动改过的行（增量）**，不推倒重来。
 
@@ -376,41 +435,49 @@ class UeplaneTools(unreal.ToolsetDefinition):
                 `full`（**全量重摆，会删掉 `UEMCP/` 下全部 Actor**，真跑还要 `force_full`）。
             force_full: 只有 `mode="full"` 真跑时才需要（确认你**确实**要把它们全删了重摆）。
             adopt: 只与 `mode="incremental"` 合用：**不改任何 Actor**，把关卡现状读成台账（基线）。
-            dry_run: true = 只校验 + 对账，**一个 Actor 都不落**（先看一遍再动手）。
             verify: `full`（默认，连白膜尺寸一起验）/ `transform`（只验位置朝向，省调用）/
                 `off`（完全不读回）。⚠ 省的是**确认能力**。
-            batch: true（默认）= 走官方脚本批处理；false = 逐行老路。
-            accept_user_edits: **默认 false = 保护用户在 UE 里手改的东西**（对不上就拒收）。
-                要按 plan 覆盖必须走**两步闸**：先 `dry_run=true` 列清单 → 把清单交给用户、
-                停下等他打字 → 再带 `true` + **他本人的原话**调第二次。
+            batch: ⚠ **默认 false = 逐行老路**（一行一次调用，失败只影响那一行）—— `true` 那条
+                （官方 `execute_tool_script`）在**从编辑器事件循环里发起**时会**整体失败**：
+                官方原文 `Cannot run the event loop while another loop is running`（实测复现）。
+                ⇒ 默认走**已被实测证明能用**的那条；`true` 留给你自己确认环境允许时再试。
             user_quote: 用户同意「按 plan 覆盖他手改的东西」的**原话**。**不许自己编**。
+                ⚠ 要按 plan 覆盖他手改的东西，就把它填进来 —— 空着 = 没有任何凭据，一律拒收。
+                两步闸：先调**默认参数**的 `execute_build()` 列清单（只读那几行的现状 + **留痕**）
+                → **把清单原样交给用户、停下等他打字** → 再带**他本人的原话**调第二次。
             only_labels_json: 字符串数组的 JSON 串 —— **这一轮只把这几行挪回 plan 的位置**
                 （点名的行**本来就在 plan 位置上**时会跳过）。空串 = 走默认增量差异。
-            confirm_stage3: **阶段三结束 · 换纪元** —— 用户在 UE 里看过之后的**原话**。
-                给了它 ⇒ 这一次**只做切换、一个 Actor 都不动**。
+            confirm_stage3: **手工旁路：提前换纪元**（⚠ 正常**不需要**它）。
+                正常路径是**阶段三整批落地自动触发** —— `mode` 解析为 `full` 的那一次落地
+                ⇒ 调用里**先在落位前冻结纪元 1、开纪元 2、资产表照抄成 v2，再当场落位**，
+                并在报文里**告知**（用户口径：「一进批量落位就切」）。**增量微调绝不触发。**
+                给这个参数 = 手工提前换（或台账补完后手工收尾），**不可逆**（落完回不到前三阶段）。
+                ⚠ 它与 `only_labels` / `adopt` / `user_quote` **互斥**；走它时 `mode` **只许 `auto`**
+                （⚠ 与 `main.py` 的实现口径一致：`full` / `force_full` 会当场拒收）。
+                ⚠ 它那句「原话」由**调用方声明**，工具**无法核实**是不是人打的 ——
+                `plan_v2.json` 里会如实记成 `promoted_quote_attested: false`。
 
         Returns:
             JSON 字符串：`ok` + `result`（逐行结果 / 人工痕迹 / `official_calls` / `next_step`）。
         """
         return _call(lambda: M.execute_build(
-            B.CTX, mode=mode, force_full=force_full, adopt=adopt, dry_run=dry_run,
-            verify=verify, batch=batch, accept_user_edits=accept_user_edits,
+            B.CTX, mode=mode, force_full=force_full, adopt=adopt,
+            verify=verify, batch=batch,
             user_quote=user_quote, only_labels=_opt(only_labels_json, []),
             confirm_stage3=confirm_stage3))
 
     @toolset_registry.tool_call
     @staticmethod
     @_doc("adopt_user_edits")
-    def adopt_user_edits(dry_run: bool, user_quote: str, only_json: str) -> str:
+    def adopt_user_edits(user_quote: str, only_json: str) -> str:
         """【场景④ 落关卡 · 认领手改】把「人工改过」的那几行，按**关卡现状**写回 plan 与台账。
 
-        **不摆 Actor、不出图、不走阶段二循环**（省掉"重画两张图 + 重确认"那一整轮）。
+        **不摆 Actor、不出图、不走阶段二循环**（省掉"重出一页 three.js + 重确认"那一整轮）。
 
         ⚠ 只管"人工改过"的行；plan 自己改过的行不归它（那是 `execute_build` 的活）。
         ⚠ 白膜行的 `height_m` 要读组件尺寸：**读不回来就跳过那一行**（不猜）。
 
         Args:
-            dry_run: true = 只读关卡现状、列清单 + 留痕，**一个字节都不写**（先看一遍用这个）。
             user_quote: **用户本人的原话**（例「就用我手改的」）。**不许自己编**。
             only_json: 字符串数组的 JSON 串 —— 只认领这几个 `label`。**空串 = 全部**。
 
@@ -418,7 +485,7 @@ class UeplaneTools(unreal.ToolsetDefinition):
             JSON 字符串：`ok` + `result`。
         """
         return _call(lambda: M.adopt_user_edits(B.CTX, only=_opt(only_json, []),
-                                                user_quote=user_quote, dry_run=dry_run))
+                                                user_quote=user_quote))
 
     # ══ ⑤ 阶段五：表面材质 ═══════════════════════════════════════════════════
 
@@ -488,7 +555,7 @@ class UeplaneTools(unreal.ToolsetDefinition):
     @staticmethod
     @_doc("setup_environment")
     def setup_environment(preset: str, factors_json: str = "", actors_json: str = "",
-                          overrides_json: str = "", dry_run: bool = False,
+                          overrides_json: str = "",
                           restore: bool = False, save: bool = True) -> str:
         """【场景⑥】按时段配**整套环境** —— 不只灯光：天空 / 大气 / 天光 / 高度雾 / 体积云 / 后处理 / 时段。
 
@@ -501,7 +568,6 @@ class UeplaneTools(unreal.ToolsetDefinition):
             factors_json: 只配这几个环境因素（数组 JSON）。空 = 预设里有什么配什么。
             actors_json: 点名要改哪一个 Actor，形如 `{"fog": "局部雾_1"}`。空 = 按类找第一个。
             overrides_json: 临时微调（四个保留键：`props` / `settings` / `transform` / `props`）。
-            dry_run: true = 只读现值 + 算"哪几条会变"，**一个属性都不写**。
             restore: true = **回滚**（把台账里记的现值写回去）。此时别的参数都不用给。
             save: 真跑成功后自动存盘（默认 true）。
 
@@ -511,15 +577,14 @@ class UeplaneTools(unreal.ToolsetDefinition):
         return _call(lambda: M.setup_environment(
             B.CTX, preset=preset, factors=_opt(factors_json, None),
             actors=_opt(actors_json, None), overrides=_opt(overrides_json, None),
-            dry_run=dry_run, restore=restore, save=save))
+            restore=restore, save=save))
 
     # ══ ⑦ 阶段七：评估与出图 ═════════════════════════════════════════════════
 
     @toolset_registry.tool_call
     @staticmethod
     @_doc("evaluate_layout")
-    def evaluate_layout(include_materials: bool = True, all_rows: bool = False,
-                        dry_run: bool = False) -> str:
+    def evaluate_layout(include_materials: bool = True, all_rows: bool = False) -> str:
         """【场景⑥ 导出·对账·出图】三方逐行对账（**只读**）：`plan` ↔ 搭建台账 ↔ **关卡现状**。
 
         回答一句话：**「现在关卡里的东西，跟当初确认的那一版还对得上吗」**。
@@ -531,19 +596,17 @@ class UeplaneTools(unreal.ToolsetDefinition):
         Args:
             include_materials: true（默认）= 白膜行再读一次材质覆盖（每行约 2 次官方调用）。
             all_rows: true = 连**一致**的行也列出来（默认只列不一致的）。
-            dry_run: true = 只算、**不落盘报告**。
 
         Returns:
             JSON 字符串：`ok` + `result`。
         """
         return _call(lambda: M.evaluate_layout(
-            B.CTX, include_materials=include_materials, all_rows=all_rows, dry_run=dry_run))
+            B.CTX, include_materials=include_materials, all_rows=all_rows))
 
     @toolset_registry.tool_call
     @staticmethod
     @_doc("capture_preview")
-    def capture_preview(shots_json: str, annotations: bool = False,
-                        dry_run: bool = False) -> str:
+    def capture_preview(shots_json: str, annotations: bool = False) -> str:
         """【场景⑥】按**世界坐标**摆机位出图 —— **不动用户的视口相机**。
 
         ⚠ 图**不回传给模型**（PNG 落 `views/preview/`）；要看图去读那个文件。
@@ -554,14 +617,13 @@ class UeplaneTools(unreal.ToolsetDefinition):
                 （**都是米**、世界坐标）。**空串 = 按 plan 的世界范围自动出三个**
                 （俯视 3/4 + 两端人视）。
             annotations: true = 图上叠**世界网格 + Actor 标签**（核对构图用）；false（默认）= 干净图。
-            dry_run: true = 只算机位，**一张都不拍**。
 
         Returns:
             JSON 字符串：`ok` + `result`。
         """
         return _call(lambda: M.capture_preview(
             B.CTX, shots=_models(M.PreviewShot, shots_json, None),
-            annotations=annotations, dry_run=dry_run))
+            annotations=annotations))
 
     # ══ ⑧ 阶段八：导出 / 交换 ════════════════════════════════════════════════
 
@@ -597,7 +659,36 @@ class UeplaneTools(unreal.ToolsetDefinition):
         Returns:
             JSON 字符串：`ok` + `result`（逐条 `same` / `changed` / `added` / `removed`）。
         """
-        return _call(lambda: M.check_exchange(path=path))
+        return _call(lambda: M.check_exchange(B.CTX, path=path))
+
+    # ══ ③ 阶段三：一键重置（**同一张图上从头再来**） ═══════════════════════════
+
+    @toolset_registry.tool_call
+    @staticmethod
+    @_doc("reset_scene")
+    def reset_scene(reason: str, user_quote: str = "", purge_actors: bool = False,
+                    adopt_foreign: bool = False) -> str:
+        """【场景④ 落关卡】**同一张关卡图上从头再来** —— 把这张图的场景状态整批归档、回到纪元 1。
+
+        ⚠ **换图不需要它**：换一张关卡图 = 自动换场景（各场景各记各的）——
+        它管的是「**就在这张图上**推倒重来」。
+        ⚠ **它只归档、不删**；**默认一个 Actor 都不碰**。
+        ⚠ **两段式**：先 `reset_scene(reason="…")`（不带 `user_quote`）→ 把那份现状清单
+        **原样交给用户、停下等他打字** → 再带**他本人的原话**调第二次。
+
+        Args:
+            reason: **为什么重来**（必填）—— 例：上一版搭废了 / 元素清单要重列。
+            user_quote: **用户本人的原话**。⚠ **空串 = 第一步：只问、不执行**（留痕后拒收）。
+            purge_actors: ⚠ **默认 false**：只归档我们自己的使用物，**一个 Actor 都不碰**。
+                true 才连 `UEMCP/` 与 `UEMCP_env/` 下的 Actor 一起清（只清这两个文件夹）。
+            adopt_foreign: 确认要在当前工程里用一份「属于另一个工程」的场景。
+
+        Returns:
+            JSON 字符串：`ok` + `result`，或 `refused`（闸门拒收原因）。
+        """
+        return _call(lambda: M.reset_scene(
+            B.CTX, reason=reason, user_quote=user_quote,
+            purge_actors=purge_actors, adopt_foreign=adopt_foreign))
 
 
 # 注册入口：init_unreal.py 调 `_registration.register()`
